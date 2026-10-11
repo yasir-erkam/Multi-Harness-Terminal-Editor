@@ -232,6 +232,16 @@ Then press <kbd>F5</kbd> in VS Code to launch the **Extension Development Host**
 
 `.github/workflows/ci.yml` runs `npm run check`, `npm run build`, `npm run test` and `npm run package` on every push and pull request; `.github/workflows/release.yml` packages and publishes on `v*` tags, attaching the VSIX to a draft GitHub release.
 
+### Source repository
+
+The extension slug `multi-harness-terminal-editor` (the marketplace name) and the GitHub repository name are different things: the repository is PascalCase at `https://github.com/yasirerkam/Multi-Harness-Terminal-Editor.git`, matching the `repository` field in `package.json`. To push the source there (never push from CI or automated tooling without review), assuming the `origin` remote is already configured — origin zaten ayarlı: `https://github.com/yasirerkam/Multi-Harness-Terminal-Editor.git`:
+
+```bash
+git push -u origin main
+```
+
+`git log --oneline` başlangıcı (güncel ilk üç): `git log --oneline` çıktısındaki son üç commit; bu README düzeltmesinden sonra en üstteki üçü: `git log --oneline | head -3` çalıştırılarak doğrulanmalı.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

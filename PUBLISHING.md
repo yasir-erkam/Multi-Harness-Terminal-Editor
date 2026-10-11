@@ -9,7 +9,7 @@ This document walks through releasing the extension to **both** galleries with t
 ## 1. Prerequisites
 
 - **Publisher identity.** The publisher ID in `package.json` (`publisher`) must match the publisher you create on the Marketplace. Decide the name once — see the reservation warning in the [checklist](#6-first-publish-checklist).
-- **Release identity is fixed.** `publisher: "yasir-erkam-ozdemir"` and the `yasirerkam/multi-harness-terminal-editor` repository are set in `package.json` and baked into the VSIX metadata at `vsce package` time.
+- **Release identity is fixed.** `publisher: "yasir-erkam-ozdemir"` and the `yasirerkam/Multi-Harness-Terminal-Editor` repository are set in `package.json` and baked into the VSIX metadata at `vsce package` time.
 - **GitHub repository created and pushed.** Both the CI and release workflows expect a pushed repository, and the Open VSX namespace claim requires a public repository that matches the namespace.
 - **Node.js ≥ 22** for `@vscode/vsce`.
 - **One version, one publish.** Both galleries reject a version you have already published (see the checklist). Bump `version` in `package.json` for every release.
