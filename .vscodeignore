@@ -5,8 +5,9 @@ scripts/**/**
 .github/**/**
 .build/**/**
 node_modules/**/**
-dist/**/**.map
+dist/**/*.map
 tsconfig.json
 esbuild.mjs
 .gitignore
+vscd.png
 **/*.vsix

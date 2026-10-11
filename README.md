@@ -1,6 +1,6 @@
 # Multi-Harness Terminal Editor
 
-> **Note — release identity.** This extension publishes as `publisher: "yasir-erkam-ozdemir"` with `repository` pointing at `github.com/yasirerkam/Multi-Harness-Terminal-Editor`. The Marketplace publisher must use the id `yasir-erkam-ozdemir`, the Open VSX namespace with the same id must be created before the first Open VSX publish, and the GitHub repository must exist at `github.com/yasirerkam/Multi-Harness-Terminal-Editor` before the first push. The complete release procedure is in [PUBLISHING.md](PUBLISHING.md).
+> **Note — release identity.** This extension publishes as `publisher: "yasir-erkam-ozdemir"` with `repository` pointing at `github.com/yasir-erkam/Multi-Harness-Terminal-Editor`. The Marketplace publisher must use the id `yasir-erkam-ozdemir`, the Open VSX namespace with the same id must be created before the first Open VSX publish, and the GitHub repository must exist at `github.com/yasir-erkam/Multi-Harness-Terminal-Editor` before the first push. The complete release procedure is in [PUBLISHING.md](PUBLISHING.md).
 
 ## What it is
 
@@ -234,13 +234,13 @@ Then press <kbd>F5</kbd> in VS Code to launch the **Extension Development Host**
 
 ### Source repository
 
-The extension slug `multi-harness-terminal-editor` (the marketplace name) and the GitHub repository name are different things: the repository is PascalCase at `https://github.com/yasirerkam/Multi-Harness-Terminal-Editor.git`, matching the `repository` field in `package.json`. To push the source there (never push from CI or automated tooling without review), assuming the `origin` remote is already configured — origin zaten ayarlı: `https://github.com/yasirerkam/Multi-Harness-Terminal-Editor.git`:
+The extension slug `multi-harness-terminal-editor` (the marketplace name) and the GitHub repository name are different things: the repository is PascalCase at `https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor.git`, matching the `repository` field in `package.json`. To push the source there (never push from CI or automated tooling without review), assuming the `origin` remote is already configured — origin zaten ayarlı: `https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor.git`:
 
 ```bash
 git push -u origin main
 ```
 
-`git log --oneline` başlangıcı (güncel ilk üç): `git log --oneline` çıktısındaki son üç commit; bu README düzeltmesinden sonra en üstteki üçü: `git log --oneline | head -3` çalıştırılarak doğrulanmalı.
+After each commit the tip moves; the local history is authoritative, and `git log --oneline | head -3` prints the current top three.
 
 ## License
 

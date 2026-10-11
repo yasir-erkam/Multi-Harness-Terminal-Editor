@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yasirerkam/Multi-Harness-Terminal-Editor.git"
+    "url": "https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor.git"
   },
   "categories": [
     "Other"
@@ -497,7 +497,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
-    "@types/vscode": "^1.67.0",
+    "@types/vscode": "1.67.0",
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.24.2",
     "typescript": "^5.9.3"
