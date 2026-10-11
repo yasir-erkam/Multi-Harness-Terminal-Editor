@@ -4,14 +4,14 @@
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose) in native editor-area terminal tabs.",
   "version": "0.1.0",
   "license": "MIT",
-  "publisher": "your-publisher",
+  "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.67.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/multi-harness-terminal-editor.git"
+    "url": "https://github.com/yasirerkam/multi-harness-terminal-editor.git"
   },
   "categories": [
     "Other"

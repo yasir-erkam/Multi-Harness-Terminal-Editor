@@ -1,6 +1,6 @@
 # Multi-Harness Terminal Editor
 
-> **Note — placeholder metadata.** This repository ships with placeholders: `publisher` is `your-publisher` and `repository` points at `github.com/your-org/multi-harness-terminal-editor`. Replace both in `package.json` with your real Microsoft Marketplace publisher ID and your GitHub repository URL before publishing. The complete release procedure is in [PUBLISHING.md](PUBLISHING.md).
+> **Note — release identity.** This extension publishes as `publisher: "yasir-erkam-ozdemir"` with `repository` pointing at `github.com/yasirerkam/multi-harness-terminal-editor`. The Marketplace publisher must use the id `yasir-erkam-ozdemir`, the Open VSX namespace with the same id must be created before the first Open VSX publish, and the GitHub repository must exist at `github.com/yasirerkam/multi-harness-terminal-editor` before the first push. The complete release procedure is in [PUBLISHING.md](PUBLISHING.md).
 
 ## What it is
 

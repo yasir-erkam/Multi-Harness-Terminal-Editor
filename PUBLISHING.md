@@ -2,14 +2,14 @@
 
 This document walks through releasing the extension to **both** galleries with the **same VSIX file**: the Visual Studio Marketplace and Open VSX.
 
-> **Note — placeholders.** `package.json` ships with `publisher: "your-publisher"` and a `your-org` repository URL. Replace both with your real Marketplace publisher ID and your GitHub repository before publishing. The Marketplace publisher ID **must** equal `package.json.publisher`.
+> **Note — release identity.** `package.json` publishes under `publisher: "yasir-erkam-ozdemir"` with the repository `https://github.com/yasirerkam/multi-harness-terminal-editor.git`. The Marketplace publisher ID **must** equal `package.json.publisher` (`yasir-erkam-ozdemir`), the Open VSX namespace with the same id must be created before the first Open VSX publish, and the GitHub repository must exist at `github.com/yasirerkam/multi-harness-terminal-editor` before the first push.
 
 ---
 
 ## 1. Prerequisites
 
 - **Publisher identity.** The publisher ID in `package.json` (`publisher`) must match the publisher you create on the Marketplace. Decide the name once — see the reservation warning in the [checklist](#6-first-publish-checklist).
-- **Replace the placeholders.** `your-publisher` → your real publisher ID; `your-org/multi-harness-terminal-editor` → your real GitHub repository. Do this before the first `vsce package`, because `publisher` and `repository` are baked into the VSIX metadata.
+- **Release identity is fixed.** `publisher: "yasir-erkam-ozdemir"` and the `yasirerkam/multi-harness-terminal-editor` repository are set in `package.json` and baked into the VSIX metadata at `vsce package` time.
 - **GitHub repository created and pushed.** Both the CI and release workflows expect a pushed repository, and the Open VSX namespace claim requires a public repository that matches the namespace.
 - **Node.js ≥ 22** for `@vscode/vsce`.
 - **One version, one publish.** Both galleries reject a version you have already published (see the checklist). Bump `version` in `package.json` for every release.
@@ -42,8 +42,8 @@ ls -1 ./*.vsix
 ### 3.2 Log in and verify the token
 
 ```bash
-npx @vscode/vsce login your-publisher      # paste the PAT when prompted
-npx @vscode/vsce verify-pat your-publisher # confirms the PAT is valid for the publisher
+npx @vscode/vsce login yasir-erkam-ozdemir      # paste the PAT when prompted
+npx @vscode/vsce verify-pat yasir-erkam-ozdemir # confirms the PAT is valid for the publisher
 ```
 
 The logged-in PAT is stored locally; you do not need to paste it for every `publish`.
@@ -73,7 +73,7 @@ From the publisher's **Manage** page, use the upload control to add the `.vsix` 
 
 ```bash
 export OVSX_PAT="<your open-vsx token>"
-npx ovsx create-namespace your-publisher -p "$OVSX_PAT"
+npx ovsx create-namespace yasir-erkam-ozdemir -p "$OVSX_PAT"
 ```
 
 ### 4.3 Publish the same VSIX
@@ -115,7 +115,7 @@ Open VSX tokens are unaffected by this retirement; only the Marketplace's Azure 
 - [ ] **Names stay reserved.** The Microsoft Marketplace **permanently reserves the extension name** after you remove an extension, so choose the `name`/`displayName` deliberately.
 - [ ] **Icon must not be SVG.** `vsce` requires a **PNG** icon (`icon.png`); SVG icons are rejected at package/publish time.
 - [ ] **README/CHANGELOG images must be `https` and not SVG.** Image URLs inside the README and CHANGELOG must use `https` and must not point at SVG files (badge providers are exempt from the SVG restriction).
-- [ ] **`LICENSE` file and `repository` field.** Both are expected; when they are missing, `vsce` warns and CI prompts. Replace the `your-org` repository placeholder and keep the `LICENSE` file in place.
+- [ ] **`LICENSE` file and `repository` field.** Both are expected; when they are missing, `vsce` warns and CI prompts. The `repository` field points at `github.com/yasirerkam/multi-harness-terminal-editor` and the `LICENSE` file is in place.
 - [ ] **A `license` field is required.** Open VSX has **no open-source-license requirement**, but every extension must declare a `license` in `package.json`. If it is unspecified, the Publisher Agreement defaults it to **MIT** — still, declare it explicitly. This project uses `MIT`.
 - [ ] **Keywords ≤ 30.** The `keywords` array is capped at 30 entries at publish time.
 - [ ] **Pre-release rules.** A pre-release version must be plain `major.minor.patch` — **no `-beta` suffix**. If you want pre-releases, use the `--pre-release` flag and an **odd minor** version designation (for example `0.3.0` as an odd minor following a stable `0.2.0`).
