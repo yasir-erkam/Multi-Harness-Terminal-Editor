@@ -52,6 +52,13 @@ jobs:
         id: vsix
         run: echo "path=$(ls -1 ./*.vsix | head -n 1)" >> "$GITHUB_OUTPUT"
 
+      # Release notes come from the CHANGELOG section matching the tag. When the
+      # tag has no section (exit 2) the fallback below uses --generate-notes.
+      - name: Extract release notes
+        run: |
+          node scripts/changelog-release.mjs "$GITHUB_REF_NAME" release-notes.md || true
+          ls release-notes.md 2>/dev/null || true
+
       # `vsce` picks up the VSCE_PAT environment variable on its own, so the
       # token never appears on the command line.
       - name: Publish to the Visual Studio Marketplace
@@ -66,4 +73,11 @@ jobs:
         if: ${{ startsWith(github.ref_name, 'v') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" *.vsix --generate-notes --draft
+        run: |
+          EXTRA_ARGS=()
+          if [ -f release-notes.md ]; then
+            EXTRA_ARGS+=(--notes-file release-notes.md)
+          else
+            EXTRA_ARGS+=(--generate-notes)
+          fi
+          gh release create "$GITHUB_REF_NAME" *.vsix --draft "${EXTRA_ARGS[@]}"
