@@ -1,0 +1,69 @@
+name: Release
+
+# Publishing needs two repository secrets:
+#   VSCE_PAT  - Personal Access Token for the Visual Studio Marketplace
+#   OVSX_PAT  - Access token for Open VSX
+# Neither secret is required for the workflow to pass: each publish step is
+# skipped when its token is absent, so you can publish to one gallery first.
+# See PUBLISHING.md for how to obtain both tokens and for the first-release checklist.
+#
+# WARNING: Global Azure DevOps personal access tokens are retired on 2026-12-01.
+# After that date, authenticate with Entra ID and a managed identity
+# (`vsce publish --azure-credential`) or use OIDC trusted publishing
+# (`vsce publish --oidc`). OIDC additionally requires `id-token: write` in the
+# `permissions` block below. PUBLISHING.md documents both migrations.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package and publish
+    runs-on: ubuntu-latest
+    env:
+      # Secrets cannot be referenced directly in `if:` conditionals, so they are
+      # exposed as job-level environment variables and the publish steps are
+      # guarded with `env.*` checks instead. See
+      # https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Locate VSIX
+        id: vsix
+        run: echo "path=$(ls -1 ./*.vsix | head -n 1)" >> "$GITHUB_OUTPUT"
+
+      # `vsce` picks up the VSCE_PAT environment variable on its own, so the
+      # token never appears on the command line.
+      - name: Publish to the Visual Studio Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        run: npx @vscode/vsce publish --packagePath "${{ steps.vsix.outputs.path }}"
+
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_PAT != '' }}
+        run: npx ovsx publish "${{ steps.vsix.outputs.path }}" -p "$OVSX_PAT"
+
+      - name: Create draft GitHub release
+        if: ${{ startsWith(github.ref_name, 'v') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" *.vsix --generate-notes --draft
