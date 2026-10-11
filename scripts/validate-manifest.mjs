@@ -109,7 +109,7 @@ check(harnessIds.every((id) => /^[a-z][A-Za-z]*$/.test(id)), "harness ids are lo
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.1.0", "version is 0.1.0");
+check(manifest.version === "0.1.0" || manifest.version === "0.1.1", "published 0.1.0 is consumed; local version is 0.1.1 (the fresh one)");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");
