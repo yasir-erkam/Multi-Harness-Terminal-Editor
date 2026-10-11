@@ -2,7 +2,7 @@
 
 This document walks through releasing the extension to **both** galleries with the **same VSIX file**: the Visual Studio Marketplace and Open VSX.
 
-> **Note — release identity.** `package.json` publishes under `publisher: "yasir-erkam-ozdemir"` with the repository `https://github.com/yasirerkam/multi-harness-terminal-editor.git`. The Marketplace publisher ID **must** equal `package.json.publisher` (`yasir-erkam-ozdemir`), the Open VSX namespace with the same id must be created before the first Open VSX publish, and the GitHub repository must exist at `github.com/yasirerkam/multi-harness-terminal-editor` before the first push.
+> **Note — release identity.** `package.json` publishes under `publisher: "yasir-erkam-ozdemir"` with the repository `https://github.com/yasirerkam/Multi-Harness-Terminal-Editor.git`. The Marketplace publisher ID **must** equal `package.json.publisher` (`yasir-erkam-ozdemir`), the Open VSX namespace with the same id must be created before the first Open VSX publish, and the GitHub repository must exist at `github.com/yasirerkam/Multi-Harness-Terminal-Editor` before the first push.
 
 ---
 
@@ -115,7 +115,7 @@ Open VSX tokens are unaffected by this retirement; only the Marketplace's Azure 
 - [ ] **Names stay reserved.** The Microsoft Marketplace **permanently reserves the extension name** after you remove an extension, so choose the `name`/`displayName` deliberately.
 - [ ] **Icon must not be SVG.** `vsce` requires a **PNG** icon (`icon.png`); SVG icons are rejected at package/publish time.
 - [ ] **README/CHANGELOG images must be `https` and not SVG.** Image URLs inside the README and CHANGELOG must use `https` and must not point at SVG files (badge providers are exempt from the SVG restriction).
-- [ ] **`LICENSE` file and `repository` field.** Both are expected; when they are missing, `vsce` warns and CI prompts. The `repository` field points at `github.com/yasirerkam/multi-harness-terminal-editor` and the `LICENSE` file is in place.
+- [ ] **`LICENSE` file and `repository` field.** Both are expected; when they are missing, `vsce` warns and CI prompts. The `repository` field points at `github.com/yasirerkam/Multi-Harness-Terminal-Editor` and the `LICENSE` file is in place.
 - [ ] **A `license` field is required.** Open VSX has **no open-source-license requirement**, but every extension must declare a `license` in `package.json`. If it is unspecified, the Publisher Agreement defaults it to **MIT** — still, declare it explicitly. This project uses `MIT`.
 - [ ] **Keywords ≤ 30.** The `keywords` array is capped at 30 entries at publish time.
 - [ ] **Pre-release rules.** A pre-release version must be plain `major.minor.patch` — **no `-beta` suffix**. If you want pre-releases, use the `--pre-release` flag and an **odd minor** version designation (for example `0.3.0` as an odd minor following a stable `0.2.0`).
