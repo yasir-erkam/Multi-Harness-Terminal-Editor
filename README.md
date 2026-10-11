@@ -1,6 +1,6 @@
 # Multi-Harness Terminal Editor
 
-> **Note — release identity.** This extension publishes as `publisher: "yasir-erkam-ozdemir"` with `repository` pointing at `github.com/yasir-erkam/Multi-Harness-Terminal-Editor`. The Marketplace publisher must use the id `yasir-erkam-ozdemir`, the Open VSX namespace with the same id must be created before the first Open VSX publish, and the GitHub repository must exist at `github.com/yasir-erkam/Multi-Harness-Terminal-Editor` before the first push. The complete release procedure is in [PUBLISHING.md](PUBLISHING.md).
+Source & docs: [github.com/yasir-erkam/Multi-Harness-Terminal-Editor](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor) — release steps in [PUBLISHING.md](PUBLISHING.md).
 
 ## What it is
 
