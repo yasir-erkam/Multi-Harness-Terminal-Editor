@@ -71,15 +71,15 @@ jobs:
       # `vsce` picks up the VSCE_PAT environment variable on its own, so the
       # token never appears on the command line.
       - name: Publish to the Visual Studio Marketplace
-        if: ${{ env.VSCE_PAT != '' }}
+        if: ${{ !cancelled() && env.VSCE_PAT != '' }}
         run: npx @vscode/vsce publish --packagePath "${{ steps.vsix.outputs.path }}"
 
       - name: Publish to Open VSX
-        if: ${{ env.OVSX_PAT != '' }}
+        if: ${{ !cancelled() && env.OVSX_PAT != '' }}
         run: npx ovsx publish "${{ steps.vsix.outputs.path }}" -p "$OVSX_PAT"
 
       - name: Create draft GitHub release
-        if: ${{ startsWith(github.ref_name, 'v') }}
+        if: ${{ !cancelled() && startsWith(github.ref_name, 'v') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
