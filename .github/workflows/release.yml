@@ -17,6 +17,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -58,6 +59,14 @@ jobs:
         run: |
           node scripts/changelog-release.mjs "$GITHUB_REF_NAME" release-notes.md || true
           ls release-notes.md 2>/dev/null || true
+
+      - name: Check publish credentials
+        run: |
+          echo "VSCE_PAT present: ${{ env.VSCE_PAT != '' }}"
+          echo "OVSX_PAT present: ${{ env.OVSX_PAT != '' }}"
+          if [ -z "$VSCE_PAT" ] || [ -z "$OVSX_PAT" ]; then
+            echo "::warning::Publish secrets are missing (VSCE_PAT and/or OVSX_PAT) — publish steps will be skipped. Add them under Settings → Secrets and variables → Actions → Secrets (repository secrets, exact names, case-sensitive)."
+          fi
 
       # `vsce` picks up the VSCE_PAT environment variable on its own, so the
       # token never appears on the command line.
