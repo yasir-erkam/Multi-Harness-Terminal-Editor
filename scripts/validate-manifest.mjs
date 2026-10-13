@@ -106,10 +106,35 @@ for (const id of settingIds) {
 check(new Set(harnessIds).size === harnessIds.length, "harness ids are unique");
 check(harnessIds.every((id) => /^[a-z][A-Za-z]*$/.test(id)), "harness ids are lowercase-first");
 
+// Terminal profiles: one per harness with a matching activation event.
+const profiles = manifest.contributes.terminal ?? [];
+check(profiles.length === 12, "exactly 12 terminal profiles are contributed");
+const profileIds = profiles.map((profile) => profile.id);
+harnessIds.forEach((id) => {
+    const profileId = `multiHarness.${id}`;
+    check(profileIds.includes(profileId), `terminal profile ${profileId} exists`);
+    check(profiles.find((profile) => profile.id === profileId)?.title === `%terminal.profile.${id}.title%`, `terminal profile ${profileId} title uses an %nls% placeholder`);
+    const nlsKey = profiles.find((profile) => profile.id === profileId)?.title.slice(1, -1);
+    check(typeof nls[nlsKey] === "string", `nls key ${nlsKey} exists in package.nls.json`);
+    check(activationEvents.includes(`onTerminalProfile:${profileId}`), `activation event onTerminalProfile:${profileId} exists`);
+});
+
+// Turkish localization mirrors every key of the default bundle.
+let nlsTr;
+try {
+    nlsTr = JSON.parse(readFileSync(join(root, "package.nls.tr.json"), "utf8"));
+} catch {
+    nlsTr = undefined;
+}
+check(nlsTr !== undefined, "package.nls.tr.json is present and valid JSON");
+if (nlsTr) {
+    check(JSON.stringify(Object.keys(nlsTr).sort()) === JSON.stringify(Object.keys(nls).sort()), "package.nls.tr.json mirrors every package.nls.json key");
+}
+
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(["0.1.0", "0.1.1", "0.1.2"].includes(manifest.version), "published 0.1.0/0.1.1 are consumed; local version is the fresh one (0.1.2)");
+check(["0.1.0", "0.1.1", "0.1.2", "0.2.0"].includes(manifest.version), "published versions are consumed; local 0.2.0 is the fresh one");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

@@ -1,10 +1,14 @@
 import * as vscode from "vscode";
 import { HARNESSES } from "./harnesses";
-import { registerOpenCommand } from "./open";
+import { openAgentTerminal } from "./launch";
+import { registerAgentProfile } from "./profiles";
 
 export function activate(context: vscode.ExtensionContext): void {
     for (const harness of HARNESSES) {
-        registerOpenCommand(context, harness);
+        context.subscriptions.push(
+            vscode.commands.registerCommand(`multiHarness.open${harness.id}`, () => openAgentTerminal(context, harness))
+        );
+        registerAgentProfile(context, harness);
     }
     context.subscriptions.push(
         vscode.commands.registerCommand("multiHarness.openAgentPicker", async () => {

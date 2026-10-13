@@ -2,7 +2,7 @@
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose) in native editor-area terminal tabs.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -58,7 +58,19 @@
     "onCommand:multiHarness.openCrush",
     "onCommand:multiHarness.openQwen",
     "onCommand:multiHarness.openGoose",
-    "onCommand:multiHarness.openAgentPicker"
+    "onCommand:multiHarness.openAgentPicker",
+    "onTerminalProfile:multiHarness.claudeCode",
+    "onTerminalProfile:multiHarness.codex",
+    "onTerminalProfile:multiHarness.openCode",
+    "onTerminalProfile:multiHarness.pi",
+    "onTerminalProfile:multiHarness.ohMyPi",
+    "onTerminalProfile:multiHarness.gemini",
+    "onTerminalProfile:multiHarness.copilot",
+    "onTerminalProfile:multiHarness.cursorAgent",
+    "onTerminalProfile:multiHarness.aider",
+    "onTerminalProfile:multiHarness.crush",
+    "onTerminalProfile:multiHarness.qwen",
+    "onTerminalProfile:multiHarness.goose"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -503,7 +515,57 @@
           "scope": "window"
         }
       }
-    }
+    },
+    "terminal": [
+      {
+        "id": "multiHarness.claudeCode",
+        "title": "%terminal.profile.claudeCode.title%"
+      },
+      {
+        "id": "multiHarness.codex",
+        "title": "%terminal.profile.codex.title%"
+      },
+      {
+        "id": "multiHarness.openCode",
+        "title": "%terminal.profile.openCode.title%"
+      },
+      {
+        "id": "multiHarness.pi",
+        "title": "%terminal.profile.pi.title%"
+      },
+      {
+        "id": "multiHarness.ohMyPi",
+        "title": "%terminal.profile.ohMyPi.title%"
+      },
+      {
+        "id": "multiHarness.gemini",
+        "title": "%terminal.profile.gemini.title%"
+      },
+      {
+        "id": "multiHarness.copilot",
+        "title": "%terminal.profile.copilot.title%"
+      },
+      {
+        "id": "multiHarness.cursorAgent",
+        "title": "%terminal.profile.cursorAgent.title%"
+      },
+      {
+        "id": "multiHarness.aider",
+        "title": "%terminal.profile.aider.title%"
+      },
+      {
+        "id": "multiHarness.crush",
+        "title": "%terminal.profile.crush.title%"
+      },
+      {
+        "id": "multiHarness.qwen",
+        "title": "%terminal.profile.qwen.title%"
+      },
+      {
+        "id": "multiHarness.goose",
+        "title": "%terminal.profile.goose.title%"
+      }
+    ]
   },
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit",

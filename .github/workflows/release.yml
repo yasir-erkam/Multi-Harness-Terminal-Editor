@@ -19,8 +19,13 @@ on:
       - "v*"
   workflow_dispatch:
 
+# `id-token: write` is not consumed yet: it becomes relevant once the publish
+# step switches to `vsce publish --oidc` (see PUBLISHING.md section 5 for the
+# 2026-12-01 Azure DevOps PAT retirement). Declaring it now keeps the workflow
+# OIDC-ready without changing current behavior.
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:

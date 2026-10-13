@@ -52,5 +52,17 @@
   "crush.arguments.description": "Additional arguments passed to the Crush CLI on launch.",
   "qwen.arguments.description": "Additional arguments passed to the Qwen Code CLI on launch.",
   "goose.arguments.description": "Additional arguments passed to the Goose CLI on launch.",
-  "notifyOnExit.description": "Show a notification when an agent terminal exits."
+  "notifyOnExit.description": "Show a notification when an agent terminal exits.",
+  "terminal.profile.claudeCode.title": "Open Claude Code terminal",
+  "terminal.profile.codex.title": "Open Codex terminal",
+  "terminal.profile.openCode.title": "Open OpenCode terminal",
+  "terminal.profile.pi.title": "Open Pi Agent terminal",
+  "terminal.profile.ohMyPi.title": "Open Oh My Pi terminal",
+  "terminal.profile.gemini.title": "Open Gemini CLI terminal",
+  "terminal.profile.copilot.title": "Open Copilot CLI terminal",
+  "terminal.profile.cursorAgent.title": "Open Cursor Agent terminal",
+  "terminal.profile.aider.title": "Open Aider terminal",
+  "terminal.profile.crush.title": "Open Crush terminal",
+  "terminal.profile.qwen.title": "Open Qwen Code terminal",
+  "terminal.profile.goose.title": "Open Goose terminal"
 }

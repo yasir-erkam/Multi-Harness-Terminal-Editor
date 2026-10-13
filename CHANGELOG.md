@@ -1,8 +1,11 @@
 # Changelog
 
-## 0.1.2
+## 0.2.0
 
-Recognizable agent icons on the editor title-bar buttons (LobeHub MIT sources where available; original geometric marks elsewhere).
+- Recognizable agent icons on the editor title-bar buttons — LobeHub MIT sources where available; original geometric marks for Oh My Pi, Aider and Crush.
+- Terminal-profile support: every agent is also selectable from the terminal profile dropdown (`multiHarness.<id>` profiles; unresolvable executables are omitted).
+- Turkish (tr) localization of the manifest strings (command titles, category, configuration title, all setting descriptions).
+
 
 ## 0.1.1
 
