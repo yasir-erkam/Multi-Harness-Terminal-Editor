@@ -94,7 +94,15 @@ function waitForShellIntegration(
         return Promise.resolve(undefined);
     }
 
-    const { promise, resolve } = Promise.withResolvers<vscode.TerminalShellIntegration | undefined>();
+    // Hand-rolled deferred on purpose: Promise.withResolvers only exists from
+    // Node 22 / V8 12.4 onwards, while VS Code 1.93 — the first release with
+    // shell integration — ships Electron 30.4.0 (Node 20.15.1), the very
+    // runtime where this code runs. Using the newer helper would throw a
+    // TypeError at launch time on exactly the supported versions.
+    let resolve!: (integration: vscode.TerminalShellIntegration | undefined) => void;
+    const promise = new Promise<vscode.TerminalShellIntegration | undefined>((resolveFn) => {
+        resolve = resolveFn;
+    });
     let settled = false;
     const finish = (integration: vscode.TerminalShellIntegration | undefined): void => {
         if (settled) {

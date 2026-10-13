@@ -334,7 +334,15 @@ try {
 
     // -----------------------------------------------------------------------
     // Shell mode + status surface.
+    //
+    // Older runtimes matter here: VS Code 1.93 (first release with shell
+    // integration) ships Electron 30.4.0 / Node 20.15.1, which has no
+    // Promise.withResolvers. Delete it from the globals so the whole block runs
+    // like Node 20 would, and restore it afterwards.
     // -----------------------------------------------------------------------
+    const realWithResolvers = Promise.withResolvers;
+    delete Promise.withResolvers;
+    assert.equal(typeof Promise.withResolvers, "undefined", "the test really runs without Promise.withResolvers");
 
     // (i) direct mode is unchanged: the terminal has shellPath and nothing in
     // this mode touches the status bar or the shell-integration API.
@@ -449,6 +457,10 @@ try {
     );
     passed += 1;
     console.log("ok: shell mode without integration falls back to a quoted command line with one message");
+
+    Promise.withResolvers = realWithResolvers;
+    passed += 1;
+    console.log("ok: shell mode works on runtimes without Promise.withResolvers (Node 20 / VS Code 1.93)");
 
     // Disposing the extension must cancel the pending status-hide timer —
     // otherwise this very test would sit on the 30s timer before exiting.
