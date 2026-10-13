@@ -39,15 +39,19 @@ MARKS = {"ohMyPi": "OP", "aider": "AI", "crush": "CR"}
 
 
 def lobehub_svg(stem, color):
-    """LobeHub icon normalized: fixed 16px, themed fill, XML prolog-free."""
+    """LobeHub icon normalized: 16x16 viewBox, themed fill.
+
+    The paths are authored on a 24-unit grid, so the whole artwork is wrapped in
+    a group scaled by 16/24 = 2/3 to fit the 16-unit viewBox the manifest icons
+    are required to use.
+    """
     src = open(os.path.join(ICONDIR, f"{stem}.svg"), encoding="utf-8").read()
-    src = re.sub(
-        r"<svg[^>]*>",
-        f'<svg xmlns="http://www.w3.org/2000/svg" fill="{color}" viewBox="0 0 24 24" width="16" height="16">',
-        src,
-        count=1,
+    body = re.sub(r"<svg[^>]*>", "", src, count=1).replace("</svg>", "")
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+        f'<g transform="scale(0.66667)" fill="{color}">{body}</g>'
+        "</svg>"
     )
-    return src
 
 
 def letter_shapes(mark, color, off):
@@ -84,12 +88,14 @@ def letter_shapes(mark, color, off):
 
 
 def original_svg(mark, theme, color):
-    tone = LIGHT if theme == "light" else DARK
-    parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">']
-    parts.append(f'<rect x="1" y="1" width="22" height="22" rx="4" fill="none" stroke="{color}" stroke-width="2" opacity="0.55"/>')
+    parts = [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">',
+        '<g transform="scale(0.66667)">',
+        f'<rect x="1" y="1" width="22" height="22" rx="4" fill="none" stroke="{color}" stroke-width="2" opacity="0.55"/>',
+    ]
     parts.extend(letter_shapes(mark[0], color, 3))
     parts.extend(letter_shapes(mark[1], color, 13))
-    parts.append("</svg>")
+    parts.append("</g></svg>")
     return "".join(parts)
 
 

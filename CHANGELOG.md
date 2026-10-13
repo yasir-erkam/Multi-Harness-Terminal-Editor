@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+Fix: editor title-bar buttons and the agent picker could not open terminals (command id mismatch introduced by the terminal-profile refactor).
+
 ## 0.2.0
 
 - Recognizable agent icons on the editor title-bar buttons — LobeHub MIT sources where available; original geometric marks for Oh My Pi, Aider and Crush.

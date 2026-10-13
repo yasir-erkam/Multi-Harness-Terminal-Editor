@@ -6,7 +6,7 @@ import { registerAgentProfile } from "./profiles";
 export function activate(context: vscode.ExtensionContext): void {
     for (const harness of HARNESSES) {
         context.subscriptions.push(
-            vscode.commands.registerCommand(`multiHarness.open${harness.id}`, () => openAgentTerminal(context, harness))
+            vscode.commands.registerCommand(harness.commandId, () => openAgentTerminal(context, harness))
         );
         registerAgentProfile(context, harness);
     }

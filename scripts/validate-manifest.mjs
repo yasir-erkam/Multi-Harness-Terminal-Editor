@@ -31,6 +31,19 @@ check(JSON.stringify(sourceHarnessIds) === JSON.stringify(harnessIds), "src/harn
 const sourceCommandIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/commandId: "([^"]+)"/g)].map((m) => m[1]);
 agentCommandIds.forEach((id, index) => check(sourceCommandIds[index] === id, `src/harnesses.ts command ${index} is ${id}`));
 
+// The registration must use the literal ids from the table, never a
+// concatenation (the headless activation test in scripts/test.mjs proves this
+// at runtime; this check catches the pattern statically as well).
+const extensionSource = readFileSync(join(root, "src", "extension.ts"), "utf8");
+check(
+    extensionSource.includes("registerCommand(harness.commandId"),
+    "src/extension.ts registers the literal harness.commandId"
+);
+check(
+    !/registerCommand\(\s*`/.test(extensionSource),
+    "src/extension.ts does not build command ids with a template literal"
+);
+
 let failures = 0;
 function check(condition, message) {
     if (condition) {
@@ -134,7 +147,7 @@ if (nlsTr) {
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(["0.1.0", "0.1.1", "0.1.2", "0.2.0"].includes(manifest.version), "published versions are consumed; local 0.2.0 is the fresh one");
+check(["0.1.0", "0.1.1", "0.1.2", "0.2.0", "0.2.1"].includes(manifest.version), "published versions are consumed; local 0.2.1 is the fresh one");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");
