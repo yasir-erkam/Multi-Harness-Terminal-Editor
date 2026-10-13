@@ -144,10 +144,35 @@ if (nlsTr) {
     check(JSON.stringify(Object.keys(nlsTr).sort()) === JSON.stringify(Object.keys(nls).sort()), "package.nls.tr.json mirrors every package.nls.json key");
 }
 
+// Settings keys: reads go through the section-relative `settingKey`, while the
+// settings UI needs the fully-qualified `fullSettingKey`. The headless
+// activation test in scripts/test.mjs proves this at runtime against VS Code's
+// real relative-lookup semantics.
+const harnessSource = readFileSync(join(root, "src", "harnesses.ts"), "utf8");
+const settingKeyBody = harnessSource.match(/export function settingKey[^{]*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+check(
+    settingKeyBody.includes("return `${harness.id}.${setting}`"),
+    "settingKey() returns the section-relative key (no leading multiHarness. prefix)"
+);
+const fullKeyBody = harnessSource.match(/export function fullSettingKey[^{]*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+check(
+    fullKeyBody.includes("multiHarness.${settingKey(harness, setting)}"),
+    "fullSettingKey() returns the fully-qualified setting id"
+);
+const launchSource = readFileSync(join(root, "src", "launch.ts"), "utf8");
+check(
+    /config\.get<[^>]*>\(\s*settingKey\(/.test(launchSource),
+    "src/launch.ts reads settings with the relative settingKey()"
+);
+check(
+    /"workbench\.action\.openSettings",\s*\n\s*fullSettingKey\(harness, "executablePath"\)/.test(launchSource),
+    "src/launch.ts opens settings with the fully-qualified id"
+);
+
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(["0.1.0", "0.1.1", "0.1.2", "0.2.0", "0.2.1"].includes(manifest.version), "published versions are consumed; local 0.2.1 is the fresh one");
+check(["0.1.0", "0.1.1", "0.1.2", "0.2.0", "0.2.1", "0.2.2"].includes(manifest.version), "published versions are consumed; local 0.2.2 is the fresh one");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

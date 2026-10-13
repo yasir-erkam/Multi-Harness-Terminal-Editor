@@ -1,6 +1,6 @@
 import * as os from "node:os";
 import * as vscode from "vscode";
-import { iconFile, settingKey, type Harness } from "./harnesses";
+import { fullSettingKey, iconFile, settingKey, type Harness } from "./harnesses";
 import { resolveExecutable } from "./resolveExecutable";
 
 export interface AgentLaunch {
@@ -44,13 +44,13 @@ export function resolveAgentLaunch(context: vscode.ExtensionContext, harness: Ha
 }
 
 async function offerOpenSettings(displayName: string, configuredPath: string, harness: Harness): Promise<void> {
-    const message = `Multi-Harness: could not find an executable for ${displayName} ('${configuredPath}'). Install the CLI or set its executable path.`;
+    const message = `Multi-Harness: could not find an executable for ${displayName} ('${configuredPath}'). Install the CLI or set ${fullSettingKey(harness, "executablePath")}.`;
     const openSettings = "Open Settings";
     const picked = await vscode.window.showErrorMessage(message, openSettings);
     if (picked === openSettings) {
         await vscode.commands.executeCommand(
             "workbench.action.openSettings",
-            settingKey(harness, "executablePath")
+            fullSettingKey(harness, "executablePath")
         );
     }
 }

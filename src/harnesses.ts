@@ -24,9 +24,22 @@ export const HARNESSES: readonly Harness[] = [
     { id: "goose", displayName: "Goose", defaultExecutable: "goose", commandId: "multiHarness.openGoose" },
 ];
 
-/** Configuration id for a harness setting, e.g. `multiHarness.claudeCode.executablePath`. */
+/**
+ * Key for reading a harness setting from a configuration object obtained via
+ * `getConfiguration("multiHarness")`. Keys passed to `WorkspaceConfiguration.get`
+ * are resolved *relative* to that section, so this must NOT carry the prefix.
+ */
 export function settingKey(harness: Harness, setting: "executablePath" | "arguments"): string {
-    return `multiHarness.${harness.id}.${setting}`;
+    return `${harness.id}.${setting}`;
+}
+
+/**
+ * Fully-qualified setting id, e.g. `multiHarness.claudeCode.executablePath`.
+ * Use for the `workbench.action.openSettings` argument and user-facing text —
+ * that API expects the complete id, not a section-relative key.
+ */
+export function fullSettingKey(harness: Harness, setting: "executablePath" | "arguments"): string {
+    return `multiHarness.${settingKey(harness, setting)}`;
 }
 
 /** Filename of a harness icon evenly themed for the given scheme. */

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+Fix: per-agent `executablePath` and `arguments` settings were never read (the configuration key was double-prefixed), so custom CLI paths and arguments were silently ignored.
+
 ## 0.2.1
 
 Fix: editor title-bar buttons and the agent picker could not open terminals (command id mismatch introduced by the terminal-profile refactor).

@@ -116,12 +116,51 @@ test("win32 explicit .ps1 path resolves without adding suffixes", (dir) => {
 // ---------------------------------------------------------------------------
 
 const VSCODE_STUB = `
-const calls = { commands: [], profiles: [], created: [], errors: [], executed: [] };
+const calls = { commands: [], profiles: [], created: [], errors: [], executed: [], configGets: [] };
+
+// Mirrors the real semantics: getConfiguration(section) hands back the subtree
+// at \`section\`, and get(key) walks the (dotted) key RELATIVE to that subtree.
+// A key that repeats the section (\`multiHarness.x.y\` under section
+// \`multiHarness\`) therefore resolves to undefined — exactly like VS Code,
+// where ExtHostConfiguration#get does lookUp(sectionSubtree, key) and
+// getConfigurationValue walks the parts without stripping a repeated prefix.
+const FIXTURE = {
+    multiHarness: {
+        notifyOnExit: false,
+        ohMyPi: { executablePath: "/custom/omp", arguments: ["--continue"] },
+        pi: { executablePath: "/custom/missing-cli", arguments: [] },
+    },
+};
+
+function walk(tree, key) {
+    let node = tree;
+    for (const part of String(key).split(".")) {
+        if (node === undefined || node === null || typeof node !== "object") {
+            return undefined;
+        }
+        node = node[part];
+    }
+    return node;
+}
+
+function getConfiguration(section, _scope) {
+    const base = section ? walk(FIXTURE, section) : FIXTURE;
+    return {
+        get(key, fallback) {
+            calls.configGets.push({ section, key });
+            const value = walk(base, key);
+            return value === undefined ? fallback : value;
+        },
+        has(key) { return walk(base, key) !== undefined; },
+    };
+}
+
 module.exports = {
     __calls: calls,
+    __fixture: FIXTURE,
     commands: {
         registerCommand(id, handler) { calls.commands.push({ id, handler }); return { dispose() {} }; },
-        executeCommand(id) { calls.executed.push(id); return Promise.resolve(); },
+        executeCommand(...args) { calls.executed.push(...args); return Promise.resolve(); },
     },
     window: {
         terminals: [],
@@ -134,11 +173,7 @@ module.exports = {
         showInformationMessage() { return Promise.resolve(undefined); },
         createTerminal(options) { calls.created.push(options); return { show() {} }; },
     },
-    workspace: {
-        workspaceFolders: [],
-        getWorkspaceFolder() { return undefined; },
-        getConfiguration() { return { get: (_key, fallback) => fallback }; },
-    },
+    workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration },
     Uri: { joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
     ViewColumn: { Beside: -2 },
     TerminalProfile: class TerminalProfile { constructor(options) { this.options = options; } },
@@ -177,6 +212,13 @@ try {
     };
     extension.activate(context);
 
+    // The configured path must exist to reach createTerminal, so point the
+    // fixture at a real temp executable (the stub exposes the live fixture).
+    const fakeCli = join(activationDir, "custom-omp");
+    writeFileSync(fakeCli, "#!/bin/sh\n");
+    chmodSync(fakeCli, 0o755);
+    vscodeStub.__fixture.multiHarness.ohMyPi.executablePath = fakeCli;
+
     const registeredCommands = vscodeStub.__calls.commands.map((c) => c.id).sort();
     const registeredProfiles = vscodeStub.__calls.profiles.map((p) => p.id).sort();
 
@@ -204,6 +246,46 @@ try {
     );
     passed += 1;
     console.log("ok: invoking multiHarness.openOhMyPi runs the real open path without throwing");
+
+    // Settings plumbing: reads must use the SECTION-RELATIVE key, otherwise the
+    // value silently falls back to the default (the double-prefix bug).
+    vscodeStub.__calls.created.length = 0;
+    vscodeStub.__calls.configGets.length = 0;
+    await ohMyPi.handler();
+    const readKeys = vscodeStub.__calls.configGets.map((c) => `${c.section}|${c.key}`);
+    assert.ok(
+        readKeys.includes("multiHarness|ohMyPi.executablePath"),
+        `settings must be read with the section-relative key (saw ${JSON.stringify(readKeys)})`
+    );
+    assert.ok(
+        readKeys.includes("multiHarness|ohMyPi.arguments"),
+        `arguments must be read with the section-relative key (saw ${JSON.stringify(readKeys)})`
+    );
+    assert.ok(
+        !readKeys.some((k) => k.includes("multiHarness|multiHarness.")),
+        `no read may repeat the section prefix (saw ${JSON.stringify(readKeys)})`
+    );
+    const created = vscodeStub.__calls.created.at(-1);
+    assert.equal(created?.shellPath, fakeCli, `createTerminal must use the configured executablePath (got ${created?.shellPath})`);
+    assert.deepEqual(created?.shellArgs, ["--continue"], "createTerminal must use the configured arguments");
+    passed += 1;
+    console.log("ok: configured executablePath and arguments are read with relative keys and reach createTerminal");
+
+    // The Open Settings path must use the FULL id (that API wants the complete key).
+    vscodeStub.__calls.executed.length = 0;
+    vscodeStub.window.showErrorMessage = (message) => {
+        vscodeStub.__calls.errors.push(message);
+        return Promise.resolve("Open Settings");
+    };
+    const piHarness = vscodeStub.__calls.commands.find((c) => c.id === "multiHarness.openPi");
+    await piHarness.handler();
+    assert.deepEqual(
+        vscodeStub.__calls.executed,
+        ["workbench.action.openSettings", "multiHarness.pi.executablePath"],
+        `Open Settings must receive the fully-qualified id (saw ${JSON.stringify(vscodeStub.__calls.executed)})`
+    );
+    passed += 1;
+    console.log("ok: unresolved executable opens settings with the fully-qualified setting id");
 
     // Picker forwards to the literal ids too.
     const picker = vscodeStub.__calls.commands.find((c) => c.id === "multiHarness.openAgentPicker");
