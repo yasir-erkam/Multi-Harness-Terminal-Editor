@@ -72,10 +72,12 @@ jobs:
       # token never appears on the command line.
       - name: Publish to the Visual Studio Marketplace
         if: ${{ !cancelled() && env.VSCE_PAT != '' }}
-        run: npx @vscode/vsce publish --packagePath "${{ steps.vsix.outputs.path }}"
+        run: npx @vscode/vsce publish --packagePath "${{ steps.vsix.outputs.path }}" --skip-duplicate
 
+      # 'already published' is expected on a re-dispatch; don't let it sink the draft release
       - name: Publish to Open VSX
         if: ${{ !cancelled() && env.OVSX_PAT != '' }}
+        continue-on-error: true
         run: npx ovsx publish "${{ steps.vsix.outputs.path }}" -p "$OVSX_PAT"
 
       - name: Create draft GitHub release
