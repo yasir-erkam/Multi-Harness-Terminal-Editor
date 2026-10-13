@@ -1,0 +1,72 @@
+{
+  "claudeCode": {
+    "file": "claudeCode.svg",
+    "url": "https://unpkg.com/@lobehub/icons-static-svg@1.95.1/icons/claudecode.svg",
+    "themeColors": [
+      "currentColor"
+    ]
+  },
+  "codex": {
+    "file": "codex.svg",
+    "url": "https://unpkg.com/@lobehub/icons-static-svg@1.95.1/icons/openai.svg",
+    "themeColors": [
+      "currentColor"
+    ]
+  },
+  "openCode": {
+    "file": "openCode.svg",
+    "url": "https://github.com/anomalyco/opencode/blob/1163e6cd91c06c3249a0ae9ef29cab98b18f8740/packages/console/app/src/asset/brand/opencode-logo-dark.svg",
+    "themeColors": [
+      "#F1ECEC"
+    ],
+    "secondaryColors": [
+      "#4B4646"
+    ]
+  },
+  "pi": {
+    "file": "pi.svg",
+    "url": "https://pi.dev/logo-auto.svg",
+    "viewBox": "165.29 165.29 469.43 469.43"
+  },
+  "ohMyPi": {
+    "file": "ohMyPi.svg",
+    "url": "https://github.com/can1357/oh-my-pi/blob/main/assets/icon.svg",
+    "themeColors": [
+      "#fafafa"
+    ]
+  },
+  "gemini": {
+    "file": "gemini.png",
+    "url": "https://github.com/google-gemini/gemini-cli/blob/29315e53d0c2e9b78f301f3c24db235b0f3fa597/packages/vscode-ide-companion/assets/icon.png"
+  },
+  "copilot": {
+    "file": "copilot.svg",
+    "url": "https://unpkg.com/@lobehub/icons-static-svg@1.95.1/icons/githubcopilot.svg",
+    "themeColors": [
+      "currentColor"
+    ]
+  },
+  "cursorAgent": {
+    "file": "cursorAgent.svg",
+    "url": "https://cursor.com/marketing-static/favicon-light.svg"
+  },
+  "aider": {
+    "file": "aider.png",
+    "url": "https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/website/assets/icons/android-chrome-192x192.png"
+  },
+  "crush": {
+    "file": "crush.png",
+    "url": "https://github.com/charmbracelet/crush/blob/d6edc3222231a0177b88d073733413578c9a1e01/internal/ui/notification/crush-icon-solo.png"
+  },
+  "qwen": {
+    "file": "qwen.svg",
+    "url": "https://github.com/QwenLM/qwen-code/blob/6212189f1f8334da78a69e3fb6b63ff6ca88251e/packages/vscode-ide-companion/assets/sidebar-icon.svg",
+    "themeColors": [
+      "currentColor"
+    ]
+  },
+  "goose": {
+    "file": "goose.svg",
+    "url": "https://github.com/block/goose/blob/4811ae25f736fdf0ede847449c060e96645426b5/ui/desktop/src/images/icon.svg"
+  }
+}

@@ -7,6 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import process from "node:process";
+import { execFileSync } from "node:child_process";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(here);
@@ -478,10 +479,13 @@ try {
 }
 
 // ---------------------------------------------------------------------------
-// Icon sanity: 16x16 viewport, no font-dependent <text>, correct theme fills.
+// Icon sanity: standalone 16px assets, brand colors and themed foregrounds.
 // ---------------------------------------------------------------------------
 
 const HARNESS_IDS = manifest.contributes.terminal.map((t) => t.id.replace("multiHarness.", ""));
+const iconSources = JSON.parse(readFileSync(join(projectRoot, "media", "sources", "icons.json"), "utf8"));
+assert.deepEqual(Object.keys(iconSources), HARNESS_IDS, "every harness has an attributed icon source");
+execFileSync(process.execPath, [join(here, "gen-icons.mjs"), "--check"], { stdio: "inherit" });
 
 function relativeLuminance(hex) {
     const channels = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
@@ -498,10 +502,16 @@ for (const id of HARNESS_IDS) {
         assert.ok(svg.includes('viewBox="0 0 16 16"'), `${id}-${theme}.svg must declare viewBox="0 0 16 16"`);
         assert.ok(svg.includes('width="16" height="16"'), `${id}-${theme}.svg must declare width="16" height="16"`);
         assert.ok(!svg.includes("<text"), `${id}-${theme}.svg must not use <text> (font-dependent rendering)`);
+        assert.ok(!/<(?:script|foreignObject)\b/i.test(svg), `${id}-${theme}.svg must be a static image`);
+        assert.ok(!/(?:href|src)="(?!#|data:image\/png;base64,)/i.test(svg), `${id}-${theme}.svg must not load external assets`);
+        assert.ok(!svg.includes("currentColor"), `${id}-${theme}.svg must resolve foreground colors explicitly`);
         const hexes = [...new Set(svg.match(/#[0-9a-fA-F]{6}/g) ?? [])];
         assert.ok(hexes.length > 0, `${id}-${theme}.svg must use an explicit fill/stroke color`);
         const luminance = relativeLuminance(hexes[0]);
-        if (theme === "light") {
+        if (!iconSources[id].themeColors) {
+            // Full-color application icons retain their original palette in both themes.
+            assert.ok(svg.includes("<image") || svg.includes("<path"), `${id}-${theme}.svg contains brand artwork`);
+        } else if (theme === "light") {
             assert.ok(luminance < 0.5, `${id}-light.svg must use a dark fill (got ${hexes[0]}, L=${luminance.toFixed(3)})`);
         } else {
             assert.ok(luminance > 0.5, `${id}-dark.svg must use a light fill (got ${hexes[0]}, L=${luminance.toFixed(3)})`);
@@ -511,7 +521,7 @@ for (const id of HARNESS_IDS) {
     fillReport.push(`${id}: light=${fills.light} dark=${fills.dark}`);
 }
 passed += 1;
-console.log(`ok: all ${HARNESS_IDS.length * 2} SVGs are 16x16, text-free, with theme-correct fills`);
+console.log(`ok: all ${HARNESS_IDS.length * 2} SVGs are standalone 16px assets with brand colors or themed foregrounds`);
 console.log(`\nicon fills (light variant = dark ink, dark variant = light ink):\n  ${fillReport.join("\n  ")}`);
 
 await import(pathToFileURL(join(here, "validate-manifest.mjs")).href);

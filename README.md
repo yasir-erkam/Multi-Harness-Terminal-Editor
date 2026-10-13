@@ -269,9 +269,11 @@ MIT. See [LICENSE](LICENSE).
 
 ## Icon credits
 
-Editor title-bar icons: 9 agents use redrawn brand marks from
-[LobeHub `@lobehub/icons-static-svg`](https://github.com/lobehub/lobe-icons)
-(MIT, recolored and resized to 16 px); Oh My Pi, Aider and Crush use original
-geometric marks drawn for this project. Details in
-[media/THIRD_PARTY_NOTICES.md](media/THIRD_PARTY_NOTICES.md). No press-kit
-artwork from the agent vendors themselves is used.
+Editor title-bar and terminal icons use the harnesses' application marks,
+including Claude Code's mascot, GitHub Copilot's robot, Gemini CLI's terminal
+mark, and Crush's pixel heart. Nine use upstream website or application assets;
+Claude Code, Codex and GitHub Copilot use the corresponding LobeHub brand marks.
+Brand colors are preserved; monochrome foregrounds adapt to light/dark themes.
+Sources and licenses are recorded in
+[media/THIRD_PARTY_NOTICES.md](media/THIRD_PARTY_NOTICES.md).
+Regenerate all 24 icons offline with `node scripts/gen-icons.mjs`.
