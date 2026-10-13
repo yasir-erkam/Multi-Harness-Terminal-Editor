@@ -230,7 +230,7 @@ npm run package # compile, then produce a .vsix with @vscode/vsce
 
 Then press <kbd>F5</kbd> in VS Code to launch the **Extension Development Host** with the extension loaded.
 
-`.github/workflows/ci.yml` runs `npm run check`, `npm run build`, `npm run test` and `npm run package` on every push and pull request; `.github/workflows/release.yml` packages and publishes on `v*` tags, attaching the VSIX to a draft GitHub release.
+`.github/workflows/ci.yml` runs `npm run check`, `npm run build`, `npm run test` and `npm run package` on every push and pull request; `.github/workflows/release.yml` packages and publishes on `v*` tags, attaching the VSIX to a published GitHub release.
 
 ### Source repository
 

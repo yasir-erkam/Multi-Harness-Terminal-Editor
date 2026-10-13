@@ -80,7 +80,7 @@ jobs:
         continue-on-error: true
         run: npx ovsx publish "${{ steps.vsix.outputs.path }}" -p "$OVSX_PAT"
 
-      - name: Create draft GitHub release
+      - name: Create GitHub release
         if: ${{ !cancelled() && startsWith(github.ref_name, 'v') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,4 +91,4 @@ jobs:
           else
             EXTRA_ARGS+=(--generate-notes)
           fi
-          gh release create "$GITHUB_REF_NAME" *.vsix --draft "${EXTRA_ARGS[@]}"
+          gh release create "$GITHUB_REF_NAME" *.vsix "${EXTRA_ARGS[@]}"

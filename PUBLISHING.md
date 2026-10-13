@@ -130,7 +130,7 @@ Open VSX tokens are unaffected by this retirement; only the Marketplace's Azure 
 1. checks out the repo, sets up Node 22, runs `npm ci` and `npm run package`;
 2. publishes the produced `*.vsix` to the Marketplace when the `VSCE_PAT` secret is set;
 3. publishes the same file to Open VSX when the `OVSX_PAT` secret is set;
-4. creates a **draft** GitHub release with the VSIX attached.
+4. creates a **published** GitHub release with the VSIX attached.
 
 Add the tokens once via **Settings → Secrets and variables → Actions** (repository secrets named exactly `VSCE_PAT` and `OVSX_PAT`), or with the GitHub CLI:
 
