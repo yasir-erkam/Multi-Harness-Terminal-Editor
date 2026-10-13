@@ -245,3 +245,12 @@ After each commit the tip moves; the local history is authoritative, and `git lo
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Icon credits
+
+Editor title-bar icons: 9 agents use redrawn brand marks from
+[LobeHub `@lobehub/icons-static-svg`](https://github.com/lobehub/lobe-icons)
+(MIT, recolored and resized to 16 px); Oh My Pi, Aider and Crush use original
+geometric marks drawn for this project. Details in
+[media/THIRD_PARTY_NOTICES.md](media/THIRD_PARTY_NOTICES.md). No press-kit
+artwork from the agent vendors themselves is used.

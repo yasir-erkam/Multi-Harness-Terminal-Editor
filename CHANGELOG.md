@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+Recognizable agent icons on the editor title-bar buttons (LobeHub MIT sources where available; original geometric marks elsewhere).
+
 ## 0.1.1
 
 Adds searchable keywords to the extension listing (Claude Code, Codex, OpenCode, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose).
