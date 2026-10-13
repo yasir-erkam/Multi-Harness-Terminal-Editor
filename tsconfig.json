@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "commonjs",
     "moduleResolution": "node10",
-    "lib": ["ES2022"],
+    // "ES2024.Promise" only adds the `Promise.withResolvers` declaration, which
+    // is reachable solely on VS Code 1.93+ (where the runtime has it).
+    "lib": ["ES2022", "ES2024.Promise"],
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

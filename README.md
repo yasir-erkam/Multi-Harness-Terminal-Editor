@@ -12,6 +12,7 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 - **One terminal per agent, reused.** Running the command again reveals the agent's existing terminal instead of starting a second process; terminals are matched by the agent's display name.
 - **Opened beside the active editor.** The terminal is created with `TerminalOptions.location` set to `ViewColumn.Beside` and marked `isTransient`, so it is not restored on window reload.
 - **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all twelve harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
+- **Optional shell launch mode with live status.** `multiHarness.launchMode: "shell"` runs agents through your shell so a status-bar item can report running/finished state, duration and exit code; the default `direct` mode is unchanged. See [Launch modes](#launch-modes).
 - **Terminal profile dropdown.** Every agent is also contributed as a VS Code terminal profile (`multiHarness.<id>`), so you can start one from the terminal panel's `+` dropdown; profiles whose executable cannot be resolved are simply omitted from the list.
 - **Per-agent editor title-bar icons.** Every agent has its own toggle, `multiHarness.show<Id>Icon` (boolean, default `false`). Enable only the agents you want in the editor title bar.
 - **Exit notifications.** With `multiHarness.notifyOnExit` enabled (default `false`), the extension shows a notification containing the exit code when an agent terminal closes, so a crashed or non-zero CLI does not pass unnoticed.
@@ -182,9 +183,28 @@ This extension declares `untrustedWorkspaces: { supported: false }`, so it is di
 
 It also declares `virtualWorkspaces: { supported: false }`, so it remains disabled in virtual workspaces (for example GitHub Repositories), where spawning a local CLI process is not possible.
 
+## Launch modes
+
+`multiHarness.launchMode` (default `direct`) picks how an agent terminal starts:
+
+- **`direct`** — the agent CLI *is* the terminal process: the extension passes its path as `shellPath`. Same behaviour as every release before 0.3.0.
+- **`shell`** — the user's default shell profile starts instead, and the agent is run as a command inside it. That indirection is what makes command-level reporting possible, so shell mode is the only mode with the live status-bar readout: `$(sync~spin) <Agent>` while a command runs, then `$(check) <Agent> — <seconds>s (exit <code>)` (or `$(error) …`, and `exit ?` when the shell reports no code). The item hides itself ~30 s after the last command.
+
+Status tracking is best-effort by design. Within 10 s of creating the terminal the extension waits for shell integration and then runs the agent with `executeCommand(executable, args)`, letting VS Code handle quoting. If integration never activates, it falls back to a quoted command line (`sendText`) and says so once in a non-blocking message — with a POSIX single-quote rule (`'` becomes `'\''`), or double quotes with doubled `"` on Windows.
+
+Known limitations of shell mode (all shell-integration related, none specific to this extension):
+
+- `cmd.exe` on Windows has no shell integration, so it always takes the degraded path.
+- A complex `PROMPT_COMMAND`, a non-standard shell prompt, or a subshell opened by your shell rc can prevent activation.
+- Plain `ssh` sessions report through the *remote* shell; without Remote-SSH the local prompt is not shell-integrated.
+- If shell integration injection is disabled in your VS Code settings, activation never happens.
+- Terminal profiles from the profile dropdown always use direct mode: a profile has to return a runnable terminal, and the profile API offers no hook to await shell integration.
+
+The shell-integration API is stable since VS Code 1.93. The extension still declares `engines.vscode: ^1.67.0`, feature-detects the API at runtime, and falls back to a direct-mode terminal when it is unavailable — so nothing breaks on older VS Code, shell mode simply behaves as `direct` there.
+
 ## Requirements
 
-- **VS Code 1.67.0 or newer** (`engines.vscode: ^1.67.0`). The extension uses `TerminalOptions.location` / `TerminalLocation` (stable since 1.64), `isTransient` (stable since 1.65) and `window.tabGroups` with `TabInputTerminal` (stable since 1.67).
+- **VS Code 1.67.0 or newer** (`engines.vscode: ^1.67.0`). The extension uses `TerminalOptions.location` / `TerminalLocation` (stable since 1.64), `isTransient` (stable since 1.65) and `window.tabGroups` with `TabInputTerminal` (stable since 1.67). Shell mode additionally needs the shell-integration API from **1.93+**; on older builds it degrades to direct launching (feature-detected at runtime).
 - **A trusted, non-virtual workspace.** Because of the two capability declarations above, the extension does not activate in Restricted Mode or in virtual workspaces.
 - `extensionKind: ["workspace"]` — it runs in the workspace extension host, where the terminal API is available.
 - No runtime dependencies, and no Node.js/npm needed just to use the extension.

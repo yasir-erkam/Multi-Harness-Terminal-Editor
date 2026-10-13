@@ -110,6 +110,16 @@ for (const id of harnessIds) {
     check(properties[argsId]?.type === "array" && Array.isArray(properties[argsId]?.default) && properties[argsId]?.scope === "resource", `setting ${argsId} is string array/resource`);
 }
 check(properties["multiHarness.notifyOnExit"]?.type === "boolean" && properties["multiHarness.notifyOnExit"]?.scope === "window", "setting multiHarness.notifyOnExit is boolean/window");
+const launchMode = properties["multiHarness.launchMode"];
+check(
+    launchMode?.type === "string" && JSON.stringify(launchMode?.enum) === JSON.stringify(["direct", "shell"]) &&
+        launchMode?.default === "direct" && launchMode?.scope === "window",
+    "setting multiHarness.launchMode is a direct|shell string enum defaulting to direct (window scope)"
+);
+check(
+    Array.isArray(launchMode?.enumDescriptions) && launchMode.enumDescriptions.length === 2,
+    "multiHarness.launchMode documents each enum value"
+);
 for (const id of settingIds) {
     check(typeof properties[id]?.description === "string" && properties[id].description.startsWith("%"), `setting ${id} description uses an %nls% placeholder`);
     check(typeof nls[properties[id].description.slice(1, -1)] === "string", `nls key for setting ${id} exists in package.nls.json`);
@@ -142,6 +152,9 @@ try {
 check(nlsTr !== undefined, "package.nls.tr.json is present and valid JSON");
 if (nlsTr) {
     check(JSON.stringify(Object.keys(nlsTr).sort()) === JSON.stringify(Object.keys(nls).sort()), "package.nls.tr.json mirrors every package.nls.json key");
+for (const key of ["launchMode.description", "launchMode.direct.description", "launchMode.shell.description"]) {
+    check(typeof nls[key] === "string" && typeof nlsTr?.[key] === "string", `nls key ${key} exists in both bundles`);
+}
 }
 
 // Settings keys: reads go through the section-relative `settingKey`, while the
@@ -169,10 +182,26 @@ check(
     "src/launch.ts opens settings with the fully-qualified id"
 );
 
+// Shell mode is gated on runtime feature detection because the shell-integration
+// API is stable only since VS Code 1.93 while engines stays ^1.67.0.
+const launchSrc = readFileSync(join(root, "src", "launch.ts"), "utf8");
+check(
+    launchSrc.includes("hasShellIntegrationApi()"),
+    "src/launch.ts gates shell mode on runtime shell-integration feature detection"
+);
+check(
+    launchSrc.includes("onDidChangeTerminalShellIntegration"),
+    "src/launch.ts waits for shell integration via the change event"
+);
+check(
+    readFileSync(join(root, "src", "status.ts"), "utf8").includes("onDidStartTerminalShellExecution"),
+    "src/status.ts subscribes to shell execution events"
+);
+
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(["0.1.0", "0.1.1", "0.1.2", "0.2.0", "0.2.1", "0.2.2"].includes(manifest.version), "published versions are consumed; local 0.2.2 is the fresh one");
+check(["0.1.0", "0.1.1", "0.1.2", "0.2.0", "0.2.1", "0.2.2", "0.3.0"].includes(manifest.version), "published versions are consumed; local 0.3.0 is the fresh one");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

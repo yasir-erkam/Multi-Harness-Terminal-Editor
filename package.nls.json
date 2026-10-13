@@ -64,5 +64,8 @@
   "terminal.profile.aider.title": "Open Aider terminal",
   "terminal.profile.crush.title": "Open Crush terminal",
   "terminal.profile.qwen.title": "Open Qwen Code terminal",
-  "terminal.profile.goose.title": "Open Goose terminal"
+  "terminal.profile.goose.title": "Open Goose terminal",
+  "launchMode.description": "How agent terminals are started. 'direct' runs the agent CLI as the terminal process; 'shell' runs it as a command in your default shell, which enables per-command status tracking but requires working shell integration.",
+  "launchMode.direct.description": "Launch the agent CLI as the terminal process itself (default).",
+  "launchMode.shell.description": "Launch the agent through your shell so command status can be tracked; falls back to a quoted command line when shell integration is unavailable."
 }

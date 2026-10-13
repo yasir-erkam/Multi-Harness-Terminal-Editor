@@ -64,5 +64,8 @@
   "terminal.profile.aider.title": "Aider terminali aç",
   "terminal.profile.crush.title": "Crush terminali aç",
   "terminal.profile.qwen.title": "Qwen Code terminali aç",
-  "terminal.profile.goose.title": "Goose terminali aç"
+  "terminal.profile.goose.title": "Goose terminali aç",
+  "launchMode.description": "Ajan terminallerinin nasıl başlatılacağı. 'direct' ajan CLI'ını doğrudan terminal süreci olarak çalıştırır; 'shell' ise varsayılan kabuğunuzda bir komut olarak çalıştırır ve komut bazlı durum takibini mümkün kılar (çalışan shell entegrasyonu gerektirir).",
+  "launchMode.direct.description": "Ajan CLI'ını doğrudan terminal süreci olarak başlat (varsayılan).",
+  "launchMode.shell.description": "Ajanı kabuğunuz üzerinden başlat, böylece komut durumu takip edilebilir; shell entegrasyonu yoksa tırnaklanmış komut satırına geri döner."
 }

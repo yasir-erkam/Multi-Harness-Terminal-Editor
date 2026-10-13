@@ -2,7 +2,7 @@
 // plus the full manifest validation from validate-manifest.mjs.
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
@@ -116,7 +116,9 @@ test("win32 explicit .ps1 path resolves without adding suffixes", (dir) => {
 // ---------------------------------------------------------------------------
 
 const VSCODE_STUB = `
-const calls = { commands: [], profiles: [], created: [], errors: [], executed: [], configGets: [] };
+const calls = { commands: [], profiles: [], created: [], errors: [], infos: [], executed: [], configGets: [],
+    terminals: [], sendTexts: [], statusItems: [], statusShown: [], statusHidden: [], statusDisposed: 0,
+    shellIntegrationHandlers: [], executionStartHandlers: [], executionEndHandlers: [] };
 
 // Mirrors the real semantics: getConfiguration(section) hands back the subtree
 // at \`section\`, and get(key) walks the (dotted) key RELATIVE to that subtree.
@@ -127,6 +129,7 @@ const calls = { commands: [], profiles: [], created: [], errors: [], executed: [
 const FIXTURE = {
     multiHarness: {
         notifyOnExit: false,
+        launchMode: "direct",
         ohMyPi: { executablePath: "/custom/omp", arguments: ["--continue"] },
         pi: { executablePath: "/custom/missing-cli", arguments: [] },
     },
@@ -158,6 +161,7 @@ function getConfiguration(section, _scope) {
 module.exports = {
     __calls: calls,
     __fixture: FIXTURE,
+    StatusBarAlignment: { Left: 1, Right: 2 },
     commands: {
         registerCommand(id, handler) { calls.commands.push({ id, handler }); return { dispose() {} }; },
         executeCommand(...args) { calls.executed.push(...args); return Promise.resolve(); },
@@ -170,8 +174,37 @@ module.exports = {
         onDidCloseTerminal() { return { dispose() {} }; },
         showQuickPick() { return Promise.resolve(undefined); },
         showErrorMessage(message) { calls.errors.push(message); return Promise.resolve(undefined); },
-        showInformationMessage() { return Promise.resolve(undefined); },
-        createTerminal(options) { calls.created.push(options); return { show() {} }; },
+        showInformationMessage(message) { calls.infos.push(message); return Promise.resolve(undefined); },
+        createTerminal(options) {
+            const terminal = {
+                name: options.name,
+                shellIntegration: undefined,
+                shown: 0,
+                show() { this.shown += 1; },
+                sendText(text) { calls.sendTexts.push({ name: options.name, text }); },
+                dispose() {},
+            };
+            calls.created.push({ options, terminal });
+            calls.terminals.push(terminal);
+            return terminal;
+        },
+        createStatusBarItem(alignment) {
+            const item = {
+                alignment,
+                text: "",
+                visible: false,
+                show() { this.visible = true; calls.statusShown.push(this.text); },
+                hide() { this.visible = false; calls.statusHidden.push(this.text); },
+                dispose() { calls.statusDisposed += 1; },
+            };
+            calls.statusItems.push(item);
+            return item;
+        },
+        // shell-integration API family (1.93+): handlers are recorded so the
+        // test can fire them, mirroring VS Code 1.93's relative-lookup world.
+        onDidChangeTerminalShellIntegration(handler) { calls.shellIntegrationHandlers.push(handler); return { dispose() {} }; },
+        onDidStartTerminalShellExecution(handler) { calls.executionStartHandlers.push(handler); return { dispose() {} }; },
+        onDidEndTerminalShellExecution(handler) { calls.executionEndHandlers.push(handler); return { dispose() {} }; },
     },
     workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration },
     Uri: { joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
@@ -251,6 +284,7 @@ try {
     // value silently falls back to the default (the double-prefix bug).
     vscodeStub.__calls.created.length = 0;
     vscodeStub.__calls.configGets.length = 0;
+    vscodeStub.window.terminals.length = 0;
     await ohMyPi.handler();
     const readKeys = vscodeStub.__calls.configGets.map((c) => `${c.section}|${c.key}`);
     assert.ok(
@@ -265,7 +299,7 @@ try {
         !readKeys.some((k) => k.includes("multiHarness|multiHarness.")),
         `no read may repeat the section prefix (saw ${JSON.stringify(readKeys)})`
     );
-    const created = vscodeStub.__calls.created.at(-1);
+    const created = vscodeStub.__calls.created.at(-1)?.options;
     assert.equal(created?.shellPath, fakeCli, `createTerminal must use the configured executablePath (got ${created?.shellPath})`);
     assert.deepEqual(created?.shellArgs, ["--continue"], "createTerminal must use the configured arguments");
     passed += 1;
@@ -297,6 +331,133 @@ try {
     assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openOhMyPi"], "picker dispatches the harness commandId");
     passed += 1;
     console.log("ok: agent picker dispatches the harness commandId");
+
+    // -----------------------------------------------------------------------
+    // Shell mode + status surface.
+    // -----------------------------------------------------------------------
+
+    // (i) direct mode is unchanged: the terminal has shellPath and nothing in
+    // this mode touches the status bar or the shell-integration API.
+    const baseline = () => {
+        vscodeStub.__calls.created.length = 0;
+        vscodeStub.__calls.statusItems.length = 0;
+        vscodeStub.__calls.sendTexts.length = 0;
+        vscodeStub.__calls.executed.length = 0;
+        vscodeStub.__calls.infos.length = 0;
+        vscodeStub.window.terminals.length = 0;
+        vscodeStub.__fixture.multiHarness.launchMode = "direct";
+    };
+    baseline();
+    await ohMyPi.handler();
+    const directOptions = vscodeStub.__calls.created.at(-1)?.options;
+    assert.equal(directOptions?.shellPath, fakeCli, "direct mode must still set shellPath");
+    assert.equal(vscodeStub.__calls.statusItems.length, 0, "direct mode must not create a status-bar item");
+    assert.equal(vscodeStub.__calls.infos.length, 0, "direct mode must not announce shell-integration fallback");
+    passed += 1;
+    console.log("ok: direct mode sets shellPath and never creates a status-bar item");
+
+    // (ii) shell mode: no shellPath, and the agent runs through the two-argument
+    // executeCommand overload once shell integration activates.
+    baseline();
+    vscodeStub.__fixture.multiHarness.launchMode = "shell";
+    const shellPromise = ohMyPi.handler();
+    await new Promise((resolve) => setImmediate(resolve));
+    const shellOptions = vscodeStub.__calls.created.at(-1)?.options;
+    assert.ok(shellOptions, "shell mode must create a terminal");
+    assert.equal(shellOptions.shellPath, undefined, "shell mode must not override shellPath");
+    assert.equal(shellOptions.name, "Oh My Pi", "shell mode keeps the terminal name");
+    assert.equal(shellOptions.cwd, homedir(), "shell mode uses the same cwd resolution as direct mode (homedir without a workspace)");
+    assert.equal(vscodeStub.__calls.statusItems.length, 1, "the first shell-mode terminal creates the status item lazily");
+    const shellTerminal = vscodeStub.__calls.created.at(-1).terminal;
+    const shellExecuteCalls = [];
+    shellTerminal.shellIntegration = undefined;
+    vscodeStub.__calls.shellIntegrationHandlers.forEach((handler) =>
+        handler({
+            terminal: shellTerminal,
+            shellIntegration: {
+                cwd: undefined,
+                executeCommand(executable, args) {
+                    shellExecuteCalls.push({ executable, args });
+                    return { commandLine: `${executable} ${args.join(" ")}` };
+                },
+            },
+        })
+    );
+    await shellPromise;
+    assert.deepEqual(
+        shellExecuteCalls,
+        [{ executable: fakeCli, args: ["--continue"] }],
+        `shell mode must call executeCommand(executable, args) — saw ${JSON.stringify(shellExecuteCalls)}`
+    );
+    assert.deepEqual(vscodeStub.__calls.sendTexts, [], "no sendText fallback on the happy path");
+    passed += 1;
+    console.log("ok: shell mode omits shellPath and runs the agent via executeCommand(executable, args)");
+
+    // (iii) start/end events drive the status-bar text.
+    const statusItem = vscodeStub.__calls.statusItems.at(-1);
+    const execution = { commandLine: "omp --continue" };
+    const integration = shellTerminal.shellIntegration ?? { cwd: undefined, executeCommand: () => execution };
+    vscodeStub.__calls.executionStartHandlers.forEach((handler) =>
+        handler({ terminal: shellTerminal, shellIntegration: integration, execution })
+    );
+    assert.equal(statusItem.text, "$(sync~spin) Oh My Pi", `start text (saw ${statusItem.text})`);
+    assert.equal(statusItem.visible, true, "status item is shown while running");
+    vscodeStub.__calls.executionEndHandlers.forEach((handler) =>
+        handler({ terminal: shellTerminal, shellIntegration: integration, execution, exitCode: 0 })
+    );
+    assert.ok(statusItem.text.startsWith("$(check) Oh My Pi — "), `end text (saw ${statusItem.text})`);
+    assert.ok(statusItem.text.endsWith("(exit 0)"), `end text carries the exit code (saw ${statusItem.text})`);
+    // undefined exit code must show "exit ?"
+    const unknownExecution = { commandLine: "omp" };
+    vscodeStub.__calls.executionStartHandlers.forEach((handler) =>
+        handler({ terminal: shellTerminal, shellIntegration: integration, execution: unknownExecution })
+    );
+    vscodeStub.__calls.executionEndHandlers.forEach((handler) =>
+        handler({ terminal: shellTerminal, shellIntegration: integration, execution: unknownExecution, exitCode: undefined })
+    );
+    assert.ok(statusItem.text.startsWith("$(error) Oh My Pi — "), `unknown-exit text (saw ${statusItem.text})`);
+    assert.ok(statusItem.text.endsWith("(exit ?)"), `unknown exit code renders as ? (saw ${statusItem.text})`);
+    passed += 1;
+    console.log("ok: start/end shell executions drive the status-bar text (exit code included)");
+
+    // (iv) the timeout path degrades to a quoted sendText plus one message.
+    baseline();
+    vscodeStub.__fixture.multiHarness.launchMode = "shell";
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    const pendingTimeouts = [];
+    globalThis.setTimeout = (callback, delay) => {
+        pendingTimeouts.push({ callback, delay });
+        return { __fake: true };
+    };
+    globalThis.clearTimeout = () => {};
+    const fallbackPromise = ohMyPi.handler();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(vscodeStub.__calls.sendTexts.length, 0, "nothing is sent before the timeout fires");
+    assert.ok(pendingTimeouts.length >= 1, "shell mode arms the integration timeout");
+    assert.equal(pendingTimeouts[0].delay, 10000, `integration timeout is 10s (saw ${pendingTimeouts[0].delay})`);
+    pendingTimeouts[0].callback();
+    await fallbackPromise;
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    const sendText = vscodeStub.__calls.sendTexts.at(-1)?.text ?? "";
+    assert.equal(sendText, `'${fakeCli}' '--continue'`, `fallback quoting rule (saw ${sendText})`);
+    assert.equal(vscodeStub.__calls.infos.length, 1, "exactly one information message on the degrade path");
+    assert.ok(
+        /status tracking is unavailable/i.test(vscodeStub.__calls.infos[0]),
+        `degrade message explains the limitation (saw ${vscodeStub.__calls.infos[0]})`
+    );
+    passed += 1;
+    console.log("ok: shell mode without integration falls back to a quoted command line with one message");
+
+    // Disposing the extension must cancel the pending status-hide timer —
+    // otherwise this very test would sit on the 30s timer before exiting.
+    for (const subscription of context.subscriptions) {
+        subscription.dispose();
+    }
+    assert.equal(vscodeStub.__calls.statusDisposed, 1, "dispose() disposes the status-bar item");
+    passed += 1;
+    console.log("ok: disposing the extension cancels the pending status timer and disposes the item");
 } catch (error) {
     console.error(`FAIL: headless activation test — ${error.message}`);
     process.exit(1);
