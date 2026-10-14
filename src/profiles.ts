@@ -24,7 +24,7 @@ export function registerAgentProfile(
                 shellPath: executable,
                 shellArgs: launch.args,
                 cwd: launch.cwd,
-                location: { viewColumn: vscode.ViewColumn.Beside },
+                location: { viewColumn: vscode.ViewColumn.Active },
                 isTransient: true,
                 iconPath: launch.iconPath,
             });

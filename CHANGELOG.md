@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2
+
+- Open agent terminals, saved sessions and terminal profiles in the active editor group without creating a side-by-side split. A single editor group uses the full editor area.
+
 ## 0.6.1
 
 - Keep agent commands, terminal profiles and saved-session filtering on the last focused project when switching from a text editor to a terminal in a multi-root workspace.

@@ -374,7 +374,7 @@ module.exports = {
         onDidChangeWorkspaceFolders(handler) { return subscribeTerminalEvent(calls.workspaceFolderHandlers, handler); },
         onDidChangeConfiguration() { return { dispose() {} }; } },
     Uri: { file: (fsPath) => ({ fsPath }), joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
-    ViewColumn: { Beside: -2 },
+    ViewColumn: { Active: -1, Beside: -2 },
     TerminalProfile: class TerminalProfile { constructor(options) { this.options = options; } },
 };
 `;
@@ -620,6 +620,7 @@ try {
     const resumed = vscodeStub.__calls.created.at(-1);
     assert.equal(firstPrime.shown, 0);
     assert.equal(resumed.options.cwd, projectDirectory);
+    assert.deepEqual(resumed.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "saved conversations open without creating a split");
     assert.deepEqual(resumed.options.shellArgs, ["--resume", savedFile, "--model", "test-model"]);
     assert.equal(resumed.options.name, "Prime Agent — recorded-prime");
     vscodeStub.window.terminals = [resumed.terminal];
@@ -816,6 +817,7 @@ try {
     const ompProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.ohMyPi");
     const workspaceProfile = ompProfile.provider.provideTerminalProfile({});
     assert.equal(workspaceProfile.options.cwd, folderB.uri.fsPath);
+    assert.deepEqual(workspaceProfile.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "terminal profiles use the active editor group");
     assert.equal(workspaceProfile.options.shellPath, workspaceLaunch.shellPath);
     vscodeStub.workspace.workspaceFolders = [folderA];
     vscodeStub.__calls.workspaceFolderHandlers.forEach((handler) => handler({}));
@@ -907,6 +909,7 @@ try {
     const created = vscodeStub.__calls.created.at(-1)?.options;
     assert.equal(created?.shellPath, fakeCli, `createTerminal must use the configured executablePath (got ${created?.shellPath})`);
     assert.deepEqual(created?.shellArgs, ["--continue"], "createTerminal must use the configured arguments");
+    assert.deepEqual(created?.location, { viewColumn: vscodeStub.ViewColumn.Active }, "direct launches use the active editor group");
     passed += 1;
     console.log("ok: configured executablePath and arguments are read with relative keys and reach createTerminal");
 
@@ -1001,6 +1004,7 @@ try {
     const shellOptions = vscodeStub.__calls.created.at(-1)?.options;
     assert.ok(shellOptions, "shell mode must create a terminal");
     assert.equal(shellOptions.shellPath, undefined, "shell mode must not override shellPath");
+    assert.deepEqual(shellOptions.location, { viewColumn: vscodeStub.ViewColumn.Active }, "shell launches use the active editor group");
     assert.equal(shellOptions.name, "Oh My Pi", "shell mode keeps the terminal name");
     assert.equal(shellOptions.cwd, homedir(), "shell mode uses the same cwd resolution as direct mode (homedir without a workspace)");
     assert.equal(vscodeStub.__calls.statusItems.length, 1, "the first shell-mode terminal creates the status item lazily");

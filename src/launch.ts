@@ -133,7 +133,7 @@ async function openShellMode(
     const terminal = vscode.window.createTerminal({
         name: launch.name,
         cwd: launch.cwd,
-        location: { viewColumn: vscode.ViewColumn.Beside },
+        location: { viewColumn: vscode.ViewColumn.Active },
         isTransient: true,
         iconPath: launch.iconPath,
     });
@@ -203,7 +203,7 @@ async function launchAgentTerminal(
         shellPath: executable,
         shellArgs: launch.args,
         cwd: launch.cwd,
-        location: { viewColumn: vscode.ViewColumn.Beside },
+        location: { viewColumn: vscode.ViewColumn.Active },
         isTransient: true,
         iconPath: launch.iconPath,
     });
