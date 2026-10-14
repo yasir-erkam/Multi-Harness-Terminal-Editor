@@ -22,6 +22,8 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     const strings = extensionStrings(context);
     const changes = new vscode.EventEmitter<void>();
     let pending: Promise<SessionScan> | undefined;
+    let pendingKey: string | undefined;
+    let scanController: AbortController | undefined;
     function getMessage(): string | undefined {
         const scope = selection.getScope();
         if (!scope.agent) {
@@ -35,22 +37,40 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         }
         return undefined;
     }
-    function getSessions(): Promise<SessionScan> {
-        if (!pending) {
-            const scope = selection.getScope();
-            if (!scope.agent || !scope.cwd) {
-                return Promise.resolve({ sessions: [], unreadable: [] });
-            }
-            const config = vscode.workspace.getConfiguration("multiHarness");
-            const roots = sessionRoots().map((root) => {
-                const override = config.get<string>(`${root.harnessId}.sessionDirectory`, "").trim();
-                return override ? { ...root, directory: override.replace(/^~(?=$|[/\\])/, os.homedir()) } : root;
-            });
-            pending = scanSavedSessions(roots, 100, { harnessId: scope.agent.id, cwd: scope.cwd });
+    async function getSessions(): Promise<SessionScan> {
+        const scope = selection.getScope();
+        const key = JSON.stringify([scope.agent?.id, scope.cwd]);
+        if (key !== pendingKey) {
+            scanController?.abort();
+            pending = undefined;
+            pendingKey = key;
         }
-        return pending;
+        if (!pending) {
+            if (!scope.agent || !scope.cwd) {
+                return { sessions: [], unreadable: [] };
+            }
+            scanController = new AbortController();
+            const signal = scanController.signal;
+            pending = Promise.resolve().then(() => {
+                const config = vscode.workspace.getConfiguration("multiHarness");
+                const roots = sessionRoots().map((root) => {
+                    const value = config.get<unknown>(`${root.harnessId}.sessionDirectory`, "");
+                    const override = typeof value === "string" ? value.trim() : "";
+                    return override ? { ...root, directory: override.replace(/^~(?=$|[/\\])/, os.homedir()) } : root;
+                });
+                return scanSavedSessions(roots, 100, { harnessId: scope.agent!.id, cwd: scope.cwd! }, { signal });
+            }).catch(() => ({ sessions: [], unreadable: [scope.agent!.id] }));
+        }
+        const request = pending;
+        const result = await request;
+        // A refresh or project change must not restore an obsolete scan.
+        if (request !== pending || key !== JSON.stringify([selection.getScope().agent?.id, selection.getScope().cwd])) {
+            return getSessions();
+        }
+        return result;
     }
     function refresh(): void {
+        scanController?.abort();
         pending = undefined;
         updateHeader();
         changes.fire();
@@ -102,6 +122,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     updateHeader();
     context.subscriptions.push(
         changes,
+        { dispose: () => scanController?.abort() },
         view,
         selection.onDidChange(refresh),
         vscode.commands.registerCommand("multiHarness.refreshSessions", refresh),

@@ -5,6 +5,8 @@
 - Keep agent commands, terminal profiles and saved-session filtering on the last focused project when switching from a text editor to a terminal in a multi-root workspace.
 - Resume saved conversations using their recorded project's executable path, arguments and local CLI lookup, even when another project's editor is active.
 - Ignore malformed message content blocks while retaining valid saved conversations and readable titles.
+- Keep missing or relocated session stores and unrecognized formats empty without breaking the extension. Recover from scan failures, ignore invalid directory setting types, cancel outdated scans, and bound archive traversal to 20,000 entries with a notice when results are incomplete.
+- Report terminal creation failures without rejecting agent commands, allowing a later retry.
 
 ## 0.6.0
 

@@ -4,6 +4,7 @@ import { fullSettingKey, iconFile, settingKey, type Harness } from "./harnesses"
 import { resolveExecutable } from "./resolveExecutable";
 import { hasShellIntegrationApi, type AgentStatus } from "./status";
 import { workspaceFolder } from "./workspaceContext";
+import { extensionStrings } from "./localization";
 
 /** How long shell mode waits for shell integration before degrading. */
 export const SHELL_INTEGRATION_TIMEOUT_MS = 10_000;
@@ -154,6 +155,20 @@ async function openShellMode(
 
 /** Open (or reveal) the harness terminal from the command. */
 export async function openAgentTerminal(
+    context: vscode.ExtensionContext,
+    harness: Harness,
+    status?: AgentStatus,
+    resume?: ResumeLaunch
+): Promise<void> {
+    try {
+        await launchAgentTerminal(context, harness, status, resume);
+    } catch {
+        const strings = extensionStrings(context);
+        await vscode.window.showErrorMessage(`${strings["terminal.openFailed"]} (${harness.displayName})`);
+    }
+}
+
+async function launchAgentTerminal(
     context: vscode.ExtensionContext,
     harness: Harness,
     status?: AgentStatus,

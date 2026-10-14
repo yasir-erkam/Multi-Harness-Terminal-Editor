@@ -160,7 +160,7 @@ try {
     writeFileSync(join(codexRoot.directory, "subagent.jsonl"), JSON.stringify({ type: "session_meta", payload: {id: "child", cwd: savedDir, source: {subagent: {}}} }) + "\n");
     assert.equal((await scanSavedSessions(roots)).sessions.length, 5);
     assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: join(savedDir, "missing") }])).sessions, []);
-    assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: prime.file }])).unreadable, ["codex"]);
+    assert.deepEqual(await scanSavedSessions([{ harnessId: "codex", directory: prime.file }]), { sessions: [], unreadable: [] }, "a session directory replaced by a file behaves like a missing store");
     assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: "relative-root" }])).unreadable, ["codex"]);
     const overrides = sessionRoots(savedDir, { CODEX_HOME: "~/custom-codex", PRIME_AGENT_SESSION_DIR: "~/prime-sessions" });
     assert.equal(overrides[0].directory, join(savedDir, "custom-codex", "sessions"));
@@ -199,6 +199,29 @@ try {
     }
     passed += 1;
     console.log("ok: malformed content blocks preserve valid saved sessions and readable titles");
+
+    const changedStore = join(savedDir, "renamed-store");
+    const movedStore = join(savedDir, "new-store");
+    mkdirSync(changedStore);
+    writeFileSync(join(changedStore, "changed-format.jsonl"), JSON.stringify({ type: "new-session-format", metadata: { id: "future", cwd: workspace } }));
+    assert.deepEqual(await scanSavedSessions([{ harnessId: "pi", directory: changedStore }]), { sessions: [], unreadable: [] });
+    const { renameSync } = await import("node:fs");
+    renameSync(changedStore, movedStore);
+    assert.deepEqual(await scanSavedSessions([{ harnessId: "pi", directory: changedStore }]), { sessions: [], unreadable: [] });
+    const aborted = new AbortController();
+    aborted.abort();
+    assert.deepEqual(await scanSavedSessions(roots, 100, undefined, { signal: aborted.signal }), { sessions: [], unreadable: [] });
+    const interrupted = new AbortController();
+    const interruptedScan = scanSavedSessions(roots, 100, { harnessId: "pi", cwd: workspace }, { signal: interrupted.signal });
+    interrupted.abort();
+    assert.deepEqual(await interruptedScan, { sessions: [], unreadable: [] }, "cancellation during a scan returns an empty result");
+    const bounded = await scanSavedSessions(roots, 100, undefined, { maxEntries: 2 });
+    assert.ok(bounded.unreadable.length > 0, "bounded scans identify incomplete results");
+    assert.ok(bounded.sessions.length <= 2);
+    writeFileSync(join(piRoot.directory, "invalid-cwd.jsonl"), JSON.stringify({ type: "session", id: "invalid-cwd", cwd: workspace + "\0" }));
+    assert.equal((await scanSavedSessions([piRoot])).sessions.some((session) => session.id === "invalid-cwd"), false);
+    passed += 1;
+    console.log("ok: changed stores and formats show empty history; scans support cancellation and bounded traversal");
 } finally {
     rmSync(savedDir, { recursive: true, force: true });
 }
@@ -380,6 +403,11 @@ try {
     const requireFrom = createRequire(join(activationDir, "loader.cjs"));
     const vscodeStub = requireFrom(join(stubDir, "index.js"));
     const extension = requireFrom(join(activationDir, "extension.cjs"));
+    await build({
+        entryPoints: [join(projectRoot, "src", "launch.ts")],
+        outfile: join(activationDir, "launch.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent",
+    });
+    const resumeLauncher = requireFrom(join(activationDir, "launch.cjs"));
 
     const savedState = new Map();
     const globalState = {
@@ -631,6 +659,52 @@ try {
     console.log("ok: saved conversations resume by identity in the recorded project and handle deleted files and missing projects");
 
     vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
+    refreshSaved.handler();
+    const staleScan = savedView.provider.getChildren();
+    await selectSessionAgent.handler("codex");
+    assert.deepEqual(await staleScan, [], "in-flight scans cannot restore the previous agent's sessions");
+    await selectSessionAgent.handler("primeAgent");
+    assert.equal((await savedView.provider.getChildren()).length, 1);
+    const originalSessionDirectory = vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory;
+    for (const invalid of [null, 42, {}, ["invalid"]]) {
+        vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory = invalid;
+        refreshSaved.handler();
+        assert.ok(Array.isArray(await savedView.provider.getChildren()), "invalid setting types cannot reject the view request");
+    }
+    vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory = join(savedRoot, "moved-away");
+    refreshSaved.handler();
+    assert.deepEqual(await savedView.provider.getChildren(), [], "a missing configured store leaves the session view empty");
+    const originalGetConfiguration = vscodeStub.workspace.getConfiguration;
+    vscodeStub.workspace.getConfiguration = () => { throw new Error("configuration unavailable"); };
+    refreshSaved.handler();
+    const failedRows = await savedView.provider.getChildren();
+    assert.equal(failedRows.length, 1);
+    assert.equal(failedRows[0].notice, true, "scan setup failures resolve as an empty history with a notice");
+    vscodeStub.workspace.getConfiguration = originalGetConfiguration;
+    vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory = originalSessionDirectory;
+    refreshSaved.handler();
+    assert.equal((await savedView.provider.getChildren()).length, 1, "refresh recovers after a transient failure");
+    const fsPromises = requireFrom("node:fs/promises");
+    const originalOpenDirectory = fsPromises.opendir;
+    try {
+        fsPromises.opendir = async (directory, ...args) => {
+            if (directory === originalSessionDirectory) {
+                throw Object.assign(new Error("access denied"), { code: "EACCES" });
+            }
+            return originalOpenDirectory(directory, ...args);
+        };
+        refreshSaved.handler();
+        const deniedRows = await savedView.provider.getChildren();
+        assert.deepEqual(deniedRows, [{ notice: true }], "directory permission failures leave history empty with a notice");
+    } finally {
+        fsPromises.opendir = originalOpenDirectory;
+    }
+    refreshSaved.handler();
+    assert.equal((await savedView.provider.getChildren()).length, 1, "history returns after directory access is restored");
+    passed += 1;
+    console.log("ok: session views ignore stale scans, tolerate invalid configuration and recover after failure");
+
+    vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
     vscodeStub.__calls.activeEditorHandlers.forEach((handler) => handler(undefined));
     const layoutCommand = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.toggleSidebarLayout");
     vscodeStub.__fixture.multiHarness.sidebarLayout = "native";
@@ -679,6 +753,7 @@ try {
     assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.resumeSession", { harnessId: "primeAgent", id: "recorded-prime" }]);
     const messagesBeforeFavorite = cardMessages.length;
     await addFavorite.handler(primeAgent);
+    await new Promise((resolve) => setImmediate(resolve));
     assert.equal(cardMessages.length, messagesBeforeFavorite + 1, "native favorite updates refresh the card model");
     assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "primeAgent").favorite, true);
     await removeFavorite.handler(primeAgent);
@@ -763,7 +838,12 @@ try {
     // the window between a focus change and the view's next refresh.
     vscodeStub.window.activeTextEditor = { document: { uri: { fsPath: join(folderA.uri.fsPath, "file.ts") } } };
     vscodeStub.window.terminals = [];
+    const launchesBeforeStaleResume = vscodeStub.__calls.created.length;
     await resume.handler({ harnessId: "ohMyPi", id: projectBSession.id });
+    assert.equal(vscodeStub.__calls.created.length, launchesBeforeStaleResume, "a stale request from another project does not open a terminal");
+    await resumeLauncher.openAgentTerminal(context, agents.find((agent) => agent.id === "ohMyPi"), undefined, {
+        terminalName: "Oh My Pi — project-b-session", cwd: folderB.uri.fsPath, args: ["--resume", ompFile],
+    });
     const projectBResume = vscodeStub.__calls.created.at(-1).options;
     assert.equal(projectBResume.cwd, folderB.uri.fsPath);
     assert.equal(projectBResume.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", "workspace-omp"));
@@ -778,7 +858,9 @@ try {
     focusEditor(undefined);
     assert.equal((await savedView.provider.getChildren())[0].id, "external-session");
     vscodeStub.workspace.workspaceFolders = [folderA];
-    await resume.handler({ harnessId: "ohMyPi", id: "external-session" });
+    await resumeLauncher.openAgentTerminal(context, agents.find((agent) => agent.id === "ohMyPi"), undefined, {
+        terminalName: "Oh My Pi — external-session", cwd: externalFolder, args: ["--resume", ompFile],
+    });
     const externalResume = vscodeStub.__calls.created.at(-1).options;
     assert.equal(externalResume.cwd, externalFolder);
     assert.equal(externalResume.shellPath, fakeCli);
@@ -827,6 +909,19 @@ try {
     assert.deepEqual(created?.shellArgs, ["--continue"], "createTerminal must use the configured arguments");
     passed += 1;
     console.log("ok: configured executablePath and arguments are read with relative keys and reach createTerminal");
+
+    vscodeStub.window.terminals = [];
+    const originalCreateTerminal = vscodeStub.window.createTerminal;
+    vscodeStub.window.createTerminal = () => { throw new Error("terminal service unavailable"); };
+    const errorsBeforeFailure = vscodeStub.__calls.errors.length;
+    await ohMyPi.handler();
+    assert.equal(vscodeStub.__calls.errors.length, errorsBeforeFailure + 1);
+    assert.ok(vscodeStub.__calls.errors.at(-1).includes("could not be opened"));
+    vscodeStub.window.createTerminal = originalCreateTerminal;
+    await ohMyPi.handler();
+    assert.equal(vscodeStub.__calls.created.at(-1).options.shellPath, fakeCli, "a later launch recovers normally");
+    passed += 1;
+    console.log("ok: terminal service failures report an error without rejecting agent commands and allow retry");
 
     // The Open Settings path must use the FULL id (that API wants the complete key).
     vscodeStub.__calls.executed.length = 0;

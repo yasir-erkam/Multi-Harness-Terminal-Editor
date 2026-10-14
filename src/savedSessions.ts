@@ -26,6 +26,11 @@ export interface SessionFilter {
     readonly cwd: string;
 }
 
+export interface SessionScanOptions {
+    readonly signal?: AbortSignal;
+    readonly maxEntries?: number;
+}
+
 async function canonicalDirectory(directory: string): Promise<string> {
     const resolved = await fs.realpath(directory).catch(() => path.resolve(directory));
     const normalized = path.normalize(resolved);
@@ -101,7 +106,7 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
     } else {
         header = rows.find((row) => row.type === "session");
     }
-    if (!header || typeof header.id !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(header.id) || typeof header.cwd !== "string" || !path.isAbsolute(header.cwd)) {
+    if (!header || typeof header.id !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(header.id) || typeof header.cwd !== "string" || header.cwd.includes("\0") || !path.isAbsolute(header.cwd)) {
         return undefined;
     }
     let title = clean(header.title);
@@ -136,7 +141,11 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
     return { harnessId, id: header.id, cwd: header.cwd, file, modified, title: title || header.id };
 }
 
-export async function scanSavedSessions(roots = sessionRoots(), limit = 100, filter?: SessionFilter): Promise<SessionScan> {
+export async function scanSavedSessions(roots = sessionRoots(), limit = 100, filter?: SessionFilter, options: SessionScanOptions = {}): Promise<SessionScan> {
+    const empty = { sessions: [], unreadable: [] };
+    if (options.signal?.aborted || limit <= 0) {
+        return empty;
+    }
     if (filter) {
         roots = roots.filter((root) => root.harnessId === filter.harnessId);
     }
@@ -144,27 +153,40 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
     const canonicalPaths = new Map<string, string>();
     const unreadable = new Set<string>();
     const candidates: { root: SessionRoot; file: string; modified: number; size: number }[] = [];
+    let visited = 0;
+    const maxEntries = options.maxEntries ?? 20_000;
     async function walk(root: SessionRoot, directory: string, depth: number): Promise<void> {
-        let entries;
         try {
-            entries = await fs.readdir(directory, { withFileTypes: true });
-        } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-                unreadable.add(root.harnessId);
+            if (options.signal?.aborted) {
+                return;
             }
-            return;
-        }
-        for (const entry of entries) {
-            const file = path.join(directory, entry.name);
-            if (entry.isDirectory() && depth < 4 && !entry.name.startsWith(".") && !["subagents", "session-artifacts"].includes(entry.name)) {
-                await walk(root, file, depth + 1);
-            } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
-                try {
-                    const stat = await fs.stat(file);
-                    candidates.push({ root, file, modified: stat.mtimeMs, size: stat.size });
-                } catch {
-                    // A session may disappear while the list is being refreshed.
+            const entries = await fs.opendir(directory);
+            for await (const entry of entries) {
+                if (options.signal?.aborted) {
+                    return;
                 }
+                if (++visited > maxEntries) {
+                    unreadable.add(root.harnessId);
+                    return;
+                }
+                const file = path.join(directory, entry.name);
+                if (entry.isDirectory() && depth < 4 && !entry.name.startsWith(".") && !["subagents", "session-artifacts"].includes(entry.name)) {
+                    await walk(root, file, depth + 1);
+                } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+                    try {
+                        const stat = await fs.stat(file);
+                        if (stat.isFile()) {
+                            candidates.push({ root, file, modified: stat.mtimeMs, size: stat.size });
+                        }
+                    } catch {
+                        // A session may disappear while the list is being refreshed.
+                    }
+                }
+            }
+        } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code !== "ENOENT" && code !== "ENOTDIR") {
+                unreadable.add(root.harnessId);
             }
         }
     }
@@ -177,6 +199,9 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
     }));
     const codexTitles = new Map<string, string>();
     for (const root of roots.filter((candidate) => candidate.harnessId === "codex")) {
+        if (options.signal?.aborted) {
+            return empty;
+        }
         const index = path.join(root.directory, "..", "session_index.jsonl");
         try {
             const stat = await fs.stat(index);
@@ -193,6 +218,9 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
     const sessions: SavedSession[] = [];
     const seen = new Set<string>();
     for (const candidate of filter ? candidates : candidates.slice(0, MAX_CANDIDATES)) {
+        if (options.signal?.aborted) {
+            return empty;
+        }
         if (sessions.length >= limit) {
             break;
         }
