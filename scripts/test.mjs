@@ -23,6 +23,13 @@ await build({
     logLevel: "silent",
 });
 const { resolveExecutable } = await import(pathToFileURL(join(outdir, "resolveExecutable.test.mjs")).href);
+await build({
+    entryPoints: [join(projectRoot, "src", "resolveExecutable.ts")],
+    outfile: join(outdir, "resolveExecutable.windows.test.mjs"),
+    bundle: true, format: "esm", platform: "node", logLevel: "silent",
+    define: { "process.platform": '"win32"' },
+});
+const { resolveExecutable: resolveWindowsExecutable } = await import(pathToFileURL(join(outdir, "resolveExecutable.windows.test.mjs")).href);
 
 let passed = 0;
 function test(name, fn) {
@@ -108,6 +115,106 @@ test("win32 explicit .ps1 path resolves without adding suffixes", (dir) => {
         resolveExecutable(join(dir, "tools.ps1"), { platform: "win32", user: { home: dir } }),
         join(dir, "tools.ps1")
     );
+});
+
+test("Windows host searches npm user directory without an explicit platform option", (dir) => {
+    const appData = join(dir, "AppData", "Roaming");
+    const bin = join(appData, "npm");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "codex.cmd"), "@echo off\n");
+    assert.equal(resolveWindowsExecutable("codex", { user: { home: dir, appData } }), join(bin, "codex.cmd"));
+});
+
+function fnmFixture(dir) {
+    const appData = join(dir, "AppData", "Roaming");
+    const localAppData = join(dir, "AppData", "Local");
+    return { home: dir, appData, localAppData, fnmDir: join(appData, "fnm") };
+}
+
+function installFnmCli(root, version) {
+    const bin = join(root, "node-versions", version, "installation");
+    mkdirSync(bin, { recursive: true });
+    const executable = join(bin, "codex.cmd");
+    writeFileSync(executable, "@echo off\n");
+    return executable;
+}
+
+function resolveWindowsWithoutPath(target, options) {
+    const previous = process.env.PATH;
+    process.env.PATH = "";
+    try {
+        return resolveWindowsExecutable(target, options);
+    } finally {
+        if (previous === undefined) delete process.env.PATH;
+        else process.env.PATH = previous;
+    }
+}
+
+test("Windows fnm discovery finds a CLI installed after an unsuccessful lookup", (dir) => {
+    const user = fnmFixture(dir);
+    const options = { user };
+    assert.equal(resolveWindowsWithoutPath("codex", options), undefined);
+    const executable = installFnmCli(user.fnmDir, "v22.10.0");
+    assert.equal(resolveWindowsWithoutPath("codex", options), executable);
+});
+
+test("Windows fnm discovery honors a custom FNM_DIR environment variable", (dir) => {
+    const user = fnmFixture(dir);
+    delete user.fnmDir;
+    const root = join(dir, "custom-fnm");
+    const executable = installFnmCli(root, "v22.10.0");
+    const previous = process.env.FNM_DIR;
+    process.env.FNM_DIR = root;
+    try {
+        assert.equal(resolveWindowsWithoutPath("codex", { user }), executable);
+    } finally {
+        if (previous === undefined) delete process.env.FNM_DIR;
+        else process.env.FNM_DIR = previous;
+    }
+});
+
+test("Windows fnm discovery resolves the default junction before newer versions", (dir) => {
+    const user = fnmFixture(dir);
+    const executable = installFnmCli(user.fnmDir, "v20.10.0");
+    installFnmCli(user.fnmDir, "v22.10.0");
+    mkdirSync(join(user.fnmDir, "aliases"), { recursive: true });
+    symlinkSync(dirname(executable), join(user.fnmDir, "aliases", "default"), "junction");
+    assert.equal(resolveWindowsWithoutPath("codex", { user }), executable);
+});
+
+test("Windows fnm fallback selects the newest installed version numerically", (dir) => {
+    const user = fnmFixture(dir);
+    installFnmCli(user.fnmDir, "v22.9.0");
+    const executable = installFnmCli(user.fnmDir, "v22.10.0");
+    assert.equal(resolveWindowsWithoutPath("codex", { user }), executable);
+});
+
+test("Windows fnm fallback preserves PATH precedence", (dir) => {
+    const user = fnmFixture(dir);
+    installFnmCli(user.fnmDir, "v22.10.0");
+    const executable = join(dir, "codex.cmd");
+    writeFileSync(executable, "@echo off\n");
+    const previous = process.env.PATH;
+    process.env.PATH = dir;
+    try {
+        assert.equal(resolveWindowsExecutable("codex", { user }), executable);
+    } finally {
+        if (previous === undefined) delete process.env.PATH;
+        else process.env.PATH = previous;
+    }
+});
+
+test("Windows fnm fallback handles LocalAppData, legacy roots and broken defaults", (dir) => {
+    for (const location of ["local", "legacy"]) {
+        const home = join(dir, location);
+        const user = fnmFixture(home);
+        const root = location === "local" ? join(user.localAppData, "fnm") : join(home, ".fnm");
+        const executable = installFnmCli(root, "v22.10.0");
+        mkdirSync(join(root, "aliases"), { recursive: true });
+        symlinkSync(join(root, "missing"), join(root, "aliases", "default"), "junction");
+        assert.equal(resolveWindowsWithoutPath("codex", { user }), executable);
+        assert.equal(resolveWindowsWithoutPath(join(home, "missing", "codex"), { user }), undefined);
+    }
 });
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ export interface LookupOptions {
         home: string;
         appData?: string;
         localAppData?: string;
+        fnmDir?: string;
     };
     /** Optional PATH-like directory list one level below the current request. */
     nextPathDirs?: readonly string[];
@@ -54,10 +55,10 @@ function suffixCandidates(name: string, platform: NodeJS.Platform): string[] {
     return [...WIN_EXECUTABLE_SUFFIXES.map((s) => name + s), name];
 }
 
-function userDirectories(options: LookupOptions): string[] {
+function userDirectories(options: LookupOptions, platform: NodeJS.Platform): string[] {
     const home = options.user?.home ?? os.homedir();
     const dirs: string[] = [];
-    if (options.platform === "win32") {
+    if (platform === "win32") {
         const appData = options.user?.appData ?? process.env.APPDATA;
         const localAppData = options.user?.localAppData ?? process.env.LOCALAPPDATA;
         if (appData) {
@@ -70,6 +71,43 @@ function userDirectories(options: LookupOptions): string[] {
         dirs.push(path.join(home, ".bun", "bin"));
         dirs.push(path.join(home, ".local", "bin"));
         dirs.push(path.join(home, ".npm-global", "bin"));
+    }
+    return dirs;
+}
+
+/** Windows npm shims live beside node.exe in fnm's permanent installations. */
+function fnmDirectories(options: LookupOptions, platform: NodeJS.Platform): string[] {
+    if (platform !== "win32") {
+        return [];
+    }
+    const home = options.user?.home ?? os.homedir();
+    const appData = options.user?.appData ?? process.env.APPDATA;
+    const localAppData = options.user?.localAppData ?? process.env.LOCALAPPDATA;
+    const roots = [
+        options.user?.fnmDir ?? process.env.FNM_DIR,
+        ...(appData ? [path.join(appData, "fnm")] : []),
+        ...(localAppData ? [path.join(localAppData, "fnm")] : []),
+        path.join(home, ".fnm"),
+    ];
+    const dirs: string[] = [];
+    for (const root of new Set(roots)) {
+        if (!root) {
+            continue;
+        }
+        // Prefer the configured default, resolving its junction to a permanent path.
+        try {
+            dirs.push(fs.realpathSync(path.join(root, "aliases", "default")));
+        } catch {
+            // A default alias is optional, and deleted junction targets are harmless.
+        }
+        const versions = path.join(root, "node-versions");
+        try {
+            const names = fs.readdirSync(versions).filter((name) => /^v\d+\.\d+\.\d+$/.test(name));
+            names.sort((a, b) => b.localeCompare(a, "en", { numeric: true }));
+            dirs.push(...names.map((name) => path.join(versions, name, "installation")));
+        } catch {
+            // fnm may be absent or its installation directory inaccessible.
+        }
     }
     return dirs;
 }
@@ -104,13 +142,22 @@ export function resolveExecutable(target: string, options: LookupOptions = {}): 
     const dirs = [
         ...(options.rootFolder ? [path.join(options.rootFolder, "node_modules", ".bin")] : []),
         ...(options.nextPathDirs ?? []),
-        ...userDirectories(options),
+        ...userDirectories(options, platform),
         ...(process.env.PATH ?? "").split(path.delimiter),
     ];
     for (const dir of dirs) {
         if (!dir) {
             continue;
         }
+        for (const suffix of suffixes) {
+            const candidate = path.join(dir, suffix);
+            if (check(candidate)) {
+                return candidate;
+            }
+        }
+    }
+    // Keep the inherited PATH authoritative before trying other fnm versions.
+    for (const dir of fnmDirectories(options, platform)) {
         for (const suffix of suffixes) {
             const candidate = path.join(dir, suffix);
             if (check(candidate)) {

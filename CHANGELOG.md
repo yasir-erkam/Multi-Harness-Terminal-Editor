@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.4
+
+- Fixed Windows npm/pnpm directory discovery when launch commands use the host platform implicitly.
+- Discover npm-installed agents in permanent Windows fnm installations when the extension host does not inherit PowerShell's temporary multishell PATH. Prefer existing PATH matches and the fnm default alias before trying other installed versions; detect later installations on the next launch.
+
 ## 0.6.3
 
 - Added `multiHarness.useFullEditorArea` (enabled by default). Disable it to preserve split editor groups when opening, resuming or focusing agent terminals. Setting changes apply on the next interaction without reloading.

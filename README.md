@@ -273,7 +273,9 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
   - on POSIX `~/.bun/bin`, `~/.local/bin` and `~/.npm-global/bin`,
   - before finally falling back to `PATH`.
 
-  If an agent still is not found, set `multiHarness.<id>.executablePath` explicitly, or reload the VS Code window after installing the CLI.
+  On Windows, if those lookups fail, fnm installations are also searched: `FNM_DIR`, `%APPDATA%\fnm`, `%LOCALAPPDATA%\fnm` and `~/.fnm`. The default Node alias is tried first, followed by installed Node versions from newest to oldest. This finds npm-installed agents even when PowerShell's temporary `fnm_multishells` path is absent from the extension host. Existing workspace, user-directory and `PATH` matches retain precedence. Installations are checked again on each launch, so a CLI installed later can be discovered without reloading.
+
+  If an agent still is not found, set `multiHarness.<id>.executablePath` to its full path in the environment where the extension runs. For fnm, use the permanent `node-versions/<version>/installation/<agent>.cmd` path rather than a temporary `fnm_multishells` path.
 - **Status reporting requires shell mode.** Direct mode does not report agent process state. Shell mode reports command start and finish when shell integration is available; it does not detect when an agent needs input.
 - **Editor title-bar buttons are off by default.** Enable the matching `multiHarness.show<Id>Icon` setting to show them. The Multi-Harness Activity Bar launcher is available by default; you can also use `multiHarness.openAgentPicker`.
 
