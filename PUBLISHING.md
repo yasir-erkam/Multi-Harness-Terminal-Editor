@@ -51,7 +51,7 @@ The logged-in PAT is stored locally; you do not need to paste it for every `publ
 ### 3.3 Publish with the CLI
 
 ```bash
-npx @vscode/vsce publish --packagePath ./artifacts/multi-harness-terminal-editor-0.5.0.vsix
+npx @vscode/vsce publish --packagePath ./artifacts/multi-harness-terminal-editor-0.6.0.vsix
 ```
 
 ### 3.4 Or upload manually
@@ -79,7 +79,7 @@ npx ovsx create-namespace yasir-erkam-ozdemir -p "$OVSX_PAT"
 ### 4.3 Publish the same VSIX
 
 ```bash
-npx ovsx publish ./artifacts/multi-harness-terminal-editor-0.5.0.vsix -p "$OVSX_PAT"
+npx ovsx publish ./artifacts/multi-harness-terminal-editor-0.6.0.vsix -p "$OVSX_PAT"
 ```
 
 ### 4.4 Claim the namespace for the verified badge

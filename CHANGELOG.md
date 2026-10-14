@@ -2,15 +2,11 @@
 
 ## 0.6.0
 
-- Sidebar agent rows now select the saved-session filter on a single click and open the agent terminal on a double click, in both list and card layouts.
-
-- Removed the duplicate List/Cards selector inside the card panel; layout switching remains in the view header and settings. Replaced the card panel's font-dependent settings glyph with a vector gear icon.
-
-- Added a sidebar layout switch: native VS Code lists (default) or a themed card panel with search, favorites, saved sessions and open terminals. Both layouts share the selected agent, project filter and terminal commands; the layout choice is saved in VS Code settings.
-
-- Filter saved conversations by selected agent and current project directory, with a filter picker, per-workspace agent selection and directory alias matching.
-- Added separate Sessions and Open Terminals views. Sessions shows saved conversations for Codex, Claude Code, Pi, Oh My Pi and Prime Agent and resumes the selected record in its original project. Open Terminals focuses existing terminal tabs and marks the active terminal.
-- Added session refresh, custom storage-directory settings, and handling for deleted session files and unavailable projects.
+- Added two sidebar layouts: native VS Code lists by default, or cards with search, larger agent icons and integrated session lists. Switch layouts from the view header or extension settings; both share favorites, selected agent and project scope.
+- Click an agent once to show its saved conversations for the current project; double-click to open its terminal. The selected agent is remembered per workspace.
+- Added separate Sessions and Open Terminals views. Sessions reads saved conversations for Codex, Claude Code, Pi, Oh My Pi and Prime Agent independently of open terminals, and resumes the exact conversation in its original project.
+- Filter saved conversations by agent and project, including directory aliases and multi-root workspaces. Added session refresh, custom storage-directory settings, and handling for deleted session files and unavailable projects.
+- Open Terminals focuses the exact existing terminal and marks the active one. The card panel uses a vector settings gear and keeps layout switching in the view header without a duplicate List/Cards selector.
 
 ## 0.5.0
 
