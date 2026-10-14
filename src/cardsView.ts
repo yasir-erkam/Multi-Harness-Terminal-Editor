@@ -5,11 +5,14 @@ import * as vscode from "vscode";
 import { type FavoriteAgents } from "./agentsView";
 import { HARNESSES, iconFile } from "./harnesses";
 import { type AgentSessions, sessionLabel } from "./sessionsView";
+import { type SavedSessions } from "./savedSessionsView";
+import { basename } from "node:path";
 
 export function registerCardsView(
     context: vscode.ExtensionContext,
     favorites: FavoriteAgents,
-    sessions: AgentSessions
+    sessions: AgentSessions,
+    savedSessions: SavedSessions
 ): void {
     let current: vscode.WebviewView | undefined;
     const media = vscode.Uri.joinPath(context.extensionUri, "media");
@@ -18,11 +21,18 @@ export function registerCardsView(
         join(context.extensionPath, language === "tr" ? "package.nls.tr.json" : "package.nls.json"), "utf8"
     ));
 
-    function refresh(): void {
-        if (!current) {
+    let generation = 0;
+    async function refresh(): Promise<void> {
+        const view = current;
+        if (!view) {
             return;
         }
-        const webview = current.webview;
+        const version = ++generation;
+        const saved = await savedSessions.getSessions();
+        if (current !== view || version !== generation) {
+            return;
+        }
+        const webview = view.webview;
         void webview.postMessage({
             type: "state",
             agents: [...HARNESSES].sort((a, b) => Number(favorites.isFavorite(b)) - Number(favorites.isFavorite(a))).map((harness) => ({
@@ -37,6 +47,15 @@ export function registerCardsView(
                 label: sessionLabel(session),
                 active: session.terminal === vscode.window.activeTerminal,
             })),
+            saved: saved.sessions.map((session) => ({
+                key: `${session.harnessId}:${session.id}`,
+                title: session.title,
+                harness: HARNESSES.find((harness) => harness.id === session.harnessId)?.displayName,
+                project: basename(session.cwd),
+                cwd: session.cwd,
+                modified: session.modified,
+            })),
+            savedUnreadable: saved.unreadable.length > 0,
         });
     }
 
@@ -46,7 +65,7 @@ export function registerCardsView(
             const webview = view.webview;
             webview.options = { enableScripts: true, localResourceRoots: [media] };
             const nonce = randomBytes(18).toString("hex");
-            const asset = (name: string): string => webview.asWebviewUri(vscode.Uri.joinPath(media, name)).toString();
+            const asset = (name: string): string => `${webview.asWebviewUri(vscode.Uri.joinPath(media, name)).toString()}?v=${nonce}`;
             const labels = JSON.stringify(strings).replace(/</g, "\\u003c");
             webview.html = `<!DOCTYPE html>
 <html lang="${language}"><head><meta charset="UTF-8">
@@ -64,7 +83,14 @@ export function registerCardsView(
                     }
                     const { action, id } = message as { action?: unknown; id?: unknown };
                     if (action === "ready") {
-                        refresh();
+                        await refresh();
+                    } else if (action === "refresh") {
+                        await vscode.commands.executeCommand("multiHarness.refreshSessions");
+                    } else if (action === "resume" && typeof id === "string") {
+                        const saved = (await savedSessions.getSessions()).sessions.find((session) => `${session.harnessId}:${session.id}` === id);
+                        if (saved) {
+                            await vscode.commands.executeCommand("multiHarness.resumeSession", { harnessId: saved.harnessId, id: saved.id });
+                        }
                     } else if (action === "settings") {
                         await vscode.commands.executeCommand("multiHarness.openSettings");
                     } else if (action === "layout") {
@@ -97,6 +123,7 @@ export function registerCardsView(
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider("multiHarness.cards", provider),
         favorites.onDidChange(refresh),
-        sessions.onDidChange(refresh)
+        sessions.onDidChange(refresh),
+        savedSessions.onDidChange(refresh)
     );
 }

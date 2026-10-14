@@ -2,7 +2,7 @@
 const vscode = acquireVsCodeApi();
 const labels = window.sidebarLabels;
 const t = (key) => labels[key] || key;
-let state = { agents: [], sessions: [] };
+let state = { agents: [], sessions: [], saved: [] };
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -52,6 +52,11 @@ function section(title) {
 }
 
 const sessions = section(t("view.sessions.name"));
+const saved = section(t("view.savedSessions.name"));
+saved.node.querySelector("h2").append(button("icon-button refresh-button", "↻", "refresh", undefined, t("command.refreshSessions.title")));
+saved.body.className = "saved-list";
+saved.body.append(element("p", "empty", t("sidebar.loading")));
+saved.node.append(element("p", "support-note", t("sidebar.savedSupport")));
 const agents = section(t("view.agents.name"));
 const search = element("input", "search");
 search.type = "search";
@@ -61,11 +66,34 @@ search.value = vscode.getState()?.query || "";
 search.addEventListener("input", () => {
     vscode.setState({ query: search.value });
     renderAgents();
+    renderSaved();
+    renderSessions();
 });
-agents.node.insertBefore(search, agents.body);
 agents.body.className = "agent-grid";
 sessions.body.className = "session-list";
-app.append(header, switcher, sessions.node, agents.node);
+app.append(header, switcher, search, saved.node, sessions.node, agents.node);
+
+function renderSaved() {
+    const query = search.value.trim().toLocaleLowerCase();
+    const matching = (state.saved || []).filter((session) =>
+        `${session.title} ${session.harness} ${session.project}`.toLocaleLowerCase().includes(query));
+    saved.count.textContent = String(matching.length);
+    saved.body.replaceChildren();
+    if (state.savedUnreadable) {
+        saved.body.append(element("p", "empty", t("savedSessions.unreadable")));
+    }
+    if (matching.length === 0) {
+        saved.body.append(element("p", "empty", t(query ? "sidebar.noResults" : "sidebar.noSavedSessions")));
+    }
+    for (const session of matching) {
+        const row = button("saved-session", undefined, "resume", session.key,
+            `${t("command.resumeSession.title")}: ${session.title}\n${session.cwd}`);
+        const date = new Date(session.modified).toLocaleDateString(document.documentElement.lang);
+        row.append(element("span", "saved-title", session.title),
+            element("span", "saved-meta", `${session.harness} · ${session.project} · ${date}`));
+        saved.body.append(row);
+    }
+}
 
 function renderAgents() {
     const query = search.value.trim().toLocaleLowerCase();
@@ -99,12 +127,14 @@ function renderAgents() {
 }
 
 function renderSessions() {
-    sessions.count.textContent = String(state.sessions.length);
+    const query = search.value.trim().toLocaleLowerCase();
+    const matching = state.sessions.filter((session) => session.label.toLocaleLowerCase().includes(query));
+    sessions.count.textContent = String(matching.length);
     sessions.body.replaceChildren();
-    if (state.sessions.length === 0) {
-        sessions.body.append(element("p", "empty", t("sidebar.noSessions")));
+    if (matching.length === 0) {
+        sessions.body.append(element("p", "empty", t(query ? "sidebar.noResults" : "sidebar.noSessions")));
     }
-    for (const session of state.sessions) {
+    for (const session of matching) {
         const row = button(`session${session.active ? " active" : ""}`, undefined, "focus", session.id,
             `${t("command.focusSession.title")}: ${session.label}`);
         row.append(element("span", "session-dot", "●"), element("span", "session-name", session.label));
@@ -122,6 +152,7 @@ window.addEventListener("message", (event) => {
     const previous = focused?.dataset.action ? { action: focused.dataset.action, id: focused.dataset.id } : undefined;
     state = event.data;
     renderSessions();
+    renderSaved();
     renderAgents();
     if (previous) {
         const replacement = Array.from(app.querySelectorAll("button[data-action]")).find((node) =>

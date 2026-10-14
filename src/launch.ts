@@ -18,6 +18,12 @@ export interface AgentLaunch {
     iconPath: { light: vscode.Uri; dark: vscode.Uri };
 }
 
+export interface ResumeLaunch {
+    readonly terminalName: string;
+    readonly cwd: string;
+    readonly args: readonly string[];
+}
+
 /** Workspace folder backing the next agent launch (active editor first). */
 export function workspaceFolder(): vscode.WorkspaceFolder | undefined {
     const activeUri = vscode.window.activeTextEditor?.document.uri;
@@ -157,15 +163,21 @@ async function openShellMode(
 export async function openAgentTerminal(
     context: vscode.ExtensionContext,
     harness: Harness,
-    status?: AgentStatus
+    status?: AgentStatus,
+    resume?: ResumeLaunch
 ): Promise<void> {
-    const existing = vscode.window.terminals.find((terminal) => terminal.name === harness.displayName);
+    const existing = vscode.window.terminals.find((terminal) => terminal.name === (resume?.terminalName ?? harness.displayName));
     if (existing) {
         existing.show(false);
         return;
     }
 
     const launch = resolveAgentLaunch(context, harness);
+    if (resume) {
+        launch.name = resume.terminalName;
+        launch.cwd = resume.cwd;
+        launch.args = [...resume.args, ...(launch.args ?? [])];
+    }
     const executable = resolveExecutable(launch.executable, { rootFolder: workspaceFolder()?.uri.fsPath });
     if (!executable) {
         await offerOpenSettings(launch.name, launch.executable, harness);

@@ -24,7 +24,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.toggleSidebarLayout"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.toggleSidebarLayout"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -99,7 +99,11 @@ for (const command of commands) {
         check(icon === "$(gear)", "settings command uses the gear icon");
         continue;
     }
-    if (["multiHarness.openAgentPicker", "multiHarness.focusSession"].includes(command.command)) {
+    if (command.command === "multiHarness.refreshSessions") {
+        check(icon === "$(refresh)", "saved sessions refresh uses the refresh icon");
+        continue;
+    }
+    if (["multiHarness.openAgentPicker", "multiHarness.focusSession", "multiHarness.resumeSession"].includes(command.command)) {
         check(icon === undefined, `${command.command} has no icon`);
         continue;
     }
@@ -110,7 +114,10 @@ for (const command of commands) {
 
 // Menu entries: all agent commands, same ordering/when as harnesses
 const settingsButton = manifest.contributes.menus?.["view/title"]?.find((entry) => entry.command === "multiHarness.openSettings");
-check(settingsButton?.when === "view == multiHarness.agents || view == multiHarness.cards" && settingsButton?.group === "navigation", "settings button appears in both sidebar layouts");
+check(manifest.contributes.views?.multiHarness?.some((view) => view.id === "multiHarness.savedSessions" && view.name === "%view.savedSessions.name%"), "saved sessions have a separate localized view");
+check(activationEvents.includes("onView:multiHarness.savedSessions"), "saved sessions view activates the extension");
+check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === "multiHarness.refreshSessions" && entry.when === "view == multiHarness.savedSessions"), "saved sessions have a refresh button");
+check(settingsButton?.when === "view == multiHarness.agents || view == multiHarness.cards" && settingsButton?.group === "navigation", "settings button appears in the Agents view toolbar");
 const cardsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.cards");
 check(cardsView?.type === "webview" && cardsView?.when === "config.multiHarness.sidebarLayout == cards", "card layout has a conditional webview");
 check(agentsView?.when === "config.multiHarness.sidebarLayout != cards" && sessionsView?.when === agentsView.when, "native views share the opposite layout condition");

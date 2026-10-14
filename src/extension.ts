@@ -1,11 +1,12 @@
 import * as vscode from "vscode";
-import { HARNESSES } from "./harnesses";
+import { HARNESSES, harnessForTerminalName } from "./harnesses";
 import { openAgentTerminal } from "./launch";
 import { registerAgentProfile } from "./profiles";
 import { registerAgentStatus } from "./status";
 import { registerAgentsView } from "./agentsView";
 import { registerSessionsView } from "./sessionsView";
 import { registerCardsView } from "./cardsView";
+import { registerSavedSessionsView } from "./savedSessionsView";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
@@ -29,7 +30,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const favorites = registerAgentsView(context);
     const sessions = registerSessionsView(context);
-    registerCardsView(context, favorites, sessions);
+    const savedSessions = registerSavedSessionsView(context, status);
+    registerCardsView(context, favorites, sessions, savedSessions);
 
     context.subscriptions.push(
         vscode.commands.registerCommand("multiHarness.toggleSidebarLayout", async () => {
@@ -51,7 +53,7 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!config.get<boolean>("notifyOnExit", false)) {
                 return;
             }
-            const displayName = HARNESSES.find((harness) => harness.displayName === terminal.name)?.displayName;
+            const displayName = harnessForTerminalName(terminal.name)?.displayName;
             if (!displayName || !terminal.exitStatus) {
                 return;
             }

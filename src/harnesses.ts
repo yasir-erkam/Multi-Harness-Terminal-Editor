@@ -25,6 +25,10 @@ export const HARNESSES: readonly Harness[] = [
     { id: "primeAgent", displayName: "Prime Agent", defaultExecutable: "prime-agent", commandId: "multiHarness.openPrimeAgent" },
 ];
 
+export function harnessForTerminalName(name: string): Harness | undefined {
+    return HARNESSES.find((harness) => name === harness.displayName || name.startsWith(`${harness.displayName} — `));
+}
+
 /**
  * Key for reading a harness setting from a configuration object obtained via
  * `getConfiguration("multiHarness")`. Keys passed to `WorkspaceConfiguration.get`

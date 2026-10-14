@@ -8,10 +8,12 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 
 ## Features
 
+- **Two sidebar layouts.** Use the Switch Sidebar Layout button in the view header, or set `multiHarness.sidebarLayout` to `native` or `cards`. The native view uses VS Code lists; cards add search, larger agent icons and an integrated session list. Both share favorites, settings and launch commands.
+
 - **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all thirteen agents and includes a gear button for extension settings.
 - **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
-- **Open sessions.** The Open Sessions view lists open terminals whose names match a supported agent, including terminals opened from profiles. Click a session to focus that exact terminal. A dot marks the active terminal; opening or closing a terminal updates the list automatically. This lists terminals, not the agent process state inside them.
-- **Two sidebar layouts.** Use the Switch Sidebar Layout button in the view header, or set `multiHarness.sidebarLayout` to `native` or `cards`. The native view uses VS Code lists; cards add search, larger agent icons and an integrated session list. Both share favorites, settings and launch commands.
+- **Saved sessions.** The Sessions view lists up to 100 recent saved conversations with their title, agent, project and last modification date. This preview supports native JSONL stores for Codex, Claude Code, Pi, Oh My Pi and Prime Agent. Click a conversation to resume that exact record in its original project; it works even after its terminal tab has closed. Use the refresh button to discover new records and title changes. Other agents remain available in the launcher but their saved histories are not yet supported.
+- **Open terminals.** The Open Terminals view lists open agent terminal tabs, including resumed sessions. Click a row to focus that exact terminal. A dot marks the active terminal. This is separate from saved conversation history and does not claim to track agent process state.
 - **Thirteen agents, one terminal each.** Open any supported harness in its own editor-area terminal. Each agent is keyed by an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, its settings and its icon.
 - **One terminal per agent, reused.** Running the command again reveals the agent's existing terminal instead of starting a second process; terminals are matched by the agent's display name.
 - **Opened beside the active editor.** The terminal is created with `TerminalOptions.location` set to `ViewColumn.Beside` and marked `isTransient`, so it is not restored on window reload.
@@ -81,6 +83,13 @@ All commands appear in the Command Palette under the `Multi-Harness` category. T
 ## Settings
 
 Every setting lives under the `multiHarness` section.
+
+For the five supported session providers, `multiHarness.<id>.sessionDirectory`
+can override the session storage root with an absolute path (or a path starting
+with `~/`). Leave it empty to use the agent's default store. Conversation files
+are read locally, with bounded metadata reads; missing or malformed records are
+skipped, and directory access failures appear in the session list. A saved
+session cannot resume if its file or original project directory is unavailable.
 
 ### Full settings reference
 
