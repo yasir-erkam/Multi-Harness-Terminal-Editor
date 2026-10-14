@@ -2,7 +2,7 @@
   "displayName": "Multi-Harness Terminal Editor",
   "category": "Multi-Harness",
   "view.agents.name": "Ajanlar",
-  "view.sessions.name": "Açık Oturumlar",
+  "view.sessions.name": "Açık Terminaller",
   "view.sessions.welcome": "Açık ajan terminali yok. Başlatmak için Ajanlar görünümünden bir ajan seçin.\n[Ajan Aç...](command:multiHarness.openAgentPicker)",
   "command.focusSession.title": "Ajan Oturumuna Geç",
   "command.addFavorite.title": "Favorilere Ekle",
@@ -80,5 +80,17 @@
   "showPrimeAgentIcon.description": "Editör başlık çubuğunda Prime Agent düğmesini göster.",
   "primeAgent.executablePath.description": "Prime Agent CLI'ını başlatmak için kullanılan yol veya komut adı. Varsayılan olarak PATH üzerinde 'prime-agent' aranır.",
   "primeAgent.arguments.description": "Prime Agent CLI'ına başlatma sırasında eklenen argümanlar.",
-  "terminal.profile.primeAgent.title": "Prime Agent terminali aç"
+  "terminal.profile.primeAgent.title": "Prime Agent terminali aç",
+  "view.savedSessions.name": "Oturumlar",
+  "view.savedSessions.welcome": "Kayıtlı oturum bulunamadı. Bu deneme sürümü Codex, Claude Code, Pi, Oh My Pi ve Prime Agent oturumlarını okur. Özel kayıt dizinlerini eklenti ayarlarından belirleyebilirsiniz.\n[Oturumları Yenile](command:multiHarness.refreshSessions)",
+  "command.resumeSession.title": "Kayıtlı Oturuma Devam Et",
+  "command.refreshSessions.title": "Oturumları Yenile",
+  "savedSessions.unreadable": "Bazı oturum klasörleri okunamadı",
+  "savedSessions.unreadable.help": "Klasör erişimini ve sessionDirectory ayarlarını kontrol edin. Okunabilen diğer oturumlar listelenmeye devam eder.",
+  "savedSessions.missing": "Oturum dosyasına veya asıl proje dizinine erişilemiyor. Yolu kontrol edip listeyi yenileyin.",
+  "codex.sessionDirectory.description": "Codex oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
+  "claudeCode.sessionDirectory.description": "Claude Code oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
+  "pi.sessionDirectory.description": "Pi oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
+  "ohMyPi.sessionDirectory.description": "Oh My Pi oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
+  "primeAgent.sessionDirectory.description": "Prime Agent oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın."
 }

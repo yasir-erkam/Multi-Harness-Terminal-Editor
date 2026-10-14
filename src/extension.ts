@@ -1,10 +1,11 @@
 import * as vscode from "vscode";
-import { HARNESSES } from "./harnesses";
+import { HARNESSES, harnessForTerminalName } from "./harnesses";
 import { openAgentTerminal } from "./launch";
 import { registerAgentProfile } from "./profiles";
 import { registerAgentStatus } from "./status";
 import { registerAgentsView } from "./agentsView";
 import { registerSessionsView } from "./sessionsView";
+import { registerSavedSessionsView } from "./savedSessionsView";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
@@ -28,6 +29,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     registerAgentsView(context);
     registerSessionsView(context);
+    registerSavedSessionsView(context, status);
 
     context.subscriptions.push(
         vscode.commands.registerCommand("multiHarness.openSettings", () =>
@@ -41,7 +43,7 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!config.get<boolean>("notifyOnExit", false)) {
                 return;
             }
-            const displayName = HARNESSES.find((harness) => harness.displayName === terminal.name)?.displayName;
+            const displayName = harnessForTerminalName(terminal.name)?.displayName;
             if (!displayName || !terminal.exitStatus) {
                 return;
             }

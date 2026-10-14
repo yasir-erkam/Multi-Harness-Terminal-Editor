@@ -2,7 +2,7 @@
   "displayName": "Multi-Harness Terminal Editor",
   "category": "Multi-Harness",
   "view.agents.name": "Agents",
-  "view.sessions.name": "Open Sessions",
+  "view.sessions.name": "Open Terminals",
   "view.sessions.welcome": "No open agent terminals. Select an agent in the Agents view to start one.\n[Open Agent...](command:multiHarness.openAgentPicker)",
   "command.focusSession.title": "Focus Agent Session",
   "command.addFavorite.title": "Add to Favorites",
@@ -80,5 +80,17 @@
   "showPrimeAgentIcon.description": "Show a Prime Agent button in the editor title bar.",
   "primeAgent.executablePath.description": "Path or command name used to launch the Prime Agent CLI. Defaults to looking up 'prime-agent' on PATH.",
   "primeAgent.arguments.description": "Additional arguments passed to the Prime Agent CLI on launch.",
-  "terminal.profile.primeAgent.title": "Open Prime Agent terminal"
+  "terminal.profile.primeAgent.title": "Open Prime Agent terminal",
+  "view.savedSessions.name": "Sessions",
+  "view.savedSessions.welcome": "No saved sessions found. This preview reads Codex, Claude Code, Pi, Oh My Pi and Prime Agent sessions. Custom storage locations can be set in extension settings.\n[Refresh Sessions](command:multiHarness.refreshSessions)",
+  "command.resumeSession.title": "Resume Saved Session",
+  "command.refreshSessions.title": "Refresh Sessions",
+  "savedSessions.unreadable": "Some session folders could not be read",
+  "savedSessions.unreadable.help": "Check directory access and the sessionDirectory settings. Other readable sessions are still listed.",
+  "savedSessions.missing": "The saved session file or its original project directory is unavailable. Check the path and refresh the list.",
+  "codex.sessionDirectory.description": "Absolute directory containing Codex session records. Leave empty to use the default storage location.",
+  "claudeCode.sessionDirectory.description": "Absolute directory containing Claude Code session records. Leave empty to use the default storage location.",
+  "pi.sessionDirectory.description": "Absolute directory containing Pi session records. Leave empty to use the default storage location.",
+  "ohMyPi.sessionDirectory.description": "Absolute directory containing Oh My Pi session records. Leave empty to use the default storage location.",
+  "primeAgent.sessionDirectory.description": "Absolute directory containing Prime Agent session records. Leave empty to use the default storage location."
 }

@@ -80,7 +80,10 @@
     "onTerminalProfile:multiHarness.qwen",
     "onTerminalProfile:multiHarness.goose",
     "onCommand:multiHarness.openPrimeAgent",
-    "onTerminalProfile:multiHarness.primeAgent"
+    "onTerminalProfile:multiHarness.primeAgent",
+    "onView:multiHarness.savedSessions",
+    "onCommand:multiHarness.resumeSession",
+    "onCommand:multiHarness.refreshSessions"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -100,6 +103,10 @@
           "name": "%view.agents.name%"
         },
         {
+          "id": "multiHarness.savedSessions",
+          "name": "%view.savedSessions.name%"
+        },
+        {
           "id": "multiHarness.sessions",
           "name": "%view.sessions.name%"
         }
@@ -109,6 +116,10 @@
       {
         "view": "multiHarness.sessions",
         "contents": "%view.sessions.welcome%"
+      },
+      {
+        "view": "multiHarness.savedSessions",
+        "contents": "%view.savedSessions.welcome%"
       }
     ],
     "commands": [
@@ -256,6 +267,17 @@
           "light": "media/primeAgent-light.svg",
           "dark": "media/primeAgent-dark.svg"
         }
+      },
+      {
+        "command": "multiHarness.resumeSession",
+        "title": "%command.resumeSession.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "multiHarness.refreshSessions",
+        "title": "%command.refreshSessions.title%",
+        "category": "%category%",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -270,6 +292,10 @@
         },
         {
           "command": "multiHarness.removeFavorite",
+          "when": "false"
+        },
+        {
+          "command": "multiHarness.resumeSession",
           "when": "false"
         }
       ],
@@ -289,6 +315,11 @@
         {
           "command": "multiHarness.openSettings",
           "when": "view == multiHarness.agents",
+          "group": "navigation"
+        },
+        {
+          "command": "multiHarness.refreshSessions",
+          "when": "view == multiHarness.savedSessions",
           "group": "navigation"
         }
       ],
@@ -655,6 +686,36 @@
           },
           "description": "%primeAgent.arguments.description%",
           "scope": "resource"
+        },
+        "multiHarness.codex.sessionDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%codex.sessionDirectory.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.claudeCode.sessionDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%claudeCode.sessionDirectory.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.pi.sessionDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%pi.sessionDirectory.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.ohMyPi.sessionDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%ohMyPi.sessionDirectory.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.primeAgent.sessionDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%primeAgent.sessionDirectory.description%",
+          "scope": "machine-overridable"
         }
       }
     },

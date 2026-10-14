@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { HARNESSES, type Harness, iconFile } from "./harnesses";
+import { harnessForTerminalName, type Harness, iconFile } from "./harnesses";
 
 export interface AgentSession {
     readonly id: string;
@@ -27,7 +27,7 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
     function getSessions(): AgentSession[] {
         const open: AgentSession[] = [];
         for (const terminal of vscode.window.terminals) {
-            const harness = HARNESSES.find((agent) => agent.displayName === terminal.name);
+            const harness = harnessForTerminalName(terminal.name);
             if (!harness) {
                 continue;
             }

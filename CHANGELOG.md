@@ -2,7 +2,8 @@
 
 ## 0.6.0
 
-- Added an Open Sessions sidebar view that lists open agent terminals and focuses an existing terminal when clicked. The list updates when terminals open or close and marks the active terminal with a dot.
+- Added separate Sessions and Open Terminals views. Sessions shows saved conversations for Codex, Claude Code, Pi, Oh My Pi and Prime Agent and resumes the selected record in its original project. Open Terminals focuses existing terminal tabs and marks the active terminal.
+- Added session refresh, custom storage-directory settings, and handling for deleted session files and unavailable projects.
 
 ## 0.5.0
 

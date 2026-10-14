@@ -24,7 +24,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -95,7 +95,11 @@ for (const command of commands) {
         check(icon === "$(gear)", "settings command uses the gear icon");
         continue;
     }
-    if (["multiHarness.openAgentPicker", "multiHarness.focusSession"].includes(command.command)) {
+    if (command.command === "multiHarness.refreshSessions") {
+        check(icon === "$(refresh)", "saved sessions refresh uses the refresh icon");
+        continue;
+    }
+    if (["multiHarness.openAgentPicker", "multiHarness.focusSession", "multiHarness.resumeSession"].includes(command.command)) {
         check(icon === undefined, `${command.command} has no icon`);
         continue;
     }
@@ -106,6 +110,9 @@ for (const command of commands) {
 
 // Menu entries: all agent commands, same ordering/when as harnesses
 const settingsButton = manifest.contributes.menus?.["view/title"]?.find((entry) => entry.command === "multiHarness.openSettings");
+check(manifest.contributes.views?.multiHarness?.some((view) => view.id === "multiHarness.savedSessions" && view.name === "%view.savedSessions.name%"), "saved sessions have a separate localized view");
+check(activationEvents.includes("onView:multiHarness.savedSessions"), "saved sessions view activates the extension");
+check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === "multiHarness.refreshSessions" && entry.when === "view == multiHarness.savedSessions"), "saved sessions have a refresh button");
 check(settingsButton?.when === "view == multiHarness.agents" && settingsButton?.group === "navigation", "settings button appears in the Agents view toolbar");
 for (const [command, contextValue] of [["multiHarness.addFavorite", "agent"], ["multiHarness.removeFavorite", "favoriteAgent"]]) {
     const button = manifest.contributes.menus?.["view/item/context"]?.find((entry) => entry.command === command);

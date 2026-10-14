@@ -1,7 +1,7 @@
 // Unit tests: resolveExecutable (pure node module, esbuild-bundled on the fly)
 // plus the full manifest validation from validate-manifest.mjs.
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, utimesSync, symlinkSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -111,6 +111,66 @@ test("win32 explicit .ps1 path resolves without adding suffixes", (dir) => {
 });
 
 // ---------------------------------------------------------------------------
+// Saved conversation discovery is tested independently from open terminals.
+await build({
+    entryPoints: [join(projectRoot, "src", "savedSessions.ts")],
+    outfile: join(outdir, "savedSessions.test.mjs"),
+    bundle: true, format: "esm", platform: "node", logLevel: "silent",
+});
+const { scanSavedSessions, resumeArguments, sessionRoots } = await import(pathToFileURL(join(outdir, "savedSessions.test.mjs")).href);
+const savedDir = mkdtempSync(join(tmpdir(), "mhte-saved-"));
+try {
+    const roots = sessionRoots(savedDir, {});
+    const fixture = (harnessId, id, cwd, title, modified) => {
+        const root = roots.find((candidate) => candidate.harnessId === harnessId);
+        mkdirSync(root.directory, { recursive: true });
+        const file = join(root.directory, `${id}.jsonl`);
+        const header = harnessId === "codex" ? { type: "session_meta", payload: { id, cwd } }
+            : harnessId === "claudeCode" ? { type: "user", sessionId: id, cwd, message: { role: "user", content: title } }
+            : { type: "session", id, cwd };
+        const rows = [header, { type: "session_info", name: title }];
+        if (harnessId === "ohMyPi") rows.unshift({ type: "title", title });
+        writeFileSync(file, rows.map((row) => JSON.stringify(row)).join("\n") + '\n{"partial":');
+        utimesSync(file, modified / 1000, modified / 1000);
+        return file;
+    };
+    const now = Date.now();
+    for (const [index, root] of roots.entries()) {
+        fixture(root.harnessId, `saved-${root.harnessId}`, savedDir, `${root.harnessId} conversation`, now - index * 1000);
+    }
+    const codexRoot = roots.find((root) => root.harnessId === "codex");
+    writeFileSync(join(codexRoot.directory, "..", "session_index.jsonl"), JSON.stringify({ id: "saved-codex", thread_name: "Renamed Codex conversation" }) + "\n");
+    writeFileSync(join(codexRoot.directory, "invalid.jsonl"), "not JSON\n");
+    symlinkSync(join(codexRoot.directory, "saved-codex.jsonl"), join(codexRoot.directory, "linked.jsonl"));
+    const scan = await scanSavedSessions(roots);
+    assert.equal(scan.sessions.length, 5);
+    assert.deepEqual(scan.unreadable, []);
+    assert.deepEqual(scan.sessions.map((session) => session.harnessId), roots.map((root) => root.harnessId));
+    assert.equal(scan.sessions[0].title, "Renamed Codex conversation");
+    assert.equal(scan.sessions[3].title, "ohMyPi conversation");
+    assert.equal((await scanSavedSessions(roots, 2)).sessions.length, 2);
+    for (const session of scan.sessions) {
+        const args = resumeArguments(session);
+        assert.equal(args[0], session.harnessId === "codex" ? "resume" : session.harnessId === "pi" ? "--session" : "--resume");
+        assert.equal(args[1], ["codex", "claudeCode"].includes(session.harnessId) ? session.id : session.file);
+    }
+    const prime = scan.sessions.find((session) => session.harnessId === "primeAgent");
+    writeFileSync(prime.file, JSON.stringify({ type: "session", id: prime.id, cwd: savedDir }) + "\n" + " ".repeat(600000) + '\n{"type":"session_info","name":"Renamed large session"}\n');
+    assert.equal((await scanSavedSessions(roots)).sessions.find((session) => session.id === prime.id).title, "Renamed large session");
+    writeFileSync(join(codexRoot.directory, "subagent.jsonl"), JSON.stringify({ type: "session_meta", payload: {id: "child", cwd: savedDir, source: {subagent: {}}} }) + "\n");
+    assert.equal((await scanSavedSessions(roots)).sessions.length, 5);
+    assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: join(savedDir, "missing") }])).sessions, []);
+    assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: prime.file }])).unreadable, ["codex"]);
+    assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: "relative-root" }])).unreadable, ["codex"]);
+    const overrides = sessionRoots(savedDir, { CODEX_HOME: "~/custom-codex", PRIME_AGENT_SESSION_DIR: "~/prime-sessions" });
+    assert.equal(overrides[0].directory, join(savedDir, "custom-codex", "sessions"));
+    assert.equal(overrides[4].directory, join(savedDir, "prime-sessions"));
+    passed += 1;
+    console.log("ok: saved sessions read real metadata independently of terminals, tolerate partial files and use provider resume arguments");
+} finally {
+    rmSync(savedDir, { recursive: true, force: true });
+}
+
 // Headless activation test.
 //
 // Guards the class of bug where the extension registers command ids that the
@@ -238,7 +298,8 @@ module.exports = {
         onDidStartTerminalShellExecution(handler) { calls.executionStartHandlers.push(handler); return { dispose() {} }; },
         onDidEndTerminalShellExecution(handler) { calls.executionEndHandlers.push(handler); return { dispose() {} }; },
     },
-    workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration },
+    workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration,
+        onDidChangeConfiguration() { return { dispose() {} }; } },
     Uri: { joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
     ViewColumn: { Beside: -2 },
     TerminalProfile: class TerminalProfile { constructor(options) { this.options = options; } },
@@ -307,14 +368,14 @@ try {
     console.log(`ok: activation registers exactly the ${contributedCommands.length} contributed command ids`);
 
     // The sidebar lists every harness even while editor-title icons are disabled.
-    assert.equal(vscodeStub.__calls.views.length, 2);
+    assert.equal(vscodeStub.__calls.views.length, 3);
     const agentsView = vscodeStub.__calls.views[0];
     assert.equal(agentsView.id, manifest.contributes.views.multiHarness[0].id);
     const agents = agentsView.provider.getChildren();
     assert.equal(agents.length, contributedProfiles.length);
     assert.deepEqual(
         agents.map((agent) => agentsView.provider.getTreeItem(agent).command.command).sort(),
-        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession"].includes(id))
+        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions"].includes(id))
     );
     for (const agent of agents) {
         const item = agentsView.provider.getTreeItem(agent);
@@ -417,6 +478,56 @@ try {
     vscodeStub.window.activeTerminal = undefined;
     passed += 1;
     console.log("ok: sessions track terminal lifecycle and focus exact terminals without launching duplicates");
+
+    // Closed conversations are discoverable without any terminal tab and resume
+    // in their recorded project instead of revealing an unrelated agent tab.
+    const savedView = vscodeStub.__calls.views.find((view) => view.id === "multiHarness.savedSessions");
+    const savedRoot = join(activationDir, "saved-conversations");
+    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent"]) {
+        vscodeStub.__fixture.multiHarness[id] ??= {};
+        vscodeStub.__fixture.multiHarness[id].sessionDirectory = join(savedRoot, id);
+    }
+    const projectDirectory = join(activationDir, "recorded-project");
+    mkdirSync(projectDirectory);
+    const primeSessions = vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory;
+    mkdirSync(primeSessions, { recursive: true });
+    const savedFile = join(primeSessions, "recorded.jsonl");
+    writeFileSync(savedFile, JSON.stringify({type: "session", id: "recorded-prime", cwd: projectDirectory}) + '\n{"type":"session_info","name":"A saved conversation"}\n');
+    const savedRows = await savedView.provider.getChildren();
+    assert.equal(savedRows.length, 1);
+    const savedItem = savedView.provider.getTreeItem(savedRows[0]);
+    assert.equal(savedItem.label, "A saved conversation");
+    assert.ok(savedItem.description.includes("Prime Agent"));
+    assert.ok(savedItem.description.includes("recorded-project"));
+    const resume = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.resumeSession");
+    vscodeStub.__fixture.multiHarness.primeAgent.arguments = ["--model", "test-model"];
+    vscodeStub.window.terminals = [firstPrime];
+    await resume.handler(...savedItem.command.arguments);
+    const resumed = vscodeStub.__calls.created.at(-1);
+    assert.equal(firstPrime.shown, 0);
+    assert.equal(resumed.options.cwd, projectDirectory);
+    assert.deepEqual(resumed.options.shellArgs, ["--resume", savedFile, "--model", "test-model"]);
+    assert.equal(resumed.options.name, "Prime Agent — recorded-prime");
+    vscodeStub.window.terminals = [resumed.terminal];
+    const countBeforeReuse = vscodeStub.__calls.created.length;
+    await resume.handler(...savedItem.command.arguments);
+    assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    assert.equal(sessionsView.provider.getChildren()[0].harness.id, "primeAgent");
+    await resume.handler({ harnessId: "primeAgent", id: "unlisted" });
+    assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    vscodeStub.window.terminals = [];
+    rmSync(savedFile);
+    await resume.handler(...savedItem.command.arguments);
+    assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    assert.deepEqual(await savedView.provider.getChildren(), []);
+    writeFileSync(savedFile, JSON.stringify({type: "session", id: "missing-project", cwd: join(activationDir, "not-a-project")}) + "\n");
+    const refreshSaved = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.refreshSessions");
+    refreshSaved.handler();
+    const missingProject = (await savedView.provider.getChildren())[0];
+    await resume.handler({ harnessId: missingProject.harnessId, id: missingProject.id });
+    assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    passed += 1;
+    console.log("ok: saved conversations resume by identity in the recorded project and handle deleted files and missing projects");
 
     // The user's click path: the handler registered for the literal id must run
     // without throwing (resolution failure is fine — it reports an error).
