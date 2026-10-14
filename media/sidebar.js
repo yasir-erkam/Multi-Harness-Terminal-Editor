@@ -3,6 +3,7 @@ const vscode = acquireVsCodeApi();
 const labels = window.sidebarLabels;
 const t = (key) => labels[key] || key;
 let state = { agents: [], sessions: [], saved: [] };
+let agentStructure;
 
 function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -110,13 +111,33 @@ function renderAgents() {
     const query = search.value.trim().toLocaleLowerCase();
     const visible = state.agents.filter((agent) => agent.name.toLocaleLowerCase().includes(query));
     agents.count.textContent = String(visible.length);
+    const structure = JSON.stringify(visible.map(({ selected, ...agent }) => agent));
+    if (structure === agentStructure) {
+        // Keep the clicked DOM node alive between the first and second click.
+        for (const agent of visible) {
+            const launch = Array.from(agents.body.querySelectorAll(".launch")).find((node) => node.dataset.id === agent.id);
+            launch.closest(".agent-card").classList.toggle("selected-agent", Boolean(agent.selected));
+            if (agent.selected) launch.setAttribute("aria-current", "true");
+            else launch.removeAttribute("aria-current");
+            launch.querySelector(".agent-hint").textContent = agent.selected ? `${t("sidebar.selected")} · ${t("sidebar.doubleClickOpen")}` : t("sidebar.select");
+        }
+        return;
+    }
+    agentStructure = structure;
     agents.body.replaceChildren();
     if (visible.length === 0) {
         agents.body.append(element("p", "empty", t("sidebar.noResults")));
     }
     for (const agent of visible) {
         const card = element("article", `agent-card${agent.favorite ? " favorite" : ""}${agent.selected ? " selected-agent" : ""}`);
-        const launch = button("launch", undefined, "open", agent.id, `${t("sidebar.open")}: ${agent.name}`);
+        const launch = button("launch", undefined, "selectAgent", agent.id, `${agent.name} — ${t("sidebar.select")}. ${t("sidebar.doubleClickOpen")}.`);
+        launch.addEventListener("dblclick", () => vscode.postMessage({ action: "open", id: agent.id }));
+        launch.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                vscode.postMessage({ action: "open", id: agent.id });
+            }
+        });
         if (agent.selected) launch.setAttribute("aria-current", "true");
         const icons = element("span", "agent-icon");
         for (const theme of ["light", "dark"]) {
@@ -128,7 +149,7 @@ function renderAgents() {
             icons.append(img);
         }
         const copy = element("span", "agent-copy");
-        copy.append(element("span", "agent-name", agent.name), element("span", "agent-hint", agent.selected ? `${t("sidebar.selected")} · ${t("sidebar.open")}` : t("sidebar.open")));
+        copy.append(element("span", "agent-name", agent.name), element("span", "agent-hint", agent.selected ? `${t("sidebar.selected")} · ${t("sidebar.doubleClickOpen")}` : t("sidebar.select")));
         launch.append(icons, copy);
         const star = button("star", agent.favorite ? "★" : "☆", "favorite", agent.id,
             `${t(agent.favorite ? "command.removeFavorite.title" : "command.addFavorite.title")}: ${agent.name}`);

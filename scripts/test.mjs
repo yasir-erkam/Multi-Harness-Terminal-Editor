@@ -274,7 +274,10 @@ module.exports = {
         activeTextEditor: undefined,
         onDidChangeActiveTextEditor(handler) { return subscribeTerminalEvent(calls.activeEditorHandlers, handler); },
         createTreeView(id, options) {
+            const selectionHandlers = [];
             const view = { id, provider: options.treeDataProvider, disposed: false,
+                selectionHandlers,
+                onDidChangeSelection(handler) { return subscribeTerminalEvent(selectionHandlers, handler); },
                 dispose() { this.disposed = true; } };
             calls.views.push(view);
             return view;
@@ -400,14 +403,12 @@ try {
     assert.equal(agentsView.id, manifest.contributes.views.multiHarness[0].id);
     const agents = agentsView.provider.getChildren();
     assert.equal(agents.length, contributedProfiles.length);
-    assert.deepEqual(
-        agents.map((agent) => agentsView.provider.getTreeItem(agent).command.command).sort(),
-        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSidebarLayout"].includes(id))
-    );
+    assert.ok(agents.every((agent) => agentsView.provider.getTreeItem(agent).command.command === "multiHarness.selectSessionAgent"));
     for (const agent of agents) {
         const item = agentsView.provider.getTreeItem(agent);
         assert.equal(item.id, agent.id);
         assert.equal(item.label, agent.displayName);
+        assert.deepEqual(item.command.arguments, [agent.id, true]);
         assert.deepEqual(agentsView.provider.getChildren(agent), []);
         for (const theme of ["light", "dark"]) {
             assert.equal(item.iconPath[theme].fsPath, join(projectRoot, "media", `${agent.id}-${theme}.svg`));
@@ -415,11 +416,43 @@ try {
         }
     }
     const sidebarItem = agentsView.provider.getTreeItem(agents.find((agent) => agent.id === "ohMyPi"));
-    await vscodeStub.__calls.commands.find((command) => command.id === sidebarItem.command.command).handler();
+    const activateAgent = vscodeStub.__calls.commands.find((command) => command.id === sidebarItem.command.command).handler;
+    const sidebarLaunches = () => vscodeStub.__calls.executed.filter((value) => typeof value === "string" && value.startsWith("multiHarness.open"));
+    const realNow = Date.now;
+    let clickTime = realNow();
+    Date.now = () => clickTime;
+    try {
+        const terminalsBeforeClick = vscodeStub.__calls.created.length;
+        vscodeStub.__calls.executed.length = 0;
+        agentsView.selectionHandlers.forEach((handler) => handler({ selection: [agents.find((agent) => agent.id === "ohMyPi")] }));
+        await activateAgent(...sidebarItem.command.arguments);
+        assert.equal(savedState.get("workspace:selectedSessionAgent"), "ohMyPi");
+        assert.equal(vscodeStub.__calls.created.length, terminalsBeforeClick, "single click selects the history filter without creating a terminal");
+        assert.deepEqual(sidebarLaunches(), []);
+        clickTime += 100;
+        await activateAgent(...sidebarItem.command.arguments);
+        assert.deepEqual(sidebarLaunches(), ["multiHarness.openOhMyPi"], "double click opens the selected agent once");
+        vscodeStub.__calls.executed.length = 0;
+        clickTime += 1000;
+        await activateAgent("codex", true);
+        clickTime += 100;
+        await activateAgent("ohMyPi", true);
+        assert.deepEqual(sidebarLaunches(), [], "clicks on different agents cannot open a console");
+        clickTime += 1000;
+        await activateAgent("ohMyPi", true);
+        assert.deepEqual(sidebarLaunches(), [], "separate single clicks do not count as a double click");
+        vscodeStub.__fixture.workbench = { list: { openMode: "doubleClick" } };
+        await activateAgent("ohMyPi", true);
+        assert.deepEqual(sidebarLaunches(), ["multiHarness.openOhMyPi"], "honor native doubleClick mode without requiring four clicks");
+        delete vscodeStub.__fixture.workbench;
+    } finally {
+        Date.now = realNow;
+    }
+    await vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.openOhMyPi").handler();
     assert.equal(vscodeStub.__calls.created.at(-1)?.options.shellPath, fakeCli);
     assert.deepEqual(vscodeStub.__calls.created.at(-1)?.options.shellArgs, ["--continue"]);
     passed += 1;
-    console.log("ok: Activity Bar lists all harnesses with themed icons and launches through configured commands");
+    console.log("ok: Activity Bar single clicks select history and double clicks dispatch the configured launch command");
 
     const addFavorite = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.addFavorite");
     const removeFavorite = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.removeFavorite");
@@ -434,7 +467,7 @@ try {
     ], "favorites appear first with the original order preserved in both groups");
     assert.equal(agentsView.provider.getTreeItem(codex).contextValue, "favoriteAgent");
     assert.equal(agentsView.provider.getTreeItem(codex).description, "★");
-    assert.equal(agentsView.provider.getTreeItem(goose).command.command, goose.commandId);
+    assert.equal(agentsView.provider.getTreeItem(goose).command.command, "multiHarness.selectSessionAgent");
     await addFavorite.handler(codex);
     await addFavorite.handler();
     await addFavorite.handler({ id: "unknown" });
@@ -938,6 +971,8 @@ passed += 1;
 console.log(`ok: all ${HARNESS_IDS.length * 2} SVGs are standalone 16px assets with brand colors or themed foregrounds`);
 console.log(`\nicon fills (light variant = dark ink, dark variant = light ink):\n  ${fillReport.join("\n  ")}`);
 
+await import(pathToFileURL(join(here, "test-sidebar.mjs")).href);
+passed += 1;
 await import(pathToFileURL(join(here, "validate-manifest.mjs")).href);
 
 console.log(`\n${passed} test group(s) passed and manifest validation passed.`);

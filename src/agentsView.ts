@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { HARNESSES, type Harness, iconFile } from "./harnesses";
 import { type SessionContext } from "./sessionContext";
+import { extensionStrings } from "./localization";
 
 export interface FavoriteAgents {
     readonly onDidChange: vscode.Event<void>;
@@ -10,6 +11,7 @@ export interface FavoriteAgents {
 /** Activity Bar launcher reuses the same commands as the editor buttons. */
 export function registerAgentsView(context: vscode.ExtensionContext, selection: SessionContext): FavoriteAgents {
     const favoritesKey = "favoriteAgents";
+    const strings = extensionStrings(context);
     const favorites = new Set(context.globalState.get<string[]>(favoritesKey, []));
     const changes = new vscode.EventEmitter<void>();
     const provider: vscode.TreeDataProvider<Harness> = {
@@ -26,13 +28,15 @@ export function registerAgentsView(context: vscode.ExtensionContext, selection: 
                 label: harness.displayName,
                 description: [selection.getScope().agent?.id === harness.id ? "✓" : "", favorites.has(harness.id) ? "★" : ""].filter(Boolean).join(" ") || undefined,
                 contextValue: favorites.has(harness.id) ? "favoriteAgent" : "agent",
+                tooltip: `${harness.displayName} — ${strings["sidebar.select"]}. ${strings["sidebar.doubleClickOpen"]}.`,
                 iconPath: {
                     light: vscode.Uri.joinPath(context.extensionUri, "media", iconFile(harness, "light")),
                     dark: vscode.Uri.joinPath(context.extensionUri, "media", iconFile(harness, "dark")),
                 },
                 command: {
-                    command: harness.commandId,
+                    command: "multiHarness.selectSessionAgent",
                     title: harness.displayName,
+                    arguments: [harness.id, true],
                 },
             };
         },
@@ -54,10 +58,17 @@ export function registerAgentsView(context: vscode.ExtensionContext, selection: 
         changes.fire();
     }
 
+    const view = vscode.window.createTreeView("multiHarness.agents", { treeDataProvider: provider });
     context.subscriptions.push(
         changes,
         selection.onDidChange(() => changes.fire()),
-        vscode.window.registerTreeDataProvider("multiHarness.agents", provider),
+        view,
+        view.onDidChangeSelection((event) => {
+            const harness = event.selection[0];
+            if (harness) {
+                void selection.selectAgent(harness.id);
+            }
+        }),
         vscode.commands.registerCommand("multiHarness.addFavorite", (harness?: Harness) => setFavorite(harness, true)),
         vscode.commands.registerCommand("multiHarness.removeFavorite", (harness?: Harness) => setFavorite(harness, false))
     );

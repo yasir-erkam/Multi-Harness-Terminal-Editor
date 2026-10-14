@@ -2,6 +2,8 @@
 
 ## 0.6.0
 
+- Sidebar agent rows now select the saved-session filter on a single click and open the agent terminal on a double click, in both list and card layouts.
+
 - Removed the duplicate List/Cards selector inside the card panel; layout switching remains in the view header and settings. Replaced the card panel's font-dependent settings glyph with a vector gear icon.
 
 - Added a sidebar layout switch: native VS Code lists (default) or a themed card panel with search, favorites, saved sessions and open terminals. Both layouts share the selected agent, project filter and terminal commands; the layout choice is saved in VS Code settings.

@@ -88,6 +88,8 @@
   "sidebarLayout.cards.description": "Arama, favoriler, kayıtlı oturumlar ve açık terminalleri tek panelde gösteren kartlar.",
   "sidebar.search": "Ajan ve oturum ara…",
   "sidebar.open": "Terminal aç",
+  "sidebar.select": "Geçmiş oturumları görmek için tıklayın",
+  "sidebar.doubleClickOpen": "Terminal açmak için çift tıklayın",
   "sidebar.noResults": "Eşleşen ajan yok.",
   "sidebar.noSessions": "Açık terminal yok. Başlamak için aşağıdan bir ajan seçin.",
   "sidebar.active": "Aktif",

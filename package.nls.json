@@ -88,6 +88,8 @@
   "sidebarLayout.cards.description": "Cards with search, favorite stars, saved sessions and open terminals in one panel.",
   "sidebar.search": "Search agents and sessions…",
   "sidebar.open": "Open terminal",
+  "sidebar.select": "Click to show saved sessions",
+  "sidebar.doubleClickOpen": "Double-click to open terminal",
   "sidebar.noResults": "No matching agents.",
   "sidebar.noSessions": "No open terminals. Select an agent below to get started.",
   "sidebar.active": "Active",
