@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3
+
+- Added `multiHarness.useFullEditorArea` (enabled by default). Disable it to preserve split editor groups when opening, resuming or focusing agent terminals. Setting changes apply on the next interaction without reloading.
+
 ## 0.6.2
 
 - Opening or focusing an agent terminal joins existing split editor groups into one group, preserving all open tabs so the session uses the full editor area. Terminal profiles open in the active editor group without creating a new split.

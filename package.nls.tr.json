@@ -74,6 +74,7 @@
   "terminal.profile.qwen.title": "Qwen Code terminali aç",
   "terminal.profile.goose.title": "Goose terminali aç",
   "launchMode.description": "Ajan terminallerinin nasıl başlatılacağı. 'direct' ajan CLI'ını doğrudan terminal süreci olarak çalıştırır; 'shell' ise varsayılan kabuğunuzda bir komut olarak çalıştırır ve komut bazlı durum takibini mümkün kılar (çalışan shell entegrasyonu gerektirir).",
+  "useFullEditorArea.description": "Ajan terminalini açarken, kayıtlı oturuma devam ederken veya terminale odaklanırken tüm editör alanını kullan. Bölünmüş editör gruplarını birleştirir ve açık sekmeleri korur. Mevcut editör düzenini korumak için kapatın. Terminal profilleri grupları birleştirmeden aktif grupta açılır.",
   "launchMode.direct.description": "Ajan CLI'ını doğrudan terminal süreci olarak başlat (varsayılan).",
   "launchMode.shell.description": "Ajanı kabuğunuz üzerinden başlat, böylece komut durumu takip edilebilir; shell entegrasyonu yoksa tırnaklanmış komut satırına geri döner.",
   "command.openPrimeAgent.title": "Prime Agent'ı Aç",

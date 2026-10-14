@@ -157,6 +157,8 @@ for (const id of harnessIds) {
     check(properties[argsId]?.type === "array" && Array.isArray(properties[argsId]?.default) && properties[argsId]?.scope === "resource", `setting ${argsId} is string array/resource`);
 }
 check(properties["multiHarness.notifyOnExit"]?.type === "boolean" && properties["multiHarness.notifyOnExit"]?.scope === "window", "setting multiHarness.notifyOnExit is boolean/window");
+const fullEditorArea = properties["multiHarness.useFullEditorArea"];
+check(fullEditorArea?.type === "boolean" && fullEditorArea.default === true && fullEditorArea.scope === "window", "full editor area defaults to enabled with window scope");
 const launchMode = properties["multiHarness.launchMode"];
 check(
     launchMode?.type === "string" && JSON.stringify(launchMode?.enum) === JSON.stringify(["direct", "shell"]) &&
@@ -248,7 +250,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.6.2", "manifest version matches the 0.6.2 development version");
+check(manifest.version === "0.6.3", "manifest version matches the 0.6.3 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

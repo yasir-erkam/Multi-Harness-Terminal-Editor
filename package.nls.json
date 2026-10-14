@@ -74,6 +74,7 @@
   "terminal.profile.qwen.title": "Open Qwen Code terminal",
   "terminal.profile.goose.title": "Open Goose terminal",
   "launchMode.description": "How agent terminals are started. 'direct' runs the agent CLI as the terminal process; 'shell' runs it as a command in your default shell, which enables per-command status tracking but requires working shell integration.",
+  "useFullEditorArea.description": "Use the full editor area when opening, resuming or focusing an agent terminal. Joins split editor groups while keeping all open tabs. Disable to preserve the current editor group layout. Terminal profiles open in the active group without joining groups.",
   "launchMode.direct.description": "Launch the agent CLI as the terminal process itself (default).",
   "launchMode.shell.description": "Launch the agent through your shell so command status can be tracked; falls back to a quoted command line when shell integration is unavailable.",
   "command.openPrimeAgent.title": "Open Prime Agent",

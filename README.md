@@ -30,7 +30,7 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 - **Open terminals.** The Open Terminals view lists open agent terminal tabs, including resumed sessions. Click a row to focus that exact terminal. A dot marks the active terminal. This is separate from saved conversation history and does not claim to track agent process state.
 - **Thirteen agents, one terminal each.** Open any supported harness in its own editor-area terminal. Each agent is keyed by an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, its settings and its icon.
 - **One terminal per agent, reused.** Running the command again reveals the agent's existing terminal instead of starting a second process; terminals are matched by the agent's display name.
-- **Sessions use the full editor area.** Opening or focusing an agent terminal joins split editor groups into a single group, preserving all open tabs. Terminal profiles open in the active editor group without adding a split. Terminals are marked `isTransient`, so they are not restored on window reload.
+- **Sessions use the full editor area by default.** Opening or focusing an agent terminal joins split editor groups into a single group, preserving all open tabs. Set `multiHarness.useFullEditorArea` to `false` to keep your split layout. Terminal profiles open in the active editor group without adding a split. Terminals are marked `isTransient`, so they are not restored on window reload.
 - **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all thirteen harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
 - **Optional shell launch mode with live status.** `multiHarness.launchMode: "shell"` runs agents through your shell so a status-bar item can report running/finished state, duration and exit code; the default `direct` mode is unchanged. See [Launch modes](#launch-modes).
 - **Terminal profile dropdown.** Every agent is also contributed as a VS Code terminal profile (`multiHarness.<id>`), so you can start one from the terminal panel's `+` dropdown; profiles whose executable cannot be resolved are simply omitted from the list.
@@ -109,6 +109,18 @@ After fixing a path or permission, use **Refresh Sessions** to try again.
 Resumed conversations use their recorded project's CLI settings and directory.
 
 ### Full settings reference
+
+**Editor layout**
+
+| Setting | Type | Default | Scope |
+| --- | --- | --- | --- |
+| `multiHarness.useFullEditorArea` | `boolean` | `true` | `window` |
+
+Enabled: opening, resuming or focusing an agent terminal joins editor groups,
+preserving all open tabs. Disabled: terminals use their existing group or open
+in the active group, keeping the split layout. The setting applies on the next
+interaction without reloading; disabling it does not restore previously joined
+groups. Terminal profile launches always use the active group.
 
 **Icon toggles — `multiHarness.show<Id>Icon`**
 

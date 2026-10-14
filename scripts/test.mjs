@@ -585,11 +585,17 @@ try {
     assert.equal(firstPrime.shown, 0, "focus selects the exact terminal even when names match");
     assert.equal(vscodeStub.window.tabGroups.all.length, 1, "focusing a session joins existing editor splits");
     assert.deepEqual(vscodeStub.window.tabGroups.all[0].tabs, editorTabs, "joining groups preserves open tabs");
+    const splitGroups = [{ tabs: [editorTabs[0]] }, { tabs: [editorTabs[1]] }];
+    vscodeStub.window.tabGroups.all = splitGroups;
+    vscodeStub.__fixture.multiHarness.useFullEditorArea = false;
+    await focusSession.handler(...sessionItem.command.arguments);
+    assert.equal(vscodeStub.window.tabGroups.all, splitGroups, "disabled full area preserves the existing layout when focusing sessions");
+    delete vscodeStub.__fixture.multiHarness.useFullEditorArea;
     vscodeStub.window.terminals = [firstPrime];
     vscodeStub.__calls.terminalCloseHandlers.forEach((handler) => handler(secondPrime));
     await focusSession.handler(secondPrime);
     await focusSession.handler();
-    assert.equal(secondPrime.shown, 1, "stale session clicks do not focus closed terminals");
+    assert.equal(secondPrime.shown, 2, "stale session clicks do not focus closed terminals");
     assert.equal(vscodeStub.__calls.created.length, createdBeforeFocus, "focusing sessions never launches new terminals");
     assert.equal(sessionsView.provider.getChildren().length, 1);
     assert.equal(sessionsView.provider.getTreeItem(openSessions[0]).label, "Prime Agent");
@@ -642,13 +648,26 @@ try {
     await resume.handler(...savedItem.command.arguments);
     assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
     assert.equal(vscodeStub.window.tabGroups.all.length, 1, "revealing an existing session also joins splits");
+    vscodeStub.__fixture.multiHarness.useFullEditorArea = false;
+    const preservedResumeGroups = [{ tabs: [] }, { tabs: [] }];
+    vscodeStub.window.tabGroups.all = preservedResumeGroups;
+    await resume.handler(...savedItem.command.arguments);
+    assert.equal(vscodeStub.window.tabGroups.all, preservedResumeGroups, "disabled full area preserves splits when revealing an existing saved session");
+    vscodeStub.window.terminals = [];
+    await resume.handler(...savedItem.command.arguments);
+    assert.equal(vscodeStub.window.tabGroups.all, preservedResumeGroups, "disabled full area preserves splits when creating a resumed terminal");
+    vscodeStub.window.terminals = [resumed.terminal];
+    // The additional resume above created a terminal; subsequent stale-request
+    // checks compare against this new baseline.
+    const countAfterLayoutChecks = vscodeStub.__calls.created.length;
+    delete vscodeStub.__fixture.multiHarness.useFullEditorArea;
     assert.equal(sessionsView.provider.getChildren()[0].harness.id, "primeAgent");
     await resume.handler({ harnessId: "primeAgent", id: "unlisted" });
-    assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    assert.equal(vscodeStub.__calls.created.length, countAfterLayoutChecks);
     vscodeStub.window.terminals = [];
     rmSync(savedFile);
     await resume.handler(...savedItem.command.arguments);
-    assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    assert.equal(vscodeStub.__calls.created.length, countAfterLayoutChecks);
     assert.deepEqual(await savedView.provider.getChildren(), []);
     const missingDirectory = join(activationDir, "not-a-project");
     writeFileSync(savedFile, JSON.stringify({type: "session", id: "missing-project", cwd: missingDirectory}) + "\n");
@@ -657,7 +676,7 @@ try {
     refreshSaved.handler();
     const missingProject = (await savedView.provider.getChildren())[0];
     await resume.handler({ harnessId: missingProject.harnessId, id: missingProject.id });
-    assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    assert.equal(vscodeStub.__calls.created.length, countAfterLayoutChecks);
     vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
     vscodeStub.__calls.activeEditorHandlers.forEach((handler) => handler(undefined));
     assert.deepEqual(await savedView.provider.getChildren(), [], "changing projects refreshes and excludes records for the previous folder");
@@ -930,6 +949,27 @@ try {
     passed += 1;
     console.log("ok: configured executablePath and arguments are read with relative keys and reach createTerminal");
 
+    const preservedLaunchGroups = [{ tabs: [{ label: "file.ts" }] }, { tabs: [] }];
+    vscodeStub.window.terminals = [];
+    vscodeStub.window.tabGroups.all = preservedLaunchGroups;
+    vscodeStub.__fixture.multiHarness.useFullEditorArea = false;
+    await ohMyPi.handler();
+    const preservedLaunch = vscodeStub.__calls.created.at(-1);
+    assert.equal(vscodeStub.window.tabGroups.all, preservedLaunchGroups, "disabled full area preserves groups when opening an agent");
+    assert.deepEqual(preservedLaunch.options.location, { viewColumn: vscodeStub.ViewColumn.Active });
+    vscodeStub.window.terminals = [preservedLaunch.terminal];
+    vscodeStub.__fixture.multiHarness.useFullEditorArea = true;
+    const countBeforeLayoutToggle = vscodeStub.__calls.created.length;
+    await ohMyPi.handler();
+    assert.equal(vscodeStub.window.tabGroups.all.length, 1, "enabling full area affects the next focus without a reload");
+    assert.equal(vscodeStub.__calls.created.length, countBeforeLayoutToggle, "layout changes reuse the existing terminal");
+    const singleGroup = vscodeStub.window.tabGroups.all;
+    await ohMyPi.handler();
+    assert.equal(vscodeStub.window.tabGroups.all, singleGroup, "a single group needs no additional layout command");
+    delete vscodeStub.__fixture.multiHarness.useFullEditorArea;
+    passed += 1;
+    console.log("ok: full editor area can be disabled and re-enabled without restarting or creating duplicate terminals");
+
     vscodeStub.window.terminals = [];
     const originalCreateTerminal = vscodeStub.window.createTerminal;
     vscodeStub.window.createTerminal = () => { throw new Error("terminal service unavailable"); };
@@ -1082,6 +1122,9 @@ try {
     // (iv) the timeout path degrades to a quoted sendText plus one message.
     baseline();
     vscodeStub.__fixture.multiHarness.launchMode = "shell";
+    vscodeStub.__fixture.multiHarness.useFullEditorArea = false;
+    const preservedShellGroups = [{ tabs: [] }, { tabs: [] }];
+    vscodeStub.window.tabGroups.all = preservedShellGroups;
     const realSetTimeout = globalThis.setTimeout;
     const realClearTimeout = globalThis.clearTimeout;
     const pendingTimeouts = [];
@@ -1092,11 +1135,13 @@ try {
     globalThis.clearTimeout = () => {};
     const fallbackPromise = ohMyPi.handler();
     await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(vscodeStub.window.tabGroups.all, preservedShellGroups, "shell mode also preserves the layout when full area is disabled");
     assert.equal(vscodeStub.__calls.sendTexts.length, 0, "nothing is sent before the timeout fires");
     assert.ok(pendingTimeouts.length >= 1, "shell mode arms the integration timeout");
     assert.equal(pendingTimeouts[0].delay, 10000, `integration timeout is 10s (saw ${pendingTimeouts[0].delay})`);
     pendingTimeouts[0].callback();
     await fallbackPromise;
+    delete vscodeStub.__fixture.multiHarness.useFullEditorArea;
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
     const sendText = vscodeStub.__calls.sendTexts.at(-1)?.text ?? "";
