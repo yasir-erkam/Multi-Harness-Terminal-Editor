@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Added an Open Sessions sidebar view that lists open agent terminals and focuses an existing terminal when clicked. The list updates when terminals open or close and marks the active terminal with a dot.
+
 ## 0.5.0
 
 - Added Prime Agent (`prime-agent`) to the sidebar, agent picker, editor buttons and terminal profiles, including configurable executable paths, arguments, favorites and themed Prime Intellect icons.

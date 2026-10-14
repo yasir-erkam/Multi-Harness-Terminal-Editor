@@ -24,7 +24,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -67,6 +67,11 @@ check(typeof activityContainer?.icon === "string" && existsSync(join(root, activ
 const agentsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.agents");
 check(agentsView?.name === "%view.agents.name%" && typeof nls["view.agents.name"] === "string", "Agents view has a localized name");
 check(activationEvents.includes("onView:multiHarness.agents"), "opening the Agents view activates the extension on VS Code 1.67+");
+const sessionsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.sessions");
+check(sessionsView?.name === "%view.sessions.name%" && typeof nls["view.sessions.name"] === "string", "Open Sessions view has a localized name");
+check(activationEvents.includes("onView:multiHarness.sessions"), "opening the sessions view activates the extension");
+check(manifest.contributes.viewsWelcome?.some((entry) => entry.view === "multiHarness.sessions" && entry.contents === "%view.sessions.welcome%") && typeof nls["view.sessions.welcome"] === "string", "sessions view has a localized empty state");
+check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.focusSession" && entry.when === "false"), "session focus command is hidden from the palette because it requires a terminal");
 for (const id of allCommandIds) {
     check(commandIdList.includes(id), `command ${id} exists`);
     check(activationEvents.includes(`onCommand:${id}`), `activation event onCommand:${id} exists`);
@@ -90,8 +95,8 @@ for (const command of commands) {
         check(icon === "$(gear)", "settings command uses the gear icon");
         continue;
     }
-    if (command.command === "multiHarness.openAgentPicker") {
-        check(icon === undefined, "picker command has no icon");
+    if (["multiHarness.openAgentPicker", "multiHarness.focusSession"].includes(command.command)) {
+        check(icon === undefined, `${command.command} has no icon`);
         continue;
     }
     check(typeof icon === "object" && typeof icon.light === "string" && typeof icon.dark === "string", `command ${command.command} declares light+dark icons`);
@@ -223,7 +228,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.5.0", "manifest version matches the 0.5.0 development version");
+check(manifest.version === "0.6.0", "manifest version matches the 0.6.0 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

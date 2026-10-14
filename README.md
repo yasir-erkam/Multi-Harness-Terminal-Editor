@@ -10,6 +10,7 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 
 - **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all thirteen agents and includes a gear button for extension settings.
 - **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
+- **Open sessions.** The Open Sessions view lists open terminals whose names match a supported agent, including terminals opened from profiles. Click a session to focus that exact terminal. A dot marks the active terminal; opening or closing a terminal updates the list automatically. This lists terminals, not the agent process state inside them.
 - **Thirteen agents, one terminal each.** Open any supported harness in its own editor-area terminal. Each agent is keyed by an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, its settings and its icon.
 - **One terminal per agent, reused.** Running the command again reveals the agent's existing terminal instead of starting a second process; terminals are matched by the agent's display name.
 - **Opened beside the active editor.** The terminal is created with `TerminalOptions.location` set to `ViewColumn.Beside` and marked `isTransient`, so it is not restored on window reload.

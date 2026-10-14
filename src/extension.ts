@@ -4,6 +4,7 @@ import { openAgentTerminal } from "./launch";
 import { registerAgentProfile } from "./profiles";
 import { registerAgentStatus } from "./status";
 import { registerAgentsView } from "./agentsView";
+import { registerSessionsView } from "./sessionsView";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
@@ -26,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     registerAgentsView(context);
+    registerSessionsView(context);
 
     context.subscriptions.push(
         vscode.commands.registerCommand("multiHarness.openSettings", () =>
