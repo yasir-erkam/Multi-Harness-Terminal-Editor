@@ -1,6 +1,20 @@
 # Multi-Harness Terminal Editor
 
-Source & docs: [github.com/yasir-erkam/Multi-Harness-Terminal-Editor](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor) — release steps in [PUBLISHING.md](PUBLISHING.md).
+Run thirteen AI coding-agent CLIs in native editor-area terminals. Select an agent to browse its saved conversations for your project, resume a session, and keep your favorite agents within reach.
+
+[Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=yasir-erkam-ozdemir.multi-harness-terminal-editor) · [Install from Open VSX](https://open-vsx.org/extension/yasir-erkam-ozdemir/multi-harness-terminal-editor) · [Download a VSIX](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor/releases/latest)
+
+## Quick start
+
+1. Install the extension and the agent CLI you want to use. If the CLI is not on `PATH`, set `multiHarness.<id>.executablePath` to its absolute path.
+2. Open a trusted project folder and select **Multi-Harness YEÖ** in the Activity Bar.
+3. **Single-click an agent** to show its saved conversations for the current project.
+4. **Double-click the agent** to open its editor-area terminal, or select a saved conversation to resume it.
+5. Use the star to favorite an agent and the gear to open extension settings.
+
+Saved conversations are supported for **Codex, Claude Code, Pi, Oh My Pi and Prime Agent**. All thirteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
+
+The native list is the default. Switch to cards from the view header for search and larger icons. Favorites and the selected agent are shared between layouts; the selected agent is remembered per workspace.
 
 ## What it is
 
@@ -8,7 +22,7 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 
 ## Features
 
-- **Two sidebar layouts.** The sidebar defaults to the native VS Code list. Use the Switch Sidebar Layout button in the view header, or set `multiHarness.sidebarLayout` to `native` or `cards`. The card panel has no duplicate List/Cards selector. Cards add search, larger agent icons and integrated session lists, with a vector gear button for settings. Both layouts share favorites, the selected agent and project filter, settings and launch commands. Your layout choice is saved in VS Code settings.
+- **Two sidebar layouts.** The sidebar defaults to the native VS Code list. Use the Switch Sidebar Layout button in the view header, or set `multiHarness.sidebarLayout` to `native` or `cards`. Cards add search, larger agent icons and integrated session lists. Both layouts share favorites, the selected agent and project filter, settings and launch commands. Your layout choice is saved in VS Code settings.
 
 - **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all thirteen agents and includes a gear button for extension settings. Click an agent once to select it and show its saved sessions for the current project; double-click to open its terminal. Both sidebar layouts use this behavior.
 - **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
@@ -26,19 +40,11 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 - **Configurable launch.** For each agent you can override the executable with `multiHarness.<id>.executablePath` and add extra CLI flags with `multiHarness.<id>.arguments`.
 - **No runtime dependencies.** The extension is pure VS Code API code.
 
-## Getting started
+## Other ways to open an agent
 
-Click **Multi-Harness YEÖ** in the Activity Bar (left sidebar), then click an agent
-in the **Agents** view to open its editor-area terminal. All thirteen agents are
-available here, independently of the title-bar icon settings. The sidebar uses
-the same executable, arguments, launch mode and workspace selection as the
-existing commands and editor buttons.
-Use the gear button in the **Agents** view header to open settings filtered to
-Multi-Harness (executable paths, arguments, launch mode and title-bar icons).
-
-1. From an editor tab, run one of the `Multi-Harness: Open <Agent>` commands — or **Multi-Harness: Open Agent...** to pick from all thirteen.
-2. The agent CLI must be installed and on `PATH`; otherwise set its `multiHarness.<id>.executablePath` to an absolute path.
-3. Enable the matching `multiHarness.show<Id>Icon` setting if you want a title-bar button for that harness.
+- Run **Multi-Harness: Open Agent...** in the Command Palette, or one of the **Multi-Harness: Open &lt;Agent&gt;** commands.
+- Choose an agent from the terminal profile dropdown.
+- Enable its `multiHarness.show<Id>Icon` setting to add an editor title-bar button. These buttons are off by default; the Activity Bar launcher is always available.
 
 ## Supported agents
 
@@ -91,6 +97,17 @@ are read locally, with bounded metadata reads; missing or malformed records are
 skipped, and directory access failures appear in the session list. A saved
 session cannot resume if its file or original project directory is unavailable.
 
+If an agent moves its session store or changes to an unrecognized file format,
+Sessions stays empty and the terminal launcher remains usable. Set
+`multiHarness.<id>.sessionDirectory` to the new storage directory when known,
+then refresh Sessions. A path override supports a moved store; a changed file
+format may require an extension update.
+
+Agent or project changes cancel outdated scans. Archive traversal is limited to
+20,000 entries; a notice indicates incomplete results or access failures.
+After fixing a path or permission, use **Refresh Sessions** to try again.
+Resumed conversations use their recorded project's CLI settings and directory.
+
 ### Full settings reference
 
 **Icon toggles — `multiHarness.show<Id>Icon`**
@@ -111,7 +128,7 @@ session cannot resume if its file or original project directory is unavailable.
 | `multiHarness.showGooseIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showPrimeAgentIcon` | `boolean` | `false` | `window` |
 
-**Executable overrides — `multiHarness.<id>.executablePath`** (machine-overridable; leave empty to use the default executable)
+**Executable overrides — `multiHarness.<id>.executablePath`** (machine-overridable; reset the setting to use the default executable)
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
@@ -245,7 +262,7 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
   - before finally falling back to `PATH`.
 
   If an agent still is not found, set `multiHarness.<id>.executablePath` explicitly, or reload the VS Code window after installing the CLI.
-- **No shell-integration status tracking in v0.1.** The extension does not read shell-integration data, so there is no per-agent "running / idle / needs input" indicator on the icons.
+- **Status reporting requires shell mode.** Direct mode does not report agent process state. Shell mode reports command start and finish when shell integration is available; it does not detect when an agent needs input.
 - **Editor title-bar buttons are off by default.** Enable the matching `multiHarness.show<Id>Icon` setting to show them. The Multi-Harness Activity Bar launcher is available by default; you can also use `multiHarness.openAgentPicker`.
 
 ## Installation
@@ -255,13 +272,17 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
 1. Open the Extensions view (`Ctrl+Shift+X`).
 2. Search for **Multi-Harness Terminal Editor** and check the publisher shown on the result.
 3. Click **Install**, then reload the window if prompted.
-4. Enable the agents you want with the `multiHarness.show<Id>Icon` settings.
+4. Open **Multi-Harness YEÖ** in the Activity Bar. Optionally enable editor title-bar buttons with the `multiHarness.show<Id>Icon` settings.
+
+For code-server and other Open VSX clients, install from [Open VSX](https://open-vsx.org/extension/yasir-erkam-ozdemir/multi-harness-terminal-editor), or use the VSIX below.
 
 ### From a VSIX file
 
 1. Open the Extensions view and open the `…` (Views and More Actions) menu.
 2. Choose **Install from VSIX…** and select the downloaded `.vsix` file.
-3. Alternatively, from a terminal: `code --install-extension artifacts/multi-harness-terminal-editor-0.5.0.vsix`.
+3. Alternatively, from a terminal: `code --install-extension artifacts/multi-harness-terminal-editor-0.6.1.vsix`.
+
+Get the current VSIX from [GitHub Releases](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor/releases/latest).
 
 VSIX files are produced in `artifacts/` by `npm run package` (see [PUBLISHING.md](PUBLISHING.md)).
 
