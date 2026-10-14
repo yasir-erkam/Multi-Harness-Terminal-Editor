@@ -84,6 +84,7 @@
     "onView:multiHarness.savedSessions",
     "onCommand:multiHarness.resumeSession",
     "onCommand:multiHarness.refreshSessions",
+    "onCommand:multiHarness.selectSessionAgent",
     "onView:multiHarness.cards",
     "onCommand:multiHarness.toggleSidebarLayout"
   ],
@@ -291,6 +292,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "multiHarness.selectSessionAgent",
+        "title": "%command.selectSessionAgent.title%",
+        "category": "%category%",
+        "icon": "$(filter)"
+      },
+      {
         "command": "multiHarness.toggleSidebarLayout",
         "title": "%command.toggleSidebarLayout.title%",
         "category": "%category%",
@@ -338,6 +345,11 @@
           "command": "multiHarness.refreshSessions",
           "when": "view == multiHarness.savedSessions",
           "group": "navigation"
+        },
+        {
+          "command": "multiHarness.selectSessionAgent",
+          "when": "view == multiHarness.savedSessions",
+          "group": "navigation@1"
         },
         {
           "command": "multiHarness.toggleSidebarLayout",

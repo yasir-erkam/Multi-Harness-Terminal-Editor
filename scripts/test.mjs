@@ -165,6 +165,20 @@ try {
     const overrides = sessionRoots(savedDir, { CODEX_HOME: "~/custom-codex", PRIME_AGENT_SESSION_DIR: "~/prime-sessions" });
     assert.equal(overrides[0].directory, join(savedDir, "custom-codex", "sessions"));
     assert.equal(overrides[4].directory, join(savedDir, "prime-sessions"));
+    const workspace = join(savedDir, "project");
+    const sibling = join(savedDir, "project-other");
+    mkdirSync(workspace);
+    mkdirSync(sibling);
+    fixture("codex", "matching-project", workspace, "Matching session", now - 5000);
+    fixture("primeAgent", "wrong-agent", workspace, "Other agent", now);
+    for (let index = 0; index < 105; index++) {
+        fixture("codex", `unrelated-${index}`, sibling, "Other project", now + index);
+    }
+    const scoped = await scanSavedSessions(roots, 1, { harnessId: "codex", cwd: workspace });
+    assert.deepEqual(scoped.sessions.map((session) => session.id), ["matching-project"], "scope filtering happens before the result limit");
+    const alias = join(savedDir, "project-alias");
+    symlinkSync(workspace, alias);
+    assert.equal((await scanSavedSessions(roots, 100, { harnessId: "codex", cwd: alias })).sessions[0].id, "matching-project", "symlink aliases resolve to the same project");
     passed += 1;
     console.log("ok: saved sessions read real metadata independently of terminals, tolerate partial files and use provider resume arguments");
 } finally {
@@ -189,7 +203,7 @@ const VSCODE_STUB = `
 const calls = { commands: [], profiles: [], views: [], webviews: [], configUpdates: [], created: [], errors: [], infos: [], executed: [], configGets: [],
     terminals: [], sendTexts: [], statusItems: [], statusShown: [], statusHidden: [], statusDisposed: 0,
     shellIntegrationHandlers: [], executionStartHandlers: [], executionEndHandlers: [],
-    terminalOpenHandlers: [], terminalCloseHandlers: [], activeTerminalHandlers: [] };
+    terminalOpenHandlers: [], terminalCloseHandlers: [], activeTerminalHandlers: [], activeEditorHandlers: [] };
 
 function subscribeTerminalEvent(handlers, handler) {
     handlers.push(handler);
@@ -258,6 +272,13 @@ module.exports = {
         terminals: [],
         activeTerminal: undefined,
         activeTextEditor: undefined,
+        onDidChangeActiveTextEditor(handler) { return subscribeTerminalEvent(calls.activeEditorHandlers, handler); },
+        createTreeView(id, options) {
+            const view = { id, provider: options.treeDataProvider, disposed: false,
+                dispose() { this.disposed = true; } };
+            calls.views.push(view);
+            return view;
+        },
         registerWebviewViewProvider(id, provider) { calls.webviews.push({ id, provider }); return { dispose() {} }; },
         registerTerminalProfileProvider(id, provider) { calls.profiles.push({ id, provider }); return { dispose() {} }; },
         registerTreeDataProvider(id, provider) {
@@ -303,6 +324,7 @@ module.exports = {
         onDidEndTerminalShellExecution(handler) { calls.executionEndHandlers.push(handler); return { dispose() {} }; },
     },
     workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration,
+        onDidChangeWorkspaceFolders() { return { dispose() {} }; },
         onDidChangeConfiguration() { return { dispose() {} }; } },
     Uri: { joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
     ViewColumn: { Beside: -2 },
@@ -343,6 +365,7 @@ try {
     const context = {
         subscriptions: [],
         globalState,
+        workspaceState: { get(key, fallback) { return savedState.get('workspace:' + key) ?? fallback; }, async update(key, value) { savedState.set('workspace:' + key, value); } },
         extensionUri: { fsPath: join(projectRoot) },
         extensionPath: join(projectRoot),
     };
@@ -379,7 +402,7 @@ try {
     assert.equal(agents.length, contributedProfiles.length);
     assert.deepEqual(
         agents.map((agent) => agentsView.provider.getTreeItem(agent).command.command).sort(),
-        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.toggleSidebarLayout"].includes(id))
+        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSidebarLayout"].includes(id))
     );
     for (const agent of agents) {
         const item = agentsView.provider.getTreeItem(agent);
@@ -497,6 +520,11 @@ try {
     mkdirSync(primeSessions, { recursive: true });
     const savedFile = join(primeSessions, "recorded.jsonl");
     writeFileSync(savedFile, JSON.stringify({type: "session", id: "recorded-prime", cwd: projectDirectory}) + '\n{"type":"session_info","name":"A saved conversation"}\n');
+    const selectSessionAgent = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.selectSessionAgent");
+    await selectSessionAgent.handler("primeAgent");
+    assert.deepEqual(await savedView.provider.getChildren(), [], "no project never falls back to all session history");
+    vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
+    vscodeStub.__calls.activeEditorHandlers.forEach((handler) => handler(undefined));
     const savedRows = await savedView.provider.getChildren();
     assert.equal(savedRows.length, 1);
     const savedItem = savedView.provider.getTreeItem(savedRows[0]);
@@ -524,15 +552,32 @@ try {
     await resume.handler(...savedItem.command.arguments);
     assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
     assert.deepEqual(await savedView.provider.getChildren(), []);
-    writeFileSync(savedFile, JSON.stringify({type: "session", id: "missing-project", cwd: join(activationDir, "not-a-project")}) + "\n");
+    const missingDirectory = join(activationDir, "not-a-project");
+    writeFileSync(savedFile, JSON.stringify({type: "session", id: "missing-project", cwd: missingDirectory}) + "\n");
     const refreshSaved = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.refreshSessions");
+    vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: missingDirectory } }];
     refreshSaved.handler();
     const missingProject = (await savedView.provider.getChildren())[0];
     await resume.handler({ harnessId: missingProject.harnessId, id: missingProject.id });
     assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
+    vscodeStub.__calls.activeEditorHandlers.forEach((handler) => handler(undefined));
+    assert.deepEqual(await savedView.provider.getChildren(), [], "changing projects refreshes and excludes records for the previous folder");
+    writeFileSync(savedFile, JSON.stringify({type: "session", id: "recorded-prime", cwd: projectDirectory}) + "\n");
+    refreshSaved.handler();
+    assert.equal((await savedView.provider.getChildren()).length, 1);
+    await selectSessionAgent.handler("codex");
+    assert.deepEqual(await savedView.provider.getChildren(), [], "selecting another agent excludes the previous agent's sessions");
+    await selectSessionAgent.handler("primeAgent");
+    assert.equal((await savedView.provider.getChildren()).length, 1);
+    assert.ok(savedView.description.includes("Prime Agent"));
+    assert.equal(savedState.get("workspace:selectedSessionAgent"), "primeAgent");
+    vscodeStub.workspace.workspaceFolders = [];
     passed += 1;
     console.log("ok: saved conversations resume by identity in the recorded project and handle deleted files and missing projects");
 
+    vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
+    vscodeStub.__calls.activeEditorHandlers.forEach((handler) => handler(undefined));
     const layoutCommand = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.toggleSidebarLayout");
     vscodeStub.__fixture.multiHarness.sidebarLayout = "native";
     await layoutCommand.handler();
@@ -565,10 +610,19 @@ try {
     assert.equal(cardMessages.at(-1).agents[0].favorite, true);
     assert.equal(cardMessages.at(-1).sessions.length, 0);
     assert.equal(cardMessages.at(-1).saved.length, 1, "cards show saved conversations even without terminal tabs");
-    assert.equal(cardMessages.at(-1).saved[0].key, "primeAgent:missing-project");
+    assert.equal(cardMessages.at(-1).saved[0].key, "primeAgent:recorded-prime");
+    assert.equal(cardMessages.at(-1).scope.agentId, "primeAgent");
+    assert.equal(cardMessages.at(-1).scope.project, "recorded-project");
+    assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "primeAgent").selected, true);
+    await selectSessionAgent.handler("codex");
+    await receiveCardMessage({ action: "ready" });
+    assert.deepEqual(cardMessages.at(-1).saved, [], "card sessions follow the selected agent filter");
+    await selectSessionAgent.handler("primeAgent");
+    await receiveCardMessage({ action: "ready" });
+    assert.equal(cardMessages.at(-1).saved.length, 1);
     vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "resume", id: "primeAgent:missing-project" });
-    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.resumeSession", { harnessId: "primeAgent", id: "missing-project" }]);
+    await receiveCardMessage({ action: "resume", id: "primeAgent:recorded-prime" });
+    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.resumeSession", { harnessId: "primeAgent", id: "recorded-prime" }]);
     const messagesBeforeFavorite = cardMessages.length;
     await addFavorite.handler(primeAgent);
     assert.equal(cardMessages.length, messagesBeforeFavorite + 1, "native favorite updates refresh the card model");
@@ -600,6 +654,7 @@ try {
     passed += 1;
     console.log("ok: card and native layouts share favorites, validate actions and focus exact sessions");
 
+    vscodeStub.workspace.workspaceFolders = [];
     // The user's click path: the handler registered for the literal id must run
     // without throwing (resolution failure is fine — it reports an error).
     const ohMyPi = vscodeStub.__calls.commands.find((c) => c.id === "multiHarness.openOhMyPi");

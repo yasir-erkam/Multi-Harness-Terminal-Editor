@@ -7,31 +7,52 @@ import { openAgentTerminal } from "./launch";
 import { extensionStrings } from "./localization";
 import { resumeArguments, scanSavedSessions, sessionRoots, type SavedSession, type SessionScan } from "./savedSessions";
 import { type AgentStatus } from "./status";
+import { type SessionContext, type SessionScope } from "./sessionContext";
 
 export interface SavedSessions {
     readonly onDidChange: vscode.Event<void>;
     getSessions(): Promise<SessionScan>;
+    getScope(): SessionScope;
+    getMessage(): string | undefined;
 }
 
 interface ScanNotice { readonly notice: true; }
 
-export function registerSavedSessionsView(context: vscode.ExtensionContext, status: AgentStatus): SavedSessions {
+export function registerSavedSessionsView(context: vscode.ExtensionContext, status: AgentStatus, selection: SessionContext): SavedSessions {
     const strings = extensionStrings(context);
     const changes = new vscode.EventEmitter<void>();
     let pending: Promise<SessionScan> | undefined;
+    function getMessage(): string | undefined {
+        const scope = selection.getScope();
+        if (!scope.agent) {
+            return strings["sessionScope.noAgent"];
+        }
+        if (!scope.cwd) {
+            return strings["sessionScope.noFolder"];
+        }
+        if (!sessionRoots().some((root) => root.harnessId === scope.agent!.id)) {
+            return strings["sessionScope.unsupported"];
+        }
+        return undefined;
+    }
     function getSessions(): Promise<SessionScan> {
         if (!pending) {
+            const scope = selection.getScope();
+            if (!scope.agent || !scope.cwd) {
+                return Promise.resolve({ sessions: [], unreadable: [] });
+            }
             const config = vscode.workspace.getConfiguration("multiHarness");
             const roots = sessionRoots().map((root) => {
                 const override = config.get<string>(`${root.harnessId}.sessionDirectory`, "").trim();
                 return override ? { ...root, directory: override.replace(/^~(?=$|[/\\])/, os.homedir()) } : root;
             });
-            pending = scanSavedSessions(roots);
+            pending = scanSavedSessions(roots, 100, { harnessId: scope.agent.id, cwd: scope.cwd });
         }
         return pending;
     }
     function refresh(): void {
         pending = undefined;
+        updateHeader();
         changes.fire();
     }
     const provider: vscode.TreeDataProvider<SavedSession | ScanNotice> = {
@@ -66,9 +87,17 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             };
         },
     };
+    const view = vscode.window.createTreeView("multiHarness.savedSessions", { treeDataProvider: provider });
+    function updateHeader(): void {
+        const scope = selection.getScope();
+        view.description = [scope.agent?.displayName, scope.cwd ? path.basename(scope.cwd) : undefined].filter(Boolean).join(" · ");
+        view.message = getMessage();
+    }
+    updateHeader();
     context.subscriptions.push(
         changes,
-        vscode.window.registerTreeDataProvider("multiHarness.savedSessions", provider),
+        view,
+        selection.onDidChange(refresh),
         vscode.commands.registerCommand("multiHarness.refreshSessions", refresh),
         vscode.commands.registerCommand("multiHarness.resumeSession", async (request?: { harnessId?: string; id?: string }) => {
             if (!request || typeof request.harnessId !== "string" || typeof request.id !== "string") {
@@ -101,5 +130,5 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             }
         })
     );
-    return { onDidChange: changes.event, getSessions };
+    return { onDidChange: changes.event, getSessions, getScope: selection.getScope, getMessage };
 }

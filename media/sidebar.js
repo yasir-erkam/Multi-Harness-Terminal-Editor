@@ -54,6 +54,9 @@ function section(title) {
 const sessions = section(t("view.sessions.name"));
 const saved = section(t("view.savedSessions.name"));
 saved.node.querySelector("h2").append(button("icon-button refresh-button", "↻", "refresh", undefined, t("command.refreshSessions.title")));
+saved.node.querySelector("h2").append(button("icon-button", "⌄", "selectAgent", undefined, t("command.selectSessionAgent.title")));
+const scopeNote = element("p", "support-note scope-note");
+saved.node.insertBefore(scopeNote, saved.body);
 saved.body.className = "saved-list";
 saved.body.append(element("p", "empty", t("sidebar.loading")));
 saved.node.append(element("p", "support-note", t("sidebar.savedSupport")));
@@ -74,6 +77,9 @@ sessions.body.className = "session-list";
 app.append(header, switcher, search, saved.node, sessions.node, agents.node);
 
 function renderSaved() {
+    const scope = state.scope || {};
+    scopeNote.textContent = [scope.agentName, scope.project].filter(Boolean).join(" · ") || t("command.selectSessionAgent.title");
+    scopeNote.title = scope.cwd || "";
     const query = search.value.trim().toLocaleLowerCase();
     const matching = (state.saved || []).filter((session) =>
         `${session.title} ${session.harness} ${session.project}`.toLocaleLowerCase().includes(query));
@@ -83,7 +89,7 @@ function renderSaved() {
         saved.body.append(element("p", "empty", t("savedSessions.unreadable")));
     }
     if (matching.length === 0) {
-        saved.body.append(element("p", "empty", t(query ? "sidebar.noResults" : "sidebar.noSavedSessions")));
+        saved.body.append(element("p", "empty", scope.message || t(query ? "sidebar.noResults" : "sidebar.noSavedSessions")));
     }
     for (const session of matching) {
         const row = button("saved-session", undefined, "resume", session.key,
@@ -104,8 +110,9 @@ function renderAgents() {
         agents.body.append(element("p", "empty", t("sidebar.noResults")));
     }
     for (const agent of visible) {
-        const card = element("article", `agent-card${agent.favorite ? " favorite" : ""}`);
+        const card = element("article", `agent-card${agent.favorite ? " favorite" : ""}${agent.selected ? " selected-agent" : ""}`);
         const launch = button("launch", undefined, "open", agent.id, `${t("sidebar.open")}: ${agent.name}`);
+        if (agent.selected) launch.setAttribute("aria-current", "true");
         const icons = element("span", "agent-icon");
         for (const theme of ["light", "dark"]) {
             const img = element("img", `${theme}-icon`);
@@ -116,7 +123,7 @@ function renderAgents() {
             icons.append(img);
         }
         const copy = element("span", "agent-copy");
-        copy.append(element("span", "agent-name", agent.name), element("span", "agent-hint", t("sidebar.open")));
+        copy.append(element("span", "agent-name", agent.name), element("span", "agent-hint", agent.selected ? `${t("sidebar.selected")} · ${t("sidebar.open")}` : t("sidebar.open")));
         launch.append(icons, copy);
         const star = button("star", agent.favorite ? "★" : "☆", "favorite", agent.id,
             `${t(agent.favorite ? "command.removeFavorite.title" : "command.addFavorite.title")}: ${agent.name}`);

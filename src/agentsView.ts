@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { HARNESSES, type Harness, iconFile } from "./harnesses";
+import { type SessionContext } from "./sessionContext";
 
 export interface FavoriteAgents {
     readonly onDidChange: vscode.Event<void>;
@@ -7,7 +8,7 @@ export interface FavoriteAgents {
 }
 
 /** Activity Bar launcher reuses the same commands as the editor buttons. */
-export function registerAgentsView(context: vscode.ExtensionContext): FavoriteAgents {
+export function registerAgentsView(context: vscode.ExtensionContext, selection: SessionContext): FavoriteAgents {
     const favoritesKey = "favoriteAgents";
     const favorites = new Set(context.globalState.get<string[]>(favoritesKey, []));
     const changes = new vscode.EventEmitter<void>();
@@ -23,7 +24,7 @@ export function registerAgentsView(context: vscode.ExtensionContext): FavoriteAg
             return {
                 id: harness.id,
                 label: harness.displayName,
-                description: favorites.has(harness.id) ? "★" : undefined,
+                description: [selection.getScope().agent?.id === harness.id ? "✓" : "", favorites.has(harness.id) ? "★" : ""].filter(Boolean).join(" ") || undefined,
                 contextValue: favorites.has(harness.id) ? "favoriteAgent" : "agent",
                 iconPath: {
                     light: vscode.Uri.joinPath(context.extensionUri, "media", iconFile(harness, "light")),
@@ -55,6 +56,7 @@ export function registerAgentsView(context: vscode.ExtensionContext): FavoriteAg
 
     context.subscriptions.push(
         changes,
+        selection.onDidChange(() => changes.fire()),
         vscode.window.registerTreeDataProvider("multiHarness.agents", provider),
         vscode.commands.registerCommand("multiHarness.addFavorite", (harness?: Harness) => setFavorite(harness, true)),
         vscode.commands.registerCommand("multiHarness.removeFavorite", (harness?: Harness) => setFavorite(harness, false))

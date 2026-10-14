@@ -6,13 +6,18 @@ import { registerAgentStatus } from "./status";
 import { registerAgentsView } from "./agentsView";
 import { registerSessionsView } from "./sessionsView";
 import { registerCardsView } from "./cardsView";
+import { registerSessionContext } from "./sessionContext";
 import { registerSavedSessionsView } from "./savedSessionsView";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
+    const sessionContext = registerSessionContext(context);
     for (const harness of HARNESSES) {
         context.subscriptions.push(
-            vscode.commands.registerCommand(harness.commandId, () => openAgentTerminal(context, harness, status))
+            vscode.commands.registerCommand(harness.commandId, async () => {
+                await sessionContext.selectAgent(harness.id);
+                await openAgentTerminal(context, harness, status);
+            })
         );
         registerAgentProfile(context, harness);
     }
@@ -28,9 +33,9 @@ export function activate(context: vscode.ExtensionContext): void {
         })
     );
 
-    const favorites = registerAgentsView(context);
+    const favorites = registerAgentsView(context, sessionContext);
     const sessions = registerSessionsView(context);
-    const savedSessions = registerSavedSessionsView(context, status);
+    const savedSessions = registerSavedSessionsView(context, status, sessionContext);
     registerCardsView(context, favorites, sessions, savedSessions);
 
     context.subscriptions.push(

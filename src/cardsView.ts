@@ -33,12 +33,21 @@ export function registerCardsView(
             return;
         }
         const webview = view.webview;
+        const scope = savedSessions.getScope();
         void webview.postMessage({
             type: "state",
+            scope: {
+                agentId: scope.agent?.id,
+                agentName: scope.agent?.displayName,
+                cwd: scope.cwd,
+                project: scope.cwd ? basename(scope.cwd) : undefined,
+                message: savedSessions.getMessage(),
+            },
             agents: [...HARNESSES].sort((a, b) => Number(favorites.isFavorite(b)) - Number(favorites.isFavorite(a))).map((harness) => ({
                 id: harness.id,
                 name: harness.displayName,
                 favorite: favorites.isFavorite(harness),
+                selected: harness.id === scope.agent?.id,
                 lightIcon: webview.asWebviewUri(vscode.Uri.joinPath(media, iconFile(harness, "light"))).toString(),
                 darkIcon: webview.asWebviewUri(vscode.Uri.joinPath(media, iconFile(harness, "dark"))).toString(),
             })),
@@ -84,6 +93,8 @@ export function registerCardsView(
                     const { action, id } = message as { action?: unknown; id?: unknown };
                     if (action === "ready") {
                         await refresh();
+                    } else if (action === "selectAgent" && (id === undefined || HARNESSES.some((agent) => agent.id === id))) {
+                        await vscode.commands.executeCommand("multiHarness.selectSessionAgent", id);
                     } else if (action === "refresh") {
                         await vscode.commands.executeCommand("multiHarness.refreshSessions");
                     } else if (action === "resume" && typeof id === "string") {

@@ -21,6 +21,17 @@ export interface SessionScan {
     readonly unreadable: string[];
 }
 
+export interface SessionFilter {
+    readonly harnessId: string;
+    readonly cwd: string;
+}
+
+async function canonicalDirectory(directory: string): Promise<string> {
+    const resolved = await fs.realpath(directory).catch(() => path.resolve(directory));
+    const normalized = path.normalize(resolved);
+    return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
 const WINDOW_BYTES = 256 * 1024;
 const MAX_CANDIDATES = 1000;
 
@@ -123,7 +134,12 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
     return { harnessId, id: header.id, cwd: header.cwd, file, modified, title: title || header.id };
 }
 
-export async function scanSavedSessions(roots = sessionRoots(), limit = 100): Promise<SessionScan> {
+export async function scanSavedSessions(roots = sessionRoots(), limit = 100, filter?: SessionFilter): Promise<SessionScan> {
+    if (filter) {
+        roots = roots.filter((root) => root.harnessId === filter.harnessId);
+    }
+    const scopePath = filter ? await canonicalDirectory(filter.cwd) : undefined;
+    const canonicalPaths = new Map<string, string>();
     const unreadable = new Set<string>();
     const candidates: { root: SessionRoot; file: string; modified: number; size: number }[] = [];
     async function walk(root: SessionRoot, directory: string, depth: number): Promise<void> {
@@ -174,13 +190,23 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100): Pr
     candidates.sort((a, b) => b.modified - a.modified);
     const sessions: SavedSession[] = [];
     const seen = new Set<string>();
-    for (const candidate of candidates.slice(0, MAX_CANDIDATES)) {
+    for (const candidate of filter ? candidates : candidates.slice(0, MAX_CANDIDATES)) {
         if (sessions.length >= limit) {
             break;
         }
         try {
             const session = parseSession(candidate.root.harnessId, candidate.file, candidate.modified,
                 await readWindows(candidate.file, candidate.size));
+            if (session && scopePath !== undefined) {
+                let sessionPath = canonicalPaths.get(session.cwd);
+                if (!sessionPath) {
+                    sessionPath = await canonicalDirectory(session.cwd);
+                    canonicalPaths.set(session.cwd, sessionPath);
+                }
+                if (sessionPath !== scopePath) {
+                    continue;
+                }
+            }
             if (session && !seen.has(`${session.harnessId}:${session.id}`)) {
                 seen.add(`${session.harnessId}:${session.id}`);
                 sessions.push(session.harnessId === "codex" && codexTitles.has(session.id)

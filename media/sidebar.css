@@ -92,6 +92,8 @@ h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 
 .saved-meta, .support-note { color: var(--vscode-descriptionForeground); font-size: 10px; line-height: 1.5; }
 .support-note { margin: 7px 0 0; }
 .refresh-button { margin-left: auto; font-size: 17px; padding: 0 4px; }
+.scope-note { margin: 0 0 8px; overflow-wrap: anywhere; }
+.agent-card.selected-agent { background: var(--vscode-list-inactiveSelectionBackground); border-color: var(--vscode-focusBorder); }
 @media (max-width: 287px) {
     .launch { flex-direction: row; align-items: center; min-height: 74px; padding-right: 27px; }
 }

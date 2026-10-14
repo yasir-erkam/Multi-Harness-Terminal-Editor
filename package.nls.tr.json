@@ -95,7 +95,7 @@
   "sidebar.noSessions": "Açık terminal yok. Başlamak için aşağıdan bir ajan seçin.",
   "sidebar.active": "Aktif",
   "view.savedSessions.name": "Oturumlar",
-  "view.savedSessions.welcome": "Kayıtlı oturum bulunamadı. Bu deneme sürümü Codex, Claude Code, Pi, Oh My Pi ve Prime Agent oturumlarını okur. Özel kayıt dizinlerini eklenti ayarlarından belirleyebilirsiniz.\n[Oturumları Yenile](command:multiHarness.refreshSessions)",
+  "view.savedSessions.welcome": "Seçili ajan ve bu proje klasörüyle eşleşen kayıtlı oturum bulunamadı.\n[Ajan Seç](command:multiHarness.selectSessionAgent)\n[Oturumları Yenile](command:multiHarness.refreshSessions)",
   "command.resumeSession.title": "Kayıtlı Oturuma Devam Et",
   "command.refreshSessions.title": "Oturumları Yenile",
   "savedSessions.unreadable": "Bazı oturum klasörleri okunamadı",
@@ -107,6 +107,12 @@
   "ohMyPi.sessionDirectory.description": "Oh My Pi oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
   "primeAgent.sessionDirectory.description": "Prime Agent oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
   "sidebar.loading": "Kayıtlı oturumlar yükleniyor…",
-  "sidebar.savedSupport": "Codex · Claude Code · Pi · Oh My Pi · Prime Agent. En son 100 konuşma.",
-  "sidebar.noSavedSessions": "Kayıtlı konuşma bulunamadı. Ayarlardan kayıt dizinlerini kontrol edin."
+  "sidebar.savedSupport": "Bu projedeki seçili ajanın en son 100 konuşması gösterilir.",
+  "sidebar.noSavedSessions": "Bu ajan ve projeyle eşleşen kayıtlı konuşma yok.",
+  "command.selectSessionAgent.title": "Oturumlar İçin Ajan Seç",
+  "sessionScope.selectAgent": "Kayıtlı oturumlarını görmek istediğiniz ajanı seçin",
+  "sessionScope.noAgent": "Bu projedeki kayıtlı oturumlarını görmek için bir ajan seçin.",
+  "sessionScope.noFolder": "Kayıtlı oturumları görmek için bir proje klasörü açın.",
+  "sessionScope.unsupported": "Seçili ajan için kayıtlı oturum geçmişi henüz desteklenmiyor.",
+  "sidebar.selected": "Seçili"
 }

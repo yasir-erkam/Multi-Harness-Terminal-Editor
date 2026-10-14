@@ -95,7 +95,7 @@
   "sidebar.noSessions": "No open terminals. Select an agent below to get started.",
   "sidebar.active": "Active",
   "view.savedSessions.name": "Sessions",
-  "view.savedSessions.welcome": "No saved sessions found. This preview reads Codex, Claude Code, Pi, Oh My Pi and Prime Agent sessions. Custom storage locations can be set in extension settings.\n[Refresh Sessions](command:multiHarness.refreshSessions)",
+  "view.savedSessions.welcome": "No saved sessions match the selected agent and this project folder.\n[Select Agent](command:multiHarness.selectSessionAgent)\n[Refresh Sessions](command:multiHarness.refreshSessions)",
   "command.resumeSession.title": "Resume Saved Session",
   "command.refreshSessions.title": "Refresh Sessions",
   "savedSessions.unreadable": "Some session folders could not be read",
@@ -107,6 +107,12 @@
   "ohMyPi.sessionDirectory.description": "Absolute directory containing Oh My Pi session records. Leave empty to use the default storage location.",
   "primeAgent.sessionDirectory.description": "Absolute directory containing Prime Agent session records. Leave empty to use the default storage location.",
   "sidebar.loading": "Loading saved sessions…",
-  "sidebar.savedSupport": "Codex · Claude Code · Pi · Oh My Pi · Prime Agent. Up to 100 recent conversations.",
-  "sidebar.noSavedSessions": "No saved conversations found. Check the storage directories in settings."
+  "sidebar.savedSupport": "Showing the selected agent in this project. Up to 100 recent conversations.",
+  "sidebar.noSavedSessions": "No saved conversations match this agent and project.",
+  "command.selectSessionAgent.title": "Select Session Agent",
+  "sessionScope.selectAgent": "Choose the agent whose saved sessions to show",
+  "sessionScope.noAgent": "Select an agent to see its saved sessions for this project.",
+  "sessionScope.noFolder": "Open a project folder to see its saved sessions.",
+  "sessionScope.unsupported": "Saved session history is not yet supported for the selected agent.",
+  "sidebar.selected": "Selected"
 }
