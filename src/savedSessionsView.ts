@@ -88,8 +88,14 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         },
     };
     const view = vscode.window.createTreeView("multiHarness.savedSessions", { treeDataProvider: provider });
+    let previousAgentPresence: boolean | undefined;
     function updateHeader(): void {
         const scope = selection.getScope();
+        const hasAgent = scope.agent !== undefined;
+        if (previousAgentPresence !== hasAgent) {
+            previousAgentPresence = hasAgent;
+            void vscode.commands.executeCommand("setContext", "multiHarness.hasSelectedSessionAgent", hasAgent);
+        }
         view.description = [scope.agent?.displayName, scope.cwd ? path.basename(scope.cwd) : undefined].filter(Boolean).join(" · ");
         view.message = getMessage();
     }
