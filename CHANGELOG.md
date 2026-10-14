@@ -2,7 +2,7 @@
 
 ## 0.6.0
 
-- Added a sidebar layout switch: native VS Code lists or a themed card panel with agent search, favorite stars and open sessions. Both layouts share the same favorites and terminal commands.
+- Added a sidebar layout switch: native VS Code lists (default) or a themed card panel with search, favorites, saved sessions and open terminals. Both layouts share the selected agent, project filter and terminal commands; the layout choice is saved in VS Code settings.
 
 - Filter saved conversations by selected agent and current project directory, with a filter picker, per-workspace agent selection and directory alias matching.
 - Added separate Sessions and Open Terminals views. Sessions shows saved conversations for Codex, Claude Code, Pi, Oh My Pi and Prime Agent and resumes the selected record in its original project. Open Terminals focuses existing terminal tabs and marks the active terminal.

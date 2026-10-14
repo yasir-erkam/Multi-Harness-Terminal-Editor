@@ -763,7 +763,7 @@
             "native",
             "cards"
           ],
-          "default": "cards",
+          "default": "native",
           "enumDescriptions": [
             "%sidebarLayout.native.description%",
             "%sidebarLayout.cards.description%"

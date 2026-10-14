@@ -41,7 +41,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand("multiHarness.toggleSidebarLayout", async () => {
             const config = vscode.workspace.getConfiguration("multiHarness");
-            const layout = config.get<string>("sidebarLayout", "cards") === "native" ? "cards" : "native";
+            const layout = config.get<string>("sidebarLayout", "native") === "native" ? "cards" : "native";
             await config.update("sidebarLayout", layout, vscode.ConfigurationTarget.Global);
         })
     );
