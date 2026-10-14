@@ -23,7 +23,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -57,9 +57,15 @@ function check(condition, message) {
 // Commands + activation events
 const commands = manifest.contributes.commands ?? [];
 const commandIdList = commands.map((command) => command.command);
-check(commandIdList.length === 13, "exactly 13 commands are contributed");
-check(new Set(commandIdList).size === 13, "no duplicate command ids");
+check(commandIdList.length === allCommandIds.length, "all agent and utility commands are contributed");
+check(new Set(commandIdList).size === commandIdList.length, "no duplicate command ids");
 const activationEvents = manifest.activationEvents ?? [];
+const activityContainer = manifest.contributes.viewsContainers?.activitybar?.find((container) => container.id === "multiHarness");
+check(activityContainer?.title === "%viewContainer.title%" && typeof nls["viewContainer.title"] === "string", "Activity Bar container uses its localized title");
+check(typeof activityContainer?.icon === "string" && existsSync(join(root, activityContainer.icon)), "Activity Bar icon exists");
+const agentsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.agents");
+check(agentsView?.name === "%view.agents.name%" && typeof nls["view.agents.name"] === "string", "Agents view has a localized name");
+check(activationEvents.includes("onView:multiHarness.agents"), "opening the Agents view activates the extension on VS Code 1.67+");
 for (const id of allCommandIds) {
     check(commandIdList.includes(id), `command ${id} exists`);
     check(activationEvents.includes(`onCommand:${id}`), `activation event onCommand:${id} exists`);
@@ -75,6 +81,10 @@ for (const command of commands) {
 // Icon files exist, picker has none
 for (const command of commands) {
     const icon = command.icon;
+    if (command.command === "multiHarness.openSettings") {
+        check(icon === "$(gear)", "settings command uses the gear icon");
+        continue;
+    }
     if (command.command === "multiHarness.openAgentPicker") {
         check(icon === undefined, "picker command has no icon");
         continue;
@@ -85,6 +95,8 @@ for (const command of commands) {
 }
 
 // Menu entries: exactly the 12 agent commands, same ordering/when as harnesses
+const settingsButton = manifest.contributes.menus?.["view/title"]?.find((entry) => entry.command === "multiHarness.openSettings");
+check(settingsButton?.when === "view == multiHarness.agents" && settingsButton?.group === "navigation", "settings button appears in the Agents view toolbar");
 const menus = manifest.contributes.menus?.["editor/title"] ?? [];
 check(menus.length === 12, "editor/title has exactly 12 menu entries");
 const menuIds = menus.map((entry) => entry.command);
@@ -201,7 +213,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(["0.1.0", "0.1.1", "0.1.2", "0.2.0", "0.2.1", "0.2.2", "0.3.0"].includes(manifest.version), "published versions are consumed; local 0.3.0 is the fresh one");
+check(manifest.version === "0.4.0", "manifest version matches the 0.4.0 release");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

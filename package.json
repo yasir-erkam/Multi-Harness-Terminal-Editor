@@ -2,7 +2,7 @@
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose) in native editor-area terminal tabs.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -46,6 +46,8 @@
     }
   },
   "activationEvents": [
+    "onCommand:multiHarness.openSettings",
+    "onView:multiHarness.agents",
     "onCommand:multiHarness.openClaudeCode",
     "onCommand:multiHarness.openCodex",
     "onCommand:multiHarness.openOpenCode",
@@ -74,7 +76,30 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "multiHarness",
+          "title": "%viewContainer.title%",
+          "icon": "media/activity-bar-yeo.svg"
+        }
+      ]
+    },
+    "views": {
+      "multiHarness": [
+        {
+          "id": "multiHarness.agents",
+          "name": "%view.agents.name%"
+        }
+      ]
+    },
     "commands": [
+      {
+        "command": "multiHarness.openSettings",
+        "title": "%command.openSettings.title%",
+        "category": "%category%",
+        "icon": "$(gear)"
+      },
       {
         "command": "multiHarness.openClaudeCode",
         "title": "%command.openClaudeCode.title%",
@@ -190,6 +215,13 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "multiHarness.openSettings",
+          "when": "view == multiHarness.agents",
+          "group": "navigation"
+        }
+      ],
       "editor/title": [
         {
           "command": "multiHarness.openClaudeCode",

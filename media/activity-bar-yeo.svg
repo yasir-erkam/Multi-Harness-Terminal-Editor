@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C5C5C5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <title>Multi-Harness — YEÖ</title>
+  <path d="M7 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-8"/>
+  <path d="m6 10 3 3-3 3m6 0h5"/>
+  <g stroke-width="1.1">
+    <path d="m10 2.5 1.5 2.25L13 2.5m-1.5 2.25V8"/>
+    <path d="M18 2.5h-3V8h3m-3-2.75h2.5"/>
+    <rect x="20" y="2.5" width="3" height="5.5" rx="1.5"/>
+  </g>
+  <g fill="#C5C5C5" stroke="none">
+    <circle cx="20.5" cy="0.65" r="0.55"/>
+    <circle cx="22.5" cy="0.65" r="0.55"/>
+  </g>
+</svg>

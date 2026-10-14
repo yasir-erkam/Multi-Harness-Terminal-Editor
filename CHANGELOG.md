@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Added a Multi-Harness Activity Bar launcher listing all twelve agents with their themed icons. Click an agent to open its editor-area terminal using the existing executable, arguments, launch mode and workspace selection.
+- Added a gear button in the Agents view header and an Open Settings command to open settings filtered to this extension.
+- Added the YEÖ mark to the Activity Bar terminal icon and the Multi-Harness YEÖ panel title, with English and Turkish localization.
+- Editor title-bar buttons, the agent picker and terminal profiles remain available alongside the sidebar launcher.
+
 ## 0.3.0
 
 - Correct application marks for all twelve harnesses, including Claude Code's mascot, GitHub Copilot's robot, Gemini CLI's terminal icon and Crush's pixel heart. Oh My Pi, Aider and Crush no longer use letter placeholders. Brand colors are preserved and monochrome foregrounds adapt to light/dark themes; sources and licenses are included.

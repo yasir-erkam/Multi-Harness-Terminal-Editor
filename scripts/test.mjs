@@ -1,7 +1,7 @@
 // Unit tests: resolveExecutable (pure node module, esbuild-bundled on the fly)
 // plus the full manifest validation from validate-manifest.mjs.
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -117,7 +117,7 @@ test("win32 explicit .ps1 path resolves without adding suffixes", (dir) => {
 // ---------------------------------------------------------------------------
 
 const VSCODE_STUB = `
-const calls = { commands: [], profiles: [], created: [], errors: [], infos: [], executed: [], configGets: [],
+const calls = { commands: [], profiles: [], views: [], created: [], errors: [], infos: [], executed: [], configGets: [],
     terminals: [], sendTexts: [], statusItems: [], statusShown: [], statusHidden: [], statusDisposed: 0,
     shellIntegrationHandlers: [], executionStartHandlers: [], executionEndHandlers: [] };
 
@@ -172,6 +172,11 @@ module.exports = {
         activeTerminal: undefined,
         activeTextEditor: undefined,
         registerTerminalProfileProvider(id, provider) { calls.profiles.push({ id, provider }); return { dispose() {} }; },
+        registerTreeDataProvider(id, provider) {
+            const view = { id, provider, disposed: false };
+            calls.views.push(view);
+            return { dispose() { view.disposed = true; } };
+        },
         onDidCloseTerminal() { return { dispose() {} }; },
         showQuickPick() { return Promise.resolve(undefined); },
         showErrorMessage(message) { calls.errors.push(message); return Promise.resolve(undefined); },
@@ -269,6 +274,33 @@ try {
     passed += 1;
     console.log(`ok: activation registers exactly the ${contributedCommands.length} contributed command ids`);
 
+    // The sidebar lists every harness even while editor-title icons are disabled.
+    assert.equal(vscodeStub.__calls.views.length, 1);
+    const agentsView = vscodeStub.__calls.views[0];
+    assert.equal(agentsView.id, manifest.contributes.views.multiHarness[0].id);
+    const agents = agentsView.provider.getChildren();
+    assert.equal(agents.length, contributedProfiles.length);
+    assert.deepEqual(
+        agents.map((agent) => agentsView.provider.getTreeItem(agent).command.command).sort(),
+        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings"].includes(id))
+    );
+    for (const agent of agents) {
+        const item = agentsView.provider.getTreeItem(agent);
+        assert.equal(item.id, agent.id);
+        assert.equal(item.label, agent.displayName);
+        assert.deepEqual(agentsView.provider.getChildren(agent), []);
+        for (const theme of ["light", "dark"]) {
+            assert.equal(item.iconPath[theme].fsPath, join(projectRoot, "media", `${agent.id}-${theme}.svg`));
+            assert.ok(existsSync(item.iconPath[theme].fsPath));
+        }
+    }
+    const sidebarItem = agentsView.provider.getTreeItem(agents.find((agent) => agent.id === "ohMyPi"));
+    await vscodeStub.__calls.commands.find((command) => command.id === sidebarItem.command.command).handler();
+    assert.equal(vscodeStub.__calls.created.at(-1)?.options.shellPath, fakeCli);
+    assert.deepEqual(vscodeStub.__calls.created.at(-1)?.options.shellArgs, ["--continue"]);
+    passed += 1;
+    console.log("ok: Activity Bar lists all harnesses with themed icons and launches through configured commands");
+
     // The user's click path: the handler registered for the literal id must run
     // without throwing (resolution failure is fine — it reports an error).
     const ohMyPi = vscodeStub.__calls.commands.find((c) => c.id === "multiHarness.openOhMyPi");
@@ -332,6 +364,16 @@ try {
     assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openOhMyPi"], "picker dispatches the harness commandId");
     passed += 1;
     console.log("ok: agent picker dispatches the harness commandId");
+
+    const settings = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.openSettings");
+    vscodeStub.__calls.executed.length = 0;
+    await settings.handler();
+    assert.deepEqual(vscodeStub.__calls.executed, [
+        "workbench.action.openSettings",
+        `@ext:${manifest.publisher}.${manifest.name}`,
+    ], "settings button opens settings filtered to this extension");
+    passed += 1;
+    console.log("ok: settings button opens only Multi-Harness settings");
 
     // -----------------------------------------------------------------------
     // Shell mode + status surface.
@@ -471,6 +513,7 @@ try {
     assert.equal(vscodeStub.__calls.statusDisposed, 1, "dispose() disposes the status-bar item");
     passed += 1;
     console.log("ok: disposing the extension cancels the pending status timer and disposes the item");
+    assert.equal(agentsView.disposed, true, "extension disposal unregisters the Activity Bar provider");
 } catch (error) {
     console.error(`FAIL: headless activation test — ${error.message}`);
     process.exit(1);

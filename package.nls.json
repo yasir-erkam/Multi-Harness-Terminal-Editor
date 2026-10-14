@@ -1,6 +1,9 @@
 {
   "displayName": "Multi-Harness Terminal Editor",
   "category": "Multi-Harness",
+  "view.agents.name": "Agents",
+  "viewContainer.title": "Multi-Harness YEÖ",
+  "command.openSettings.title": "Open Settings",
   "untrustedWorkspaces.description": "Spawning terminal processes from installed CLI tools is only supported in trusted workspaces.",
   "command.openClaudeCode.title": "Open Claude Code",
   "command.openCodex.title": "Open Codex",

@@ -1,6 +1,9 @@
 {
   "displayName": "Multi-Harness Terminal Editor",
   "category": "Multi-Harness",
+  "view.agents.name": "Ajanlar",
+  "viewContainer.title": "Multi-Harness YEÖ",
+  "command.openSettings.title": "Ayarları Aç",
   "untrustedWorkspaces.description": "Kurulu CLI araçlarından terminal süreçleri başlatmak yalnızca güvenilen workspace'lerde desteklenir.",
   "command.openClaudeCode.title": "Claude Code'u Aç",
   "command.openCodex.title": "Codex'i Aç",

@@ -4,10 +4,11 @@ Source & docs: [github.com/yasir-erkam/Multi-Harness-Terminal-Editor](https://gi
 
 ## What it is
 
-Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as **native VS Code terminals in the editor area**. Each of the twelve supported agents gets its own terminal tab, created from an icon in the editor title bar (or from a single Quick Pick command that lists every agent). All icon buttons ship **off by default** and are toggled on per agent, so the title bar only shows the harnesses you actually use. The terminals are ordinary editor-area terminals: they can be split, moved, reordered and closed like any other tab, and the extension adds no custom terminal renderer or panel of its own.
+Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as **native VS Code terminals in the editor area**. Open any of the twelve supported agents from the Activity Bar launcher, an optional editor title-bar button, or the agent picker. Editor title-bar buttons ship **off by default** and are toggled on per agent. The terminals are ordinary editor-area terminals: they can be split, moved, reordered and closed like any other tab.
 
 ## Features
 
+- **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all twelve agents and includes a gear button for extension settings.
 - **Twelve agents, one terminal each.** Open any supported harness in its own editor-area terminal. Each agent is keyed by an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, its settings and its icon.
 - **One terminal per agent, reused.** Running the command again reveals the agent's existing terminal instead of starting a second process; terminals are matched by the agent's display name.
 - **Opened beside the active editor.** The terminal is created with `TerminalOptions.location` set to `ViewColumn.Beside` and marked `isTransient`, so it is not restored on window reload.
@@ -21,6 +22,14 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 - **No runtime dependencies.** The extension is pure VS Code API code.
 
 ## Getting started
+
+Click **Multi-Harness YEÖ** in the Activity Bar (left sidebar), then click an agent
+in the **Agents** view to open its editor-area terminal. All twelve agents are
+available here, independently of the title-bar icon settings. The sidebar uses
+the same executable, arguments, launch mode and workspace selection as the
+existing commands and editor buttons.
+Use the gear button in the **Agents** view header to open settings filtered to
+Multi-Harness (executable paths, arguments, launch mode and title-bar icons).
 
 1. From an editor tab, run one of the `Multi-Harness: Open <Agent>` commands — or **Multi-Harness: Open Agent...** to pick from all twelve.
 2. The agent CLI must be installed and on `PATH`; otherwise set its `multiHarness.<id>.executablePath` to an absolute path.
@@ -50,6 +59,7 @@ All commands appear in the Command Palette under the `Multi-Harness` category. T
 | Command ID | Palette label | Description |
 | --- | --- | --- |
 | `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all twelve harnesses. |
+| `multiHarness.openSettings` | Open Settings | Open settings filtered to this extension. |
 | `multiHarness.openClaudeCode` | Open Claude Code | Open a Claude Code terminal. |
 | `multiHarness.openCodex` | Open Codex | Open a Codex terminal. |
 | `multiHarness.openOpenCode` | Open OpenCode | Open an OpenCode terminal. |
@@ -219,7 +229,7 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
 
   If an agent still is not found, set `multiHarness.<id>.executablePath` explicitly, or reload the VS Code window after installing the CLI.
 - **No shell-integration status tracking in v0.1.** The extension does not read shell-integration data, so there is no per-agent "running / idle / needs input" indicator on the icons.
-- **Icon buttons are off by default.** After installing, no icon appears until you enable the matching `multiHarness.show<Id>Icon` setting (or use `multiHarness.openAgentPicker`).
+- **Editor title-bar buttons are off by default.** Enable the matching `multiHarness.show<Id>Icon` setting to show them. The Multi-Harness Activity Bar launcher is available by default; you can also use `multiHarness.openAgentPicker`.
 
 ## Installation
 
@@ -234,7 +244,7 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
 
 1. Open the Extensions view and open the `…` (Views and More Actions) menu.
 2. Choose **Install from VSIX…** and select the downloaded `.vsix` file.
-3. Alternatively, from a terminal: `code --install-extension multi-harness-terminal-editor-0.1.0.vsix`.
+3. Alternatively, from a terminal: `code --install-extension artifacts/multi-harness-terminal-editor-0.4.0.vsix`.
 
 VSIX files are produced in `artifacts/` by `npm run package` (see [PUBLISHING.md](PUBLISHING.md)).
 

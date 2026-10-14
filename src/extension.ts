@@ -3,6 +3,7 @@ import { HARNESSES } from "./harnesses";
 import { openAgentTerminal } from "./launch";
 import { registerAgentProfile } from "./profiles";
 import { registerAgentStatus } from "./status";
+import { registerAgentsView } from "./agentsView";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
@@ -22,6 +23,14 @@ export function activate(context: vscode.ExtensionContext): void {
                 await vscode.commands.executeCommand(picked.harness.commandId);
             }
         })
+    );
+
+    registerAgentsView(context);
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("multiHarness.openSettings", () =>
+            vscode.commands.executeCommand("workbench.action.openSettings", "@ext:yasir-erkam-ozdemir.multi-harness-terminal-editor")
+        )
     );
 
     context.subscriptions.push(
