@@ -2,6 +2,8 @@
   "displayName": "Multi-Harness Terminal Editor",
   "category": "Multi-Harness",
   "view.agents.name": "Ajanlar",
+  "command.addFavorite.title": "Favorilere Ekle",
+  "command.removeFavorite.title": "Favorilerden Çıkar",
   "viewContainer.title": "Multi-Harness YEÖ",
   "command.openSettings.title": "Ayarları Aç",
   "untrustedWorkspaces.description": "Kurulu CLI araçlarından terminal süreçleri başlatmak yalnızca güvenilen workspace'lerde desteklenir.",
@@ -70,5 +72,10 @@
   "terminal.profile.goose.title": "Goose terminali aç",
   "launchMode.description": "Ajan terminallerinin nasıl başlatılacağı. 'direct' ajan CLI'ını doğrudan terminal süreci olarak çalıştırır; 'shell' ise varsayılan kabuğunuzda bir komut olarak çalıştırır ve komut bazlı durum takibini mümkün kılar (çalışan shell entegrasyonu gerektirir).",
   "launchMode.direct.description": "Ajan CLI'ını doğrudan terminal süreci olarak başlat (varsayılan).",
-  "launchMode.shell.description": "Ajanı kabuğunuz üzerinden başlat, böylece komut durumu takip edilebilir; shell entegrasyonu yoksa tırnaklanmış komut satırına geri döner."
+  "launchMode.shell.description": "Ajanı kabuğunuz üzerinden başlat, böylece komut durumu takip edilebilir; shell entegrasyonu yoksa tırnaklanmış komut satırına geri döner.",
+  "command.openPrimeAgent.title": "Prime Agent'ı Aç",
+  "showPrimeAgentIcon.description": "Editör başlık çubuğunda Prime Agent düğmesini göster.",
+  "primeAgent.executablePath.description": "Prime Agent CLI'ını başlatmak için kullanılan yol veya komut adı. Varsayılan olarak PATH üzerinde 'prime-agent' aranır.",
+  "primeAgent.arguments.description": "Prime Agent CLI'ına başlatma sırasında eklenen argümanlar.",
+  "terminal.profile.primeAgent.title": "Prime Agent terminali aç"
 }

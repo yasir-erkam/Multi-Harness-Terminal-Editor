@@ -62,6 +62,15 @@ test("rootFolder/node_modules/.bin is searched first", (dir) => {
 });
 
 // 4. win32 suffix resolution via the injectable platform param
+test("Prime Agent resolves from its default local-bin install directory without PATH", (dir) => {
+    const bin = join(dir, ".local", "bin");
+    mkdirSync(bin, { recursive: true });
+    const executable = join(bin, "prime-agent");
+    writeFileSync(executable, "#!/bin/sh\n");
+    chmodSync(executable, 0o755);
+    assert.equal(resolveExecutable("prime-agent", { platform: "linux", user: { home: dir } }), executable);
+});
+
 test("win32 extension-less command resolves .cmd/.exe suffixes", (dir) => {
     // Deliberately NOT executable and NOT present under the plain name: only
     // the win32 F_OK + suffix walk can find these, the posix X_OK walk cannot.
@@ -163,6 +172,15 @@ module.exports = {
     __calls: calls,
     __fixture: FIXTURE,
     StatusBarAlignment: { Left: 1, Right: 2 },
+    EventEmitter: class EventEmitter {
+        listeners = new Set();
+        event = (listener) => {
+            this.listeners.add(listener);
+            return { dispose: () => this.listeners.delete(listener) };
+        };
+        fire(value) { for (const listener of this.listeners) { listener(value); } }
+        dispose() { this.listeners.clear(); }
+    },
     commands: {
         registerCommand(id, handler) { calls.commands.push({ id, handler }); return { dispose() {} }; },
         executeCommand(...args) { calls.executed.push(...args); return Promise.resolve(); },
@@ -244,8 +262,14 @@ try {
     const vscodeStub = requireFrom(join(stubDir, "index.js"));
     const extension = requireFrom(join(activationDir, "extension.cjs"));
 
+    const savedState = new Map();
+    const globalState = {
+        get(key, fallback) { return savedState.get(key) ?? fallback; },
+        async update(key, value) { savedState.set(key, value); },
+    };
     const context = {
         subscriptions: [],
+        globalState,
         extensionUri: { fsPath: join(projectRoot) },
         extensionPath: join(projectRoot),
     };
@@ -282,7 +306,7 @@ try {
     assert.equal(agents.length, contributedProfiles.length);
     assert.deepEqual(
         agents.map((agent) => agentsView.provider.getTreeItem(agent).command.command).sort(),
-        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings"].includes(id))
+        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite"].includes(id))
     );
     for (const agent of agents) {
         const item = agentsView.provider.getTreeItem(agent);
@@ -300,6 +324,53 @@ try {
     assert.deepEqual(vscodeStub.__calls.created.at(-1)?.options.shellArgs, ["--continue"]);
     passed += 1;
     console.log("ok: Activity Bar lists all harnesses with themed icons and launches through configured commands");
+
+    const addFavorite = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.addFavorite");
+    const removeFavorite = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.removeFavorite");
+    let favoriteRefreshes = 0;
+    agentsView.provider.onDidChangeTreeData(() => { favoriteRefreshes += 1; });
+    const codex = agents.find((agent) => agent.id === "codex");
+    const goose = agents.find((agent) => agent.id === "goose");
+    await addFavorite.handler(goose);
+    await addFavorite.handler(codex);
+    assert.deepEqual(agentsView.provider.getChildren().map((agent) => agent.id), [
+        "codex", "goose", ...agents.filter((agent) => !["codex", "goose"].includes(agent.id)).map((agent) => agent.id),
+    ], "favorites appear first with the original order preserved in both groups");
+    assert.equal(agentsView.provider.getTreeItem(codex).contextValue, "favoriteAgent");
+    assert.equal(agentsView.provider.getTreeItem(codex).description, "★");
+    assert.equal(agentsView.provider.getTreeItem(goose).command.command, goose.commandId);
+    await addFavorite.handler(codex);
+    await addFavorite.handler();
+    await addFavorite.handler({ id: "unknown" });
+    assert.equal(favoriteRefreshes, 2, "duplicate and invalid requests do not refresh the list");
+    await removeFavorite.handler(goose);
+    assert.equal(agentsView.provider.getTreeItem(goose).contextValue, "agent");
+    assert.equal(agentsView.provider.getTreeItem(goose).description, undefined);
+    assert.deepEqual(agentsView.provider.getChildren().map((agent) => agent.id), [
+        "codex", ...agents.filter((agent) => agent.id !== "codex").map((agent) => agent.id),
+    ]);
+    assert.deepEqual(globalState.get("favoriteAgents"), ["codex"]);
+    assert.equal(favoriteRefreshes, 3, "each favorite change refreshes the list");
+    passed += 1;
+    console.log("ok: favorite stars update ordering and context while preserving launch commands");
+
+    const primeAgent = agents.find((agent) => agent.id === "primeAgent");
+    assert.equal(primeAgent.defaultExecutable, "prime-agent");
+    vscodeStub.__fixture.multiHarness.primeAgent = { executablePath: fakeCli, arguments: ["--resume"] };
+    await vscodeStub.__calls.commands.find((command) => command.id === primeAgent.commandId).handler();
+    const primeTerminal = vscodeStub.__calls.created.at(-1).options;
+    assert.equal(primeTerminal.name, "Prime Agent");
+    assert.equal(primeTerminal.shellPath, fakeCli);
+    assert.deepEqual(primeTerminal.shellArgs, ["--resume"]);
+    const primeProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.primeAgent");
+    const profileOptions = primeProfile.provider.provideTerminalProfile({}).options;
+    assert.equal(profileOptions.shellPath, fakeCli);
+    assert.deepEqual(profileOptions.shellArgs, ["--resume"]);
+    await addFavorite.handler(primeAgent);
+    assert.equal(agentsView.provider.getTreeItem(primeAgent).contextValue, "favoriteAgent");
+    await removeFavorite.handler(primeAgent);
+    passed += 1;
+    console.log("ok: Prime Agent command, profile and favorites use the configured executable and arguments");
 
     // The user's click path: the handler registered for the literal id must run
     // without throwing (resolution failure is fine — it reports an error).
@@ -514,6 +585,19 @@ try {
     passed += 1;
     console.log("ok: disposing the extension cancels the pending status timer and disposes the item");
     assert.equal(agentsView.disposed, true, "extension disposal unregisters the Activity Bar provider");
+
+    // A new activation must restore favorites without depending on old module state.
+    const reloadedContext = { ...context, subscriptions: [] };
+    extension.activate(reloadedContext);
+    const reloadedView = vscodeStub.__calls.views.at(-1);
+    assert.equal(reloadedView.provider.getChildren()[0].id, "codex");
+    assert.equal(reloadedView.provider.getTreeItem(codex).contextValue, "favoriteAgent");
+    assert.equal(reloadedView.provider.getChildren().length, agents.length);
+    for (const subscription of reloadedContext.subscriptions) {
+        subscription.dispose();
+    }
+    passed += 1;
+    console.log("ok: favorites survive extension reactivation through persisted global state");
 } catch (error) {
     console.error(`FAIL: headless activation test — ${error.message}`);
     process.exit(1);

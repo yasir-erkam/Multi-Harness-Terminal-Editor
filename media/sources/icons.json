@@ -68,5 +68,13 @@
   "goose": {
     "file": "goose.svg",
     "url": "https://github.com/block/goose/blob/4811ae25f736fdf0ede847449c060e96645426b5/ui/desktop/src/images/icon.svg"
+  },
+  "primeAgent": {
+    "file": "primeAgent.svg",
+    "url": "https://www.primeintellect.ai/icons/primeintellect-logo.svg",
+    "viewBox": "0 0 40 40",
+    "themeColors": [
+      "white"
+    ]
   }
 }

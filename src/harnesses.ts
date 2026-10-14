@@ -22,6 +22,7 @@ export const HARNESSES: readonly Harness[] = [
     { id: "crush", displayName: "Crush", defaultExecutable: "crush", commandId: "multiHarness.openCrush" },
     { id: "qwen", displayName: "Qwen Code", defaultExecutable: "qwen", commandId: "multiHarness.openQwen" },
     { id: "goose", displayName: "Goose", defaultExecutable: "goose", commandId: "multiHarness.openGoose" },
+    { id: "primeAgent", displayName: "Prime Agent", defaultExecutable: "prime-agent", commandId: "multiHarness.openPrimeAgent" },
 ];
 
 /**

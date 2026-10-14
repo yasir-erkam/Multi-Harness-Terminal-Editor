@@ -2,6 +2,8 @@
   "displayName": "Multi-Harness Terminal Editor",
   "category": "Multi-Harness",
   "view.agents.name": "Agents",
+  "command.addFavorite.title": "Add to Favorites",
+  "command.removeFavorite.title": "Remove from Favorites",
   "viewContainer.title": "Multi-Harness YEÖ",
   "command.openSettings.title": "Open Settings",
   "untrustedWorkspaces.description": "Spawning terminal processes from installed CLI tools is only supported in trusted workspaces.",
@@ -70,5 +72,10 @@
   "terminal.profile.goose.title": "Open Goose terminal",
   "launchMode.description": "How agent terminals are started. 'direct' runs the agent CLI as the terminal process; 'shell' runs it as a command in your default shell, which enables per-command status tracking but requires working shell integration.",
   "launchMode.direct.description": "Launch the agent CLI as the terminal process itself (default).",
-  "launchMode.shell.description": "Launch the agent through your shell so command status can be tracked; falls back to a quoted command line when shell integration is unavailable."
+  "launchMode.shell.description": "Launch the agent through your shell so command status can be tracked; falls back to a quoted command line when shell integration is unavailable.",
+  "command.openPrimeAgent.title": "Open Prime Agent",
+  "showPrimeAgentIcon.description": "Show a Prime Agent button in the editor title bar.",
+  "primeAgent.executablePath.description": "Path or command name used to launch the Prime Agent CLI. Defaults to looking up 'prime-agent' on PATH.",
+  "primeAgent.arguments.description": "Additional arguments passed to the Prime Agent CLI on launch.",
+  "terminal.profile.primeAgent.title": "Open Prime Agent terminal"
 }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+
+- Added Prime Agent (`prime-agent`) to the sidebar, agent picker, editor buttons and terminal profiles, including configurable executable paths, arguments, favorites and themed Prime Intellect icons.
+- Mark agents as favorites with the star button in the sidebar. Favorites appear first, retain the original harness order within each group, and persist across window reloads and workspaces in the same VS Code profile.
+
 ## 0.4.0
 
 - Added a Multi-Harness Activity Bar launcher listing all twelve agents with their themed icons. Click an agent to open its editor-area terminal using the existing executable, arguments, launch mode and workspace selection.

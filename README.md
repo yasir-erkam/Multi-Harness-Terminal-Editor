@@ -4,15 +4,16 @@ Source & docs: [github.com/yasir-erkam/Multi-Harness-Terminal-Editor](https://gi
 
 ## What it is
 
-Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as **native VS Code terminals in the editor area**. Open any of the twelve supported agents from the Activity Bar launcher, an optional editor title-bar button, or the agent picker. Editor title-bar buttons ship **off by default** and are toggled on per agent. The terminals are ordinary editor-area terminals: they can be split, moved, reordered and closed like any other tab.
+Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as **native VS Code terminals in the editor area**. Open any of the thirteen supported agents from the Activity Bar launcher, an optional editor title-bar button, or the agent picker. Editor title-bar buttons ship **off by default** and are toggled on per agent. The terminals are ordinary editor-area terminals: they can be split, moved, reordered and closed like any other tab.
 
 ## Features
 
-- **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all twelve agents and includes a gear button for extension settings.
-- **Twelve agents, one terminal each.** Open any supported harness in its own editor-area terminal. Each agent is keyed by an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, its settings and its icon.
+- **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all thirteen agents and includes a gear button for extension settings.
+- **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
+- **Thirteen agents, one terminal each.** Open any supported harness in its own editor-area terminal. Each agent is keyed by an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, its settings and its icon.
 - **One terminal per agent, reused.** Running the command again reveals the agent's existing terminal instead of starting a second process; terminals are matched by the agent's display name.
 - **Opened beside the active editor.** The terminal is created with `TerminalOptions.location` set to `ViewColumn.Beside` and marked `isTransient`, so it is not restored on window reload.
-- **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all twelve harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
+- **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all thirteen harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
 - **Optional shell launch mode with live status.** `multiHarness.launchMode: "shell"` runs agents through your shell so a status-bar item can report running/finished state, duration and exit code; the default `direct` mode is unchanged. See [Launch modes](#launch-modes).
 - **Terminal profile dropdown.** Every agent is also contributed as a VS Code terminal profile (`multiHarness.<id>`), so you can start one from the terminal panel's `+` dropdown; profiles whose executable cannot be resolved are simply omitted from the list.
 - **Per-agent editor title-bar icons.** Every agent has its own toggle, `multiHarness.show<Id>Icon` (boolean, default `false`). Enable only the agents you want in the editor title bar.
@@ -24,14 +25,14 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 ## Getting started
 
 Click **Multi-Harness YEÖ** in the Activity Bar (left sidebar), then click an agent
-in the **Agents** view to open its editor-area terminal. All twelve agents are
+in the **Agents** view to open its editor-area terminal. All thirteen agents are
 available here, independently of the title-bar icon settings. The sidebar uses
 the same executable, arguments, launch mode and workspace selection as the
 existing commands and editor buttons.
 Use the gear button in the **Agents** view header to open settings filtered to
 Multi-Harness (executable paths, arguments, launch mode and title-bar icons).
 
-1. From an editor tab, run one of the `Multi-Harness: Open <Agent>` commands — or **Multi-Harness: Open Agent...** to pick from all twelve.
+1. From an editor tab, run one of the `Multi-Harness: Open <Agent>` commands — or **Multi-Harness: Open Agent...** to pick from all thirteen.
 2. The agent CLI must be installed and on `PATH`; otherwise set its `multiHarness.<id>.executablePath` to an absolute path.
 3. Enable the matching `multiHarness.show<Id>Icon` setting if you want a title-bar button for that harness.
 
@@ -51,14 +52,15 @@ Multi-Harness (executable paths, arguments, launch mode and title-bar icons).
 | `crush` | Crush | `multiHarness.openCrush` | `crush` |
 | `qwen` | Qwen Code | `multiHarness.openQwen` | `qwen` |
 | `goose` | Goose | `multiHarness.openGoose` | `goose` |
+| `primeAgent` | Prime Agent | `multiHarness.openPrimeAgent` | `prime-agent` |
 
 ## Commands
 
-All commands appear in the Command Palette under the `Multi-Harness` category. The twelve `open*` commands are also individual, keybindable commands.
+All commands appear in the Command Palette under the `Multi-Harness` category. The thirteen `open*` commands are also individual, keybindable commands.
 
 | Command ID | Palette label | Description |
 | --- | --- | --- |
-| `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all twelve harnesses. |
+| `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all thirteen harnesses. |
 | `multiHarness.openSettings` | Open Settings | Open settings filtered to this extension. |
 | `multiHarness.openClaudeCode` | Open Claude Code | Open a Claude Code terminal. |
 | `multiHarness.openCodex` | Open Codex | Open a Codex terminal. |
@@ -72,6 +74,7 @@ All commands appear in the Command Palette under the `Multi-Harness` category. T
 | `multiHarness.openCrush` | Open Crush | Open a Crush terminal. |
 | `multiHarness.openQwen` | Open Qwen Code | Open a Qwen Code terminal. |
 | `multiHarness.openGoose` | Open Goose | Open a Goose terminal. |
+| `multiHarness.openPrimeAgent` | Open Prime Agent | Open a Prime Agent terminal. |
 
 ## Settings
 
@@ -95,6 +98,7 @@ Every setting lives under the `multiHarness` section.
 | `multiHarness.showCrushIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showQwenIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showGooseIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showPrimeAgentIcon` | `boolean` | `false` | `window` |
 
 **Executable overrides — `multiHarness.<id>.executablePath`** (machine-overridable; leave empty to use the default executable)
 
@@ -112,6 +116,7 @@ Every setting lives under the `multiHarness` section.
 | `multiHarness.crush.executablePath` | `string` | `"crush"` | machine-overridable |
 | `multiHarness.qwen.executablePath` | `string` | `"qwen"` | machine-overridable |
 | `multiHarness.goose.executablePath` | `string` | `"goose"` | machine-overridable |
+| `multiHarness.primeAgent.executablePath` | `string` | `"prime-agent"` | machine-overridable |
 
 **Extra arguments — `multiHarness.<id>.arguments`**
 
@@ -129,6 +134,7 @@ Every setting lives under the `multiHarness` section.
 | `multiHarness.crush.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.qwen.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.goose.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.primeAgent.arguments` | `array` of `string` | `[]` | `resource` |
 
 **Notifications**
 
@@ -244,7 +250,7 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
 
 1. Open the Extensions view and open the `…` (Views and More Actions) menu.
 2. Choose **Install from VSIX…** and select the downloaded `.vsix` file.
-3. Alternatively, from a terminal: `code --install-extension artifacts/multi-harness-terminal-editor-0.4.0.vsix`.
+3. Alternatively, from a terminal: `code --install-extension artifacts/multi-harness-terminal-editor-0.5.0.vsix`.
 
 VSIX files are produced in `artifacts/` by `npm run package` (see [PUBLISHING.md](PUBLISHING.md)).
 
@@ -304,9 +310,9 @@ MIT. See [LICENSE](LICENSE).
 
 Editor title-bar and terminal icons use the harnesses' application marks,
 including Claude Code's mascot, GitHub Copilot's robot, Gemini CLI's terminal
-mark, and Crush's pixel heart. Nine use upstream website or application assets;
+mark, and Crush's pixel heart. Ten use upstream website or application assets;
 Claude Code, Codex and GitHub Copilot use the corresponding LobeHub brand marks.
 Brand colors are preserved; monochrome foregrounds adapt to light/dark themes.
 Sources and licenses are recorded in
 [media/THIRD_PARTY_NOTICES.md](media/THIRD_PARTY_NOTICES.md).
-Regenerate all 24 icons offline with `node scripts/gen-icons.mjs`.
+Regenerate all 26 icons offline with `node scripts/gen-icons.mjs`.

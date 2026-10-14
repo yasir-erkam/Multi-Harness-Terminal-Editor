@@ -1,8 +1,8 @@
 {
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
-  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose) in native editor-area terminal tabs.",
-  "version": "0.4.0",
+  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent) in native editor-area terminal tabs.",
+  "version": "0.5.0",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -31,7 +31,9 @@
     "qwen code",
     "goose",
     "oh my pi",
-    "pi agent"
+    "pi agent",
+    "prime agent",
+    "prime-agent"
   ],
   "extensionKind": [
     "workspace"
@@ -46,6 +48,8 @@
     }
   },
   "activationEvents": [
+    "onCommand:multiHarness.addFavorite",
+    "onCommand:multiHarness.removeFavorite",
     "onCommand:multiHarness.openSettings",
     "onView:multiHarness.agents",
     "onCommand:multiHarness.openClaudeCode",
@@ -72,7 +76,9 @@
     "onTerminalProfile:multiHarness.aider",
     "onTerminalProfile:multiHarness.crush",
     "onTerminalProfile:multiHarness.qwen",
-    "onTerminalProfile:multiHarness.goose"
+    "onTerminalProfile:multiHarness.goose",
+    "onCommand:multiHarness.openPrimeAgent",
+    "onTerminalProfile:multiHarness.primeAgent"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -94,6 +100,18 @@
       ]
     },
     "commands": [
+      {
+        "command": "multiHarness.addFavorite",
+        "title": "%command.addFavorite.title%",
+        "category": "%category%",
+        "icon": "$(star-empty)"
+      },
+      {
+        "command": "multiHarness.removeFavorite",
+        "title": "%command.removeFavorite.title%",
+        "category": "%category%",
+        "icon": "$(star-full)"
+      },
       {
         "command": "multiHarness.openSettings",
         "title": "%command.openSettings.title%",
@@ -212,9 +230,40 @@
         "command": "multiHarness.openAgentPicker",
         "title": "%command.openAgentPicker.title%",
         "category": "%category%"
+      },
+      {
+        "command": "multiHarness.openPrimeAgent",
+        "title": "%command.openPrimeAgent.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/primeAgent-light.svg",
+          "dark": "media/primeAgent-dark.svg"
+        }
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "multiHarness.addFavorite",
+          "when": "false"
+        },
+        {
+          "command": "multiHarness.removeFavorite",
+          "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "multiHarness.addFavorite",
+          "when": "view == multiHarness.agents && viewItem == agent",
+          "group": "inline"
+        },
+        {
+          "command": "multiHarness.removeFavorite",
+          "when": "view == multiHarness.agents && viewItem == favoriteAgent",
+          "group": "inline"
+        }
+      ],
       "view/title": [
         {
           "command": "multiHarness.openSettings",
@@ -282,6 +331,11 @@
           "command": "multiHarness.openGoose",
           "group": "navigation@112",
           "when": "config.multiHarness.showGooseIcon"
+        },
+        {
+          "command": "multiHarness.openPrimeAgent",
+          "group": "navigation@113",
+          "when": "config.multiHarness.showPrimeAgentIcon"
         }
       ]
     },
@@ -559,6 +613,27 @@
           "default": "direct",
           "description": "%launchMode.description%",
           "scope": "window"
+        },
+        "multiHarness.showPrimeAgentIcon": {
+          "type": "boolean",
+          "default": false,
+          "description": "%showPrimeAgentIcon.description%",
+          "scope": "window"
+        },
+        "multiHarness.primeAgent.executablePath": {
+          "type": "string",
+          "default": "prime-agent",
+          "description": "%primeAgent.executablePath.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.primeAgent.arguments": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "%primeAgent.arguments.description%",
+          "scope": "resource"
         }
       }
     },
@@ -610,6 +685,10 @@
       {
         "id": "multiHarness.goose",
         "title": "%terminal.profile.goose.title%"
+      },
+      {
+        "id": "multiHarness.primeAgent",
+        "title": "%terminal.profile.primeAgent.title%"
       }
     ]
   },

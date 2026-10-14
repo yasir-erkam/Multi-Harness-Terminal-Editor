@@ -3,14 +3,23 @@ import { HARNESSES, type Harness, iconFile } from "./harnesses";
 
 /** Activity Bar launcher reuses the same commands as the editor buttons. */
 export function registerAgentsView(context: vscode.ExtensionContext): void {
+    const favoritesKey = "favoriteAgents";
+    const favorites = new Set(context.globalState.get<string[]>(favoritesKey, []));
+    const changes = new vscode.EventEmitter<Harness | undefined | null | void>();
     const provider: vscode.TreeDataProvider<Harness> = {
+        onDidChangeTreeData: changes.event,
         getChildren(element) {
-            return element ? [] : [...HARNESSES];
+            return element ? [] : [
+                ...HARNESSES.filter((harness) => favorites.has(harness.id)),
+                ...HARNESSES.filter((harness) => !favorites.has(harness.id)),
+            ];
         },
         getTreeItem(harness) {
             return {
                 id: harness.id,
                 label: harness.displayName,
+                description: favorites.has(harness.id) ? "★" : undefined,
+                contextValue: favorites.has(harness.id) ? "favoriteAgent" : "agent",
                 iconPath: {
                     light: vscode.Uri.joinPath(context.extensionUri, "media", iconFile(harness, "light")),
                     dark: vscode.Uri.joinPath(context.extensionUri, "media", iconFile(harness, "dark")),
@@ -22,5 +31,27 @@ export function registerAgentsView(context: vscode.ExtensionContext): void {
             };
         },
     };
-    context.subscriptions.push(vscode.window.registerTreeDataProvider("multiHarness.agents", provider));
+
+    async function setFavorite(harness: Harness | undefined, favorite: boolean): Promise<void> {
+        if (!harness || !HARNESSES.some((agent) => agent.id === harness.id)) {
+            return;
+        }
+        if (favorites.has(harness.id) === favorite) {
+            return;
+        }
+        if (favorite) {
+            favorites.add(harness.id);
+        } else {
+            favorites.delete(harness.id);
+        }
+        await context.globalState.update(favoritesKey, [...favorites]);
+        changes.fire();
+    }
+
+    context.subscriptions.push(
+        changes,
+        vscode.window.registerTreeDataProvider("multiHarness.agents", provider),
+        vscode.commands.registerCommand("multiHarness.addFavorite", (harness?: Harness) => setFavorite(harness, true)),
+        vscode.commands.registerCommand("multiHarness.removeFavorite", (harness?: Harness) => setFavorite(harness, false))
+    );
 }

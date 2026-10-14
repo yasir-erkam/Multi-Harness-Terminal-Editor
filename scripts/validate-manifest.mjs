@@ -20,10 +20,11 @@ const harnessIds = [
     "crush",
     "qwen",
     "goose",
+    "primeAgent",
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -81,6 +82,10 @@ for (const command of commands) {
 // Icon files exist, picker has none
 for (const command of commands) {
     const icon = command.icon;
+    if (["multiHarness.addFavorite", "multiHarness.removeFavorite"].includes(command.command)) {
+        check(icon === (command.command === "multiHarness.addFavorite" ? "$(star-empty)" : "$(star-full)"), `favorite command ${command.command} uses its star icon`);
+        continue;
+    }
     if (command.command === "multiHarness.openSettings") {
         check(icon === "$(gear)", "settings command uses the gear icon");
         continue;
@@ -94,11 +99,16 @@ for (const command of commands) {
     check(existsSync(join(root, icon.dark)), `icon file ${icon.dark} exists`);
 }
 
-// Menu entries: exactly the 12 agent commands, same ordering/when as harnesses
+// Menu entries: all agent commands, same ordering/when as harnesses
 const settingsButton = manifest.contributes.menus?.["view/title"]?.find((entry) => entry.command === "multiHarness.openSettings");
 check(settingsButton?.when === "view == multiHarness.agents" && settingsButton?.group === "navigation", "settings button appears in the Agents view toolbar");
+for (const [command, contextValue] of [["multiHarness.addFavorite", "agent"], ["multiHarness.removeFavorite", "favoriteAgent"]]) {
+    const button = manifest.contributes.menus?.["view/item/context"]?.find((entry) => entry.command === command);
+    check(button?.when === `view == multiHarness.agents && viewItem == ${contextValue}` && button?.group === "inline", `${command} appears on the matching agent row`);
+    check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === command && entry.when === "false"), `${command} is hidden from the palette because it requires an agent row`);
+}
 const menus = manifest.contributes.menus?.["editor/title"] ?? [];
-check(menus.length === 12, "editor/title has exactly 12 menu entries");
+check(menus.length === harnessIds.length, "editor/title has one menu entry per harness");
 const menuIds = menus.map((entry) => entry.command);
 check(!menuIds.includes("multiHarness.openAgentPicker"), "picker command has no editor/title menu entry");
 agentCommandIds.forEach((id, index) => {
@@ -143,7 +153,7 @@ check(harnessIds.every((id) => /^[a-z][A-Za-z]*$/.test(id)), "harness ids are lo
 
 // Terminal profiles: one per harness with a matching activation event.
 const profiles = manifest.contributes.terminal ?? [];
-check(profiles.length === 12, "exactly 12 terminal profiles are contributed");
+check(profiles.length === harnessIds.length, "one terminal profile is contributed per harness");
 const profileIds = profiles.map((profile) => profile.id);
 harnessIds.forEach((id) => {
     const profileId = `multiHarness.${id}`;
@@ -213,7 +223,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.4.0", "manifest version matches the 0.4.0 release");
+check(manifest.version === "0.5.0", "manifest version matches the 0.5.0 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");
