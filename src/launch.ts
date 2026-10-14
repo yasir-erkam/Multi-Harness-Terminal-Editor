@@ -5,6 +5,7 @@ import { resolveExecutable } from "./resolveExecutable";
 import { hasShellIntegrationApi, type AgentStatus } from "./status";
 import { workspaceFolder } from "./workspaceContext";
 import { extensionStrings } from "./localization";
+import { showEditorTerminal } from "./editorTerminal";
 
 /** How long shell mode waits for shell integration before degrading. */
 export const SHELL_INTEGRATION_TIMEOUT_MS = 10_000;
@@ -138,7 +139,7 @@ async function openShellMode(
         iconPath: launch.iconPath,
     });
     status?.track(terminal, harness);
-    terminal.show(false);
+    await showEditorTerminal(terminal);
 
     const integration = await waitForShellIntegration(terminal, SHELL_INTEGRATION_TIMEOUT_MS);
     if (integration) {
@@ -176,7 +177,7 @@ async function launchAgentTerminal(
 ): Promise<void> {
     const existing = vscode.window.terminals.find((terminal) => terminal.name === (resume?.terminalName ?? harness.displayName));
     if (existing) {
-        existing.show(false);
+        await showEditorTerminal(existing);
         return;
     }
 
@@ -207,5 +208,5 @@ async function launchAgentTerminal(
         isTransient: true,
         iconPath: launch.iconPath,
     });
-    terminal.show(false);
+    await showEditorTerminal(terminal);
 }

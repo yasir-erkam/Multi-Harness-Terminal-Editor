@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { harnessForTerminalName, type Harness, iconFile } from "./harnesses";
+import { showEditorTerminal } from "./editorTerminal";
 
 export interface AgentSession {
     readonly id: string;
@@ -65,9 +66,9 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
     context.subscriptions.push(
         changes,
         vscode.window.registerTreeDataProvider("multiHarness.sessions", provider),
-        vscode.commands.registerCommand("multiHarness.focusSession", (terminal?: vscode.Terminal) => {
+        vscode.commands.registerCommand("multiHarness.focusSession", async (terminal?: vscode.Terminal) => {
             if (terminal && vscode.window.terminals.includes(terminal)) {
-                terminal.show(false);
+                await showEditorTerminal(terminal);
             }
         }),
         vscode.window.onDidOpenTerminal(() => changes.fire()),

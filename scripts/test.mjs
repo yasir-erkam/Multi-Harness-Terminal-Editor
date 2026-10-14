@@ -310,9 +310,16 @@ module.exports = {
     },
     commands: {
         registerCommand(id, handler) { calls.commands.push({ id, handler }); return { dispose() {} }; },
-        executeCommand(...args) { calls.executed.push(...args); return Promise.resolve(); },
+        executeCommand(...args) {
+            calls.executed.push(...args);
+            if (args[0] === "workbench.action.joinAllGroups") {
+                module.exports.window.tabGroups.all = [{ tabs: module.exports.window.tabGroups.all.flatMap((group) => group.tabs ?? []) }];
+            }
+            return Promise.resolve();
+        },
     },
     window: {
+        tabGroups: { all: [] },
         terminals: [],
         activeTerminal: undefined,
         activeTextEditor: undefined,
@@ -571,9 +578,13 @@ try {
     const sessionItem = sessionsView.provider.getTreeItem(openSessions[1]);
     const focusSession = vscodeStub.__calls.commands.find((command) => command.id === sessionItem.command.command);
     const createdBeforeFocus = vscodeStub.__calls.created.length;
+    const editorTabs = [{ label: "file.ts" }, { label: "Prime Agent" }];
+    vscodeStub.window.tabGroups.all = [{ tabs: [editorTabs[0]] }, { tabs: [editorTabs[1]] }];
     await focusSession.handler(...sessionItem.command.arguments);
     assert.equal(secondPrime.shown, 1);
     assert.equal(firstPrime.shown, 0, "focus selects the exact terminal even when names match");
+    assert.equal(vscodeStub.window.tabGroups.all.length, 1, "focusing a session joins existing editor splits");
+    assert.deepEqual(vscodeStub.window.tabGroups.all[0].tabs, editorTabs, "joining groups preserves open tabs");
     vscodeStub.window.terminals = [firstPrime];
     vscodeStub.__calls.terminalCloseHandlers.forEach((handler) => handler(secondPrime));
     await focusSession.handler(secondPrime);
@@ -616,17 +627,21 @@ try {
     const resume = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.resumeSession");
     vscodeStub.__fixture.multiHarness.primeAgent.arguments = ["--model", "test-model"];
     vscodeStub.window.terminals = [firstPrime];
+    vscodeStub.window.tabGroups.all = [{ tabs: [] }, { tabs: [] }];
     await resume.handler(...savedItem.command.arguments);
     const resumed = vscodeStub.__calls.created.at(-1);
     assert.equal(firstPrime.shown, 0);
     assert.equal(resumed.options.cwd, projectDirectory);
+    assert.equal(vscodeStub.window.tabGroups.all.length, 1, "resuming a session joins existing editor splits");
     assert.deepEqual(resumed.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "saved conversations open without creating a split");
     assert.deepEqual(resumed.options.shellArgs, ["--resume", savedFile, "--model", "test-model"]);
     assert.equal(resumed.options.name, "Prime Agent — recorded-prime");
     vscodeStub.window.terminals = [resumed.terminal];
     const countBeforeReuse = vscodeStub.__calls.created.length;
+    vscodeStub.window.tabGroups.all = [{ tabs: [] }, { tabs: [] }];
     await resume.handler(...savedItem.command.arguments);
     assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
+    assert.equal(vscodeStub.window.tabGroups.all.length, 1, "revealing an existing session also joins splits");
     assert.equal(sessionsView.provider.getChildren()[0].harness.id, "primeAgent");
     await resume.handler({ harnessId: "primeAgent", id: "unlisted" });
     assert.equal(vscodeStub.__calls.created.length, countBeforeReuse);
@@ -892,7 +907,9 @@ try {
     vscodeStub.__calls.created.length = 0;
     vscodeStub.__calls.configGets.length = 0;
     vscodeStub.window.terminals.length = 0;
+    vscodeStub.window.tabGroups.all = [{ tabs: [] }, { tabs: [] }];
     await ohMyPi.handler();
+    assert.equal(vscodeStub.window.tabGroups.all.length, 1, "new agent launches join existing editor splits");
     const readKeys = vscodeStub.__calls.configGets.map((c) => `${c.section}|${c.key}`);
     assert.ok(
         readKeys.includes("multiHarness|ohMyPi.executablePath"),
@@ -999,10 +1016,12 @@ try {
     // executeCommand overload once shell integration activates.
     baseline();
     vscodeStub.__fixture.multiHarness.launchMode = "shell";
+    vscodeStub.window.tabGroups.all = [{ tabs: [] }, { tabs: [] }];
     const shellPromise = ohMyPi.handler();
     await new Promise((resolve) => setImmediate(resolve));
     const shellOptions = vscodeStub.__calls.created.at(-1)?.options;
     assert.ok(shellOptions, "shell mode must create a terminal");
+    assert.equal(vscodeStub.window.tabGroups.all.length, 1, "shell-mode sessions join existing editor splits");
     assert.equal(shellOptions.shellPath, undefined, "shell mode must not override shellPath");
     assert.deepEqual(shellOptions.location, { viewColumn: vscodeStub.ViewColumn.Active }, "shell launches use the active editor group");
     assert.equal(shellOptions.name, "Oh My Pi", "shell mode keeps the terminal name");

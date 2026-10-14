@@ -2,7 +2,7 @@
 
 ## 0.6.2
 
-- Open agent terminals, saved sessions and terminal profiles in the active editor group without creating a side-by-side split. A single editor group uses the full editor area.
+- Opening or focusing an agent terminal joins existing split editor groups into one group, preserving all open tabs so the session uses the full editor area. Terminal profiles open in the active editor group without creating a new split.
 
 ## 0.6.1
 
