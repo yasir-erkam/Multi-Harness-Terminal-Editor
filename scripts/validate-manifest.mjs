@@ -24,7 +24,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSidebarLayout"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSidebarLayout", "multiHarness.toggleSessionSelectionMode", "multiHarness.cancelSessionSelection", "multiHarness.toggleSessionSelection", "multiHarness.selectAllSessions", "multiHarness.deleteSession", "multiHarness.deleteSelectedSessions"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -87,6 +87,18 @@ for (const command of commands) {
 // Icon files exist, picker has none
 for (const command of commands) {
     const icon = command.icon;
+    const sessionIcons = {
+        "multiHarness.toggleSessionSelectionMode": "$(checklist)",
+        "multiHarness.cancelSessionSelection": "$(close)",
+        "multiHarness.toggleSessionSelection": "$(check)",
+        "multiHarness.selectAllSessions": "$(check-all)",
+        "multiHarness.deleteSession": "$(trash)",
+        "multiHarness.deleteSelectedSessions": "$(trash)",
+    };
+    if (command.command in sessionIcons) {
+        check(icon === sessionIcons[command.command], `${command.command} uses its selection/deletion icon`);
+        continue;
+    }
     if (command.command === "multiHarness.selectSessionAgent") {
         check(icon === "$(filter)", "session agent picker uses the filter icon");
         continue;
@@ -121,6 +133,11 @@ const settingsButton = manifest.contributes.menus?.["view/title"]?.find((entry) 
 check(manifest.contributes.views?.multiHarness?.some((view) => view.id === "multiHarness.savedSessions" && view.name === "%view.savedSessions.name%"), "saved sessions have a separate localized view");
 check(activationEvents.includes("onView:multiHarness.savedSessions"), "saved sessions view activates the extension");
 check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === "multiHarness.refreshSessions" && entry.when === "view == multiHarness.savedSessions"), "saved sessions have a refresh button");
+check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.deleteSession" && entry.group === "inline" && entry.when.includes("viewItem == savedSession")), "saved session rows expose a trash button");
+check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.deleteSession" && entry.group === "session"), "saved sessions expose a delete context menu");
+for (const id of ["toggleSessionSelectionMode", "cancelSessionSelection", "selectAllSessions", "deleteSelectedSessions"]) {
+    check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === `multiHarness.${id}` && entry.when.includes("view == multiHarness.savedSessions")), `Sessions header exposes ${id}`);
+}
 check(settingsButton?.when === "view == multiHarness.agents || view == multiHarness.cards" && settingsButton?.group === "navigation", "settings button appears in the Agents view toolbar");
 const cardsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.cards");
 check(cardsView?.type === "webview" && cardsView?.when === "config.multiHarness.sidebarLayout == cards", "card layout has a conditional webview");
@@ -250,7 +267,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.6.4", "manifest version matches the 0.6.4 development version");
+check(manifest.version === "0.7.0", "manifest version matches the 0.7.0 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

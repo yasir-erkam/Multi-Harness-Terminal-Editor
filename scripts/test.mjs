@@ -225,6 +225,50 @@ await build({
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
 });
 const { scanSavedSessions, resumeArguments, sessionRoots } = await import(pathToFileURL(join(outdir, "savedSessions.test.mjs")).href);
+await build({
+    entryPoints: [join(projectRoot, "src", "deleteSession.ts")],
+    outfile: join(outdir, "deleteSession.test.mjs"),
+    bundle: true, format: "esm", platform: "node", logLevel: "silent",
+});
+const { validateSessionDeletion } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
+const deletionDir = mkdtempSync(join(tmpdir(), "mhte-delete-"));
+try {
+    const roots = sessionRoots(deletionDir, {});
+    for (const root of roots) {
+        mkdirSync(root.directory, { recursive: true });
+        const id = `delete-${root.harnessId}`;
+        const header = root.harnessId === "codex" ? { type: "session_meta", payload: { id, cwd: deletionDir } }
+            : root.harnessId === "claudeCode" ? { type: "user", sessionId: id, cwd: deletionDir }
+            : { type: "session", id, cwd: deletionDir };
+        const file = join(root.directory, "session.jsonl");
+        writeFileSync(file, JSON.stringify(header) + "\n");
+        const [session] = (await scanSavedSessions([root])).sessions;
+        await validateSessionDeletion(session, roots);
+        const moved = root.harnessId === "codex" ? { ...header, payload: { ...header.payload, cwd: root.directory } }
+            : { ...header, cwd: root.directory };
+        writeFileSync(file, JSON.stringify(moved) + "\n");
+        await assert.rejects(validateSessionDeletion(session, roots), /record changed/);
+        // Detect another conversation even outside the bounded metadata window.
+        const foreign = root.harnessId === "codex" ? { type: "session_meta", payload: { id: "other" } }
+            : root.harnessId === "claudeCode" ? { sessionId: "other" }
+            : { type: "session", id: "other" };
+        writeFileSync(file, JSON.stringify(header) + "\n" + "{}\n".repeat(100_000) + JSON.stringify(foreign) + "\n");
+        await assert.rejects(validateSessionDeletion(session, roots), /another conversation/);
+        assert.ok(existsSync(file));
+        writeFileSync(file, JSON.stringify(foreign) + "\n");
+        await assert.rejects(validateSessionDeletion(session, roots), /another conversation/);
+        const outside = join(deletionDir, `outside-${root.harnessId}.jsonl`);
+        writeFileSync(outside, JSON.stringify(header) + "\n");
+        await assert.rejects(validateSessionDeletion({ ...session, file: outside }, roots), /outside/);
+        rmSync(file);
+        symlinkSync(outside, file);
+        await assert.rejects(validateSessionDeletion(session, roots), /regular JSONL/);
+    }
+    passed += 1;
+    console.log("ok: all five session stores validate identity, reject shared/replaced files and prevent deletion outside their roots");
+} finally {
+    rmSync(deletionDir, { recursive: true, force: true });
+}
 const savedDir = mkdtempSync(join(tmpdir(), "mhte-saved-"));
 try {
     const roots = sessionRoots(savedDir, {});
@@ -348,7 +392,7 @@ try {
 // ---------------------------------------------------------------------------
 
 const VSCODE_STUB = `
-const calls = { commands: [], profiles: [], views: [], webviews: [], configUpdates: [], created: [], errors: [], infos: [], executed: [], configGets: [],
+const calls = { commands: [], profiles: [], views: [], webviews: [], configUpdates: [], created: [], errors: [], infos: [], executed: [], configGets: [], warnings: [], warningResults: [], fsDeletes: [],
     terminals: [], sendTexts: [], statusItems: [], statusShown: [], statusHidden: [], statusDisposed: 0,
     shellIntegrationHandlers: [], executionStartHandlers: [], executionEndHandlers: [],
     terminalOpenHandlers: [], terminalCloseHandlers: [], activeTerminalHandlers: [], activeEditorHandlers: [], workspaceFolderHandlers: [] };
@@ -433,7 +477,10 @@ module.exports = {
         onDidChangeActiveTextEditor(handler) { return subscribeTerminalEvent(calls.activeEditorHandlers, handler); },
         createTreeView(id, options) {
             const selectionHandlers = [];
+            const checkboxHandlers = [];
             const view = { id, provider: options.treeDataProvider, disposed: false,
+                checkboxHandlers, options,
+                onDidChangeCheckboxState(handler) { return subscribeTerminalEvent(checkboxHandlers, handler); },
                 selectionHandlers,
                 onDidChangeSelection(handler) { return subscribeTerminalEvent(selectionHandlers, handler); },
                 dispose() { this.disposed = true; } };
@@ -452,6 +499,7 @@ module.exports = {
         onDidChangeActiveTerminal(handler) { return subscribeTerminalEvent(calls.activeTerminalHandlers, handler); },
         showQuickPick() { return Promise.resolve(undefined); },
         showErrorMessage(message) { calls.errors.push(message); return Promise.resolve(undefined); },
+        showWarningMessage(message, options, ...items) { calls.warnings.push({ message, options, items }); return Promise.resolve(calls.warningResults.shift()); },
         showInformationMessage(message) { calls.infos.push(message); return Promise.resolve(undefined); },
         createTerminal(options) {
             const terminal = {
@@ -485,6 +533,7 @@ module.exports = {
         onDidEndTerminalShellExecution(handler) { calls.executionEndHandlers.push(handler); return { dispose() {} }; },
     },
     workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration,
+        fs: { async delete(uri, options) { calls.fsDeletes.push({ file: uri.fsPath, options }); await require("node:fs/promises").unlink(uri.fsPath); } },
         onDidChangeWorkspaceFolders(handler) { return subscribeTerminalEvent(calls.workspaceFolderHandlers, handler); },
         onDidChangeConfiguration() { return { dispose() {} }; } },
     Uri: { file: (fsPath) => ({ fsPath }), joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
@@ -924,6 +973,115 @@ try {
     assert.deepEqual(vscodeStub.__calls.executed, [], "unrecognized messages and stale sessions cannot execute commands");
     passed += 1;
     console.log("ok: card and native layouts share favorites, validate actions and focus exact sessions");
+
+    const command = (id) => vscodeStub.__calls.commands.find((entry) => entry.id === `multiHarness.${id}`).handler;
+    const selectionMode = command("toggleSessionSelectionMode");
+    const cancelSelection = command("cancelSessionSelection");
+    const toggleSession = command("toggleSessionSelection");
+    const selectAll = command("selectAllSessions");
+    const deleteOne = command("deleteSession");
+    const deleteSelected = command("deleteSelectedSessions");
+    const extraFiles = [join(primeSessions, "second.jsonl"), join(primeSessions, "third.jsonl")];
+    const writeSession = (file, id, title = id) => writeFileSync(file,
+        JSON.stringify({ type: "session", id, cwd: projectDirectory }) + "\n" + JSON.stringify({ type: "session_info", name: title }) + "\n");
+    writeSession(extraFiles[0], "second", "Second conversation");
+    writeSession(extraFiles[1], "third", "Third conversation");
+    refreshSaved.handler();
+    const getRow = async (id) => (await savedView.provider.getChildren()).find((row) => row.id === id);
+    const deletesBeforeCancel = vscodeStub.__calls.fsDeletes.length;
+    await deleteOne({ harnessId: "primeAgent", id: "second" });
+    assert.equal(vscodeStub.__calls.fsDeletes.length, deletesBeforeCancel, "canceling the first modal never touches disk");
+    assert.equal(vscodeStub.__calls.warnings.at(-1).options.modal, true);
+    assert.ok(vscodeStub.__calls.warnings.at(-1).options.detail.includes("Second conversation"));
+    const warningsBeforeStaleDelete = vscodeStub.__calls.warnings.length;
+    await deleteOne({ harnessId: "primeAgent", id: "not-listed", file: extraFiles[0] });
+    assert.equal(vscodeStub.__calls.warnings.length, warningsBeforeStaleDelete, "stale identifiers and supplied paths cannot trigger deletion");
+    await selectionMode();
+    let secondRow = await getRow("second");
+    assert.equal(savedView.provider.getTreeItem(secondRow).checkboxState, 0);
+    assert.equal(savedView.provider.getTreeItem(secondRow).command.command, "multiHarness.toggleSessionSelection");
+    await toggleSession({ harnessId: "primeAgent", id: "second" });
+    writeSession(extraFiles[0], "second", "Renamed conversation");
+    refreshSaved.handler();
+    secondRow = await getRow("second");
+    assert.equal(savedView.provider.getTreeItem(secondRow).checkboxState, 1, "selection survives refresh and title changes by identity");
+    await cancelSelection();
+    await selectionMode();
+    await selectAll(["primeAgent:third", "primeAgent:unknown"]);
+    assert.equal(savedView.provider.getTreeItem(await getRow("third")).checkboxState, 1);
+    assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, 0, "filtered Select All only selects supplied, listed keys");
+    await selectAll();
+    await receiveCardMessage({ action: "ready" });
+    assert.equal(cardMessages.at(-1).savedSelection.keys.length, 3, "native and card views share selections");
+    await selectSessionAgent.handler("codex");
+    await selectSessionAgent.handler("primeAgent");
+    assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, undefined, "changing scope exits selection mode");
+    await selectionMode();
+    secondRow = await getRow("second");
+    for (const handler of savedView.checkboxHandlers) await handler({ items: [[secondRow, 1]] });
+    assert.equal(savedView.provider.getTreeItem(secondRow).checkboxState, 1, "native checkbox events update shared state");
+    for (const handler of savedView.checkboxHandlers) await handler({ items: [[secondRow, 0]] });
+    await selectAll();
+    const originalDelete = vscodeStub.workspace.fs.delete;
+    const liveTerminal = firstPrime;
+    vscodeStub.window.terminals = [liveTerminal];
+    vscodeStub.workspace.fs.delete = async (uri, options) => {
+        if (uri.fsPath === extraFiles[0] && options.useTrash) throw new Error("trash unavailable");
+        return originalDelete(uri, options);
+    };
+    vscodeStub.__calls.warningResults.push("Move to Trash", undefined);
+    await deleteSelected();
+    assert.ok(!existsSync(savedFile) && !existsSync(extraFiles[1]), "successful trash deletions disappear");
+    assert.ok(existsSync(extraFiles[0]), "declining permanent deletion preserves the failed record");
+    assert.equal((await savedView.provider.getChildren()).length, 1);
+    assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, 1, "unsuccessful records remain selected");
+    assert.deepEqual(vscodeStub.window.terminals, [liveTerminal], "session deletion never closes an open terminal");
+    assert.ok(vscodeStub.__calls.fsDeletes.slice(deletesBeforeCancel).every((entry) => entry.options.useTrash && !entry.options.recursive));
+    vscodeStub.__calls.warningResults.push("Move to Trash", "Delete Permanently");
+    await deleteSelected();
+    assert.ok(!existsSync(extraFiles[0]));
+    assert.equal(vscodeStub.__calls.fsDeletes.at(-1).options.useTrash, false, "permanent deletion requires the separate explicit approval");
+    writeSession(extraFiles[0], "second");
+    refreshSaved.handler();
+    await selectAll();
+    vscodeStub.workspace.fs.delete = async () => { throw new Error("permission denied"); };
+    vscodeStub.__calls.warningResults.push("Move to Trash", "Delete Permanently");
+    const deletionErrorsBeforeFailure = vscodeStub.__calls.errors.length;
+    await deleteSelected();
+    assert.equal(vscodeStub.__calls.errors.length, deletionErrorsBeforeFailure + 1);
+    assert.ok(existsSync(extraFiles[0]));
+    assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, 1);
+    vscodeStub.workspace.fs.delete = originalDelete;
+    // Mutate the cached file after it was listed: deletion must revalidate disk.
+    writeFileSync(extraFiles[0], JSON.stringify({ type: "session", id: "second", cwd: projectDirectory }) + "\n" + JSON.stringify({ type: "session", id: "another", cwd: projectDirectory }) + "\n");
+    const deletesBeforeSharedFile = vscodeStub.__calls.fsDeletes.length;
+    vscodeStub.__calls.warningResults.push("Move to Trash");
+    await deleteSelected();
+    assert.equal(vscodeStub.__calls.fsDeletes.length, deletesBeforeSharedFile);
+    assert.ok(vscodeStub.__calls.errors.at(-1).includes("another conversation"));
+    writeSession(extraFiles[0], "second");
+    refreshSaved.handler();
+    const warningsBeforeConcurrent = vscodeStub.__calls.warnings.length;
+    vscodeStub.__calls.warningResults.push("Move to Trash");
+    await Promise.all([deleteSelected(), deleteSelected()]);
+    assert.equal(vscodeStub.__calls.warnings.length, warningsBeforeConcurrent + 1, "concurrent deletion commands produce one confirmation and operation");
+    assert.ok(!existsSync(extraFiles[0]));
+    writeSession(savedFile, "recorded-prime");
+    await cancelSelection();
+    vscodeStub.window.terminals = [];
+    refreshSaved.handler();
+    await receiveCardMessage({ action: "ready" });
+    assert.equal(cardMessages.at(-1).savedSelection.mode, false);
+    for (const [action, expected] of [["delete", "deleteSession"], ["toggleSelection", "toggleSessionSelection"]]) {
+        vscodeStub.__calls.executed.length = 0;
+        await receiveCardMessage({ action, id: "primeAgent:recorded-prime" });
+        assert.deepEqual(vscodeStub.__calls.executed, [`multiHarness.${expected}`, { harnessId: "primeAgent", id: "recorded-prime" }]);
+    }
+    vscodeStub.__calls.executed.length = 0;
+    await receiveCardMessage({ action: "delete", id: "primeAgent:not-listed", file: savedFile });
+    assert.deepEqual(vscodeStub.__calls.executed, []);
+    passed += 1;
+    console.log("ok: native/card selection, cancellation, trash fallback, partial failures, identity revalidation and concurrent deletion preserve the correct conversations");
 
     // Editor focus may move to an editor-area terminal. All launch surfaces and
     // the saved-session filter must retain the last focused workspace folder.

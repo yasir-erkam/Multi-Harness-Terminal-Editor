@@ -79,6 +79,15 @@ h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 
 .saved-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .saved-session { display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 9px; text-align: left; border: 1px solid var(--vscode-widget-border, transparent); border-radius: 4px; background: transparent; }
 .saved-session:hover { background: var(--vscode-list-hoverBackground); }
+.saved-row { display: flex; align-items: center; gap: 4px; }
+.saved-row .saved-session { flex: 1; min-width: 0; }
+.delete-session { flex-shrink: 0; display: flex; align-items: center; }
+.delete-session svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.selection-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.text-button { border: 1px solid var(--vscode-button-border, transparent); border-radius: 3px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 4px 7px; font-size: 11px; }
+.text-button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+button:disabled { opacity: .5; cursor: default; }
+.session-checkbox { flex-shrink: 0; accent-color: var(--vscode-focusBorder); }
 .saved-title { width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
 .saved-meta, .support-note { color: var(--vscode-descriptionForeground); font-size: 10px; line-height: 1.5; }
 .support-note { margin: 7px 0 0; }

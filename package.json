@@ -2,7 +2,7 @@
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent) in native editor-area terminal tabs.",
-  "version": "0.6.4",
+  "version": "0.7.0",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -86,7 +86,13 @@
     "onCommand:multiHarness.refreshSessions",
     "onCommand:multiHarness.selectSessionAgent",
     "onView:multiHarness.cards",
-    "onCommand:multiHarness.toggleSidebarLayout"
+    "onCommand:multiHarness.toggleSidebarLayout",
+    "onCommand:multiHarness.toggleSessionSelectionMode",
+    "onCommand:multiHarness.cancelSessionSelection",
+    "onCommand:multiHarness.toggleSessionSelection",
+    "onCommand:multiHarness.selectAllSessions",
+    "onCommand:multiHarness.deleteSession",
+    "onCommand:multiHarness.deleteSelectedSessions"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -308,6 +314,48 @@
         "title": "%command.toggleSidebarLayout.title%",
         "category": "%category%",
         "icon": "$(layout)"
+      },
+      {
+        "command": "multiHarness.toggleSessionSelectionMode",
+        "title": "%command.toggleSessionSelectionMode.title%",
+        "category": "%category%",
+        "icon": "$(checklist)",
+        "enablement": "!multiHarness.deletingSessions"
+      },
+      {
+        "command": "multiHarness.cancelSessionSelection",
+        "title": "%command.cancelSessionSelection.title%",
+        "category": "%category%",
+        "icon": "$(close)",
+        "enablement": "!multiHarness.deletingSessions"
+      },
+      {
+        "command": "multiHarness.toggleSessionSelection",
+        "title": "%command.toggleSessionSelection.title%",
+        "category": "%category%",
+        "icon": "$(check)",
+        "enablement": "!multiHarness.deletingSessions"
+      },
+      {
+        "command": "multiHarness.selectAllSessions",
+        "title": "%command.selectAllSessions.title%",
+        "category": "%category%",
+        "icon": "$(check-all)",
+        "enablement": "!multiHarness.deletingSessions"
+      },
+      {
+        "command": "multiHarness.deleteSession",
+        "title": "%command.deleteSession.title%",
+        "category": "%category%",
+        "icon": "$(trash)",
+        "enablement": "!multiHarness.deletingSessions"
+      },
+      {
+        "command": "multiHarness.deleteSelectedSessions",
+        "title": "%command.deleteSelectedSessions.title%",
+        "category": "%category%",
+        "icon": "$(trash)",
+        "enablement": "multiHarness.hasSelectedSessions && !multiHarness.deletingSessions"
       }
     ],
     "menus": {
@@ -327,6 +375,30 @@
         {
           "command": "multiHarness.resumeSession",
           "when": "false"
+        },
+        {
+          "command": "multiHarness.toggleSessionSelectionMode",
+          "when": "false"
+        },
+        {
+          "command": "multiHarness.cancelSessionSelection",
+          "when": "false"
+        },
+        {
+          "command": "multiHarness.toggleSessionSelection",
+          "when": "false"
+        },
+        {
+          "command": "multiHarness.selectAllSessions",
+          "when": "false"
+        },
+        {
+          "command": "multiHarness.deleteSession",
+          "when": "false"
+        },
+        {
+          "command": "multiHarness.deleteSelectedSessions",
+          "when": "false"
         }
       ],
       "view/item/context": [
@@ -339,6 +411,16 @@
           "command": "multiHarness.removeFavorite",
           "when": "view == multiHarness.agents && viewItem == favoriteAgent",
           "group": "inline"
+        },
+        {
+          "command": "multiHarness.deleteSession",
+          "when": "view == multiHarness.savedSessions && viewItem == savedSession && !multiHarness.deletingSessions",
+          "group": "inline"
+        },
+        {
+          "command": "multiHarness.deleteSession",
+          "when": "view == multiHarness.savedSessions && viewItem == savedSession && !multiHarness.deletingSessions",
+          "group": "session"
         }
       ],
       "view/title": [
@@ -361,6 +443,26 @@
           "command": "multiHarness.toggleSidebarLayout",
           "when": "view == multiHarness.agents || view == multiHarness.cards",
           "group": "navigation@1"
+        },
+        {
+          "command": "multiHarness.toggleSessionSelectionMode",
+          "when": "view == multiHarness.savedSessions && !multiHarness.sessionSelectionMode",
+          "group": "navigation@2"
+        },
+        {
+          "command": "multiHarness.cancelSessionSelection",
+          "when": "view == multiHarness.savedSessions && multiHarness.sessionSelectionMode",
+          "group": "navigation@2"
+        },
+        {
+          "command": "multiHarness.selectAllSessions",
+          "when": "view == multiHarness.savedSessions && multiHarness.sessionSelectionMode",
+          "group": "navigation@3"
+        },
+        {
+          "command": "multiHarness.deleteSelectedSessions",
+          "when": "view == multiHarness.savedSessions && multiHarness.sessionSelectionMode && multiHarness.hasSelectedSessions",
+          "group": "navigation@4"
         }
       ],
       "editor/title": [

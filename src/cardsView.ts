@@ -65,6 +65,7 @@ export function registerCardsView(
                 modified: session.modified,
             })),
             savedUnreadable: saved.unreadable.length > 0,
+            savedSelection: savedSessions.getSelection(),
         });
     }
 
@@ -90,17 +91,24 @@ export function registerCardsView(
                     if (!message || typeof message !== "object") {
                         return;
                     }
-                    const { action, id } = message as { action?: unknown; id?: unknown };
+                    const { action, id, keys } = message as { action?: unknown; id?: unknown; keys?: unknown };
                     if (action === "ready") {
                         await refresh();
                     } else if (action === "selectAgent" && (id === undefined || HARNESSES.some((agent) => agent.id === id))) {
                         await vscode.commands.executeCommand("multiHarness.selectSessionAgent", id);
                     } else if (action === "refresh") {
                         await vscode.commands.executeCommand("multiHarness.refreshSessions");
-                    } else if (action === "resume" && typeof id === "string") {
+                    } else if (action === "selectionMode") {
+                        await vscode.commands.executeCommand("multiHarness.toggleSessionSelectionMode");
+                    } else if (action === "selectAll" && Array.isArray(keys)) {
+                        await vscode.commands.executeCommand("multiHarness.selectAllSessions", keys);
+                    } else if (action === "deleteSelected") {
+                        await vscode.commands.executeCommand("multiHarness.deleteSelectedSessions");
+                    } else if (["resume", "toggleSelection", "delete"].includes(String(action)) && typeof id === "string") {
                         const saved = (await savedSessions.getSessions()).sessions.find((session) => `${session.harnessId}:${session.id}` === id);
                         if (saved) {
-                            await vscode.commands.executeCommand("multiHarness.resumeSession", { harnessId: saved.harnessId, id: saved.id });
+                            const command = action === "resume" ? "multiHarness.resumeSession" : action === "delete" ? "multiHarness.deleteSession" : "multiHarness.toggleSessionSelection";
+                            await vscode.commands.executeCommand(command, { harnessId: saved.harnessId, id: saved.id });
                         }
                     } else if (action === "settings") {
                         await vscode.commands.executeCommand("multiHarness.openSettings");

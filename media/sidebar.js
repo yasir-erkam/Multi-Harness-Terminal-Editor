@@ -59,10 +59,14 @@ function section(title) {
 
 const sessions = section(t("view.sessions.name"));
 const saved = section(t("view.savedSessions.name"));
+const selectionButton = button("text-button selection-mode", t("savedSessions.select"), "selectionMode");
+saved.node.querySelector("h2").append(selectionButton);
 saved.node.querySelector("h2").append(button("icon-button refresh-button", "↻", "refresh", undefined, t("command.refreshSessions.title")));
 saved.node.querySelector("h2").append(button("icon-button", "⌄", "selectAgent", undefined, t("command.selectSessionAgent.title")));
 const scopeNote = element("p", "support-note scope-note");
 saved.node.insertBefore(scopeNote, saved.body);
+const selectionTools = element("div", "selection-tools");
+saved.node.insertBefore(selectionTools, saved.body);
 saved.body.className = "saved-list";
 saved.body.append(element("p", "empty", t("sidebar.loading")));
 saved.node.append(element("p", "support-note", t("sidebar.savedSupport")));
@@ -89,6 +93,21 @@ function renderSaved() {
     const query = search.value.trim().toLocaleLowerCase();
     const matching = (state.saved || []).filter((session) =>
         `${session.title} ${session.harness} ${session.project}`.toLocaleLowerCase().includes(query));
+    const selection = state.savedSelection || { mode: false, busy: false, keys: [] };
+    const selected = new Set(selection.keys);
+    selectionButton.textContent = t(selection.mode ? "savedSessions.cancelSelection" : "savedSessions.select");
+    selectionButton.disabled = selection.busy;
+    selectionButton.setAttribute("aria-pressed", String(selection.mode));
+    selectionTools.replaceChildren();
+    if (selection.mode) {
+        const all = button("text-button select-all", t("savedSessions.selectAll"));
+        all.disabled = selection.busy || !matching.length;
+        all.addEventListener("click", () => vscode.postMessage({ action: "selectAll", keys: matching.map((session) => session.key) }));
+        const remove = button("text-button delete-selected", t("savedSessions.deleteSelected").replace("{count}", String(selected.size)), "deleteSelected");
+        remove.disabled = selection.busy || !selected.size;
+        selectionTools.append(all, remove);
+    }
+    if (selection.busy) selectionTools.append(element("span", "support-note", t("savedSessions.deleting")));
     saved.count.textContent = String(matching.length);
     saved.body.replaceChildren();
     if (state.savedUnreadable) {
@@ -98,12 +117,35 @@ function renderSaved() {
         saved.body.append(element("p", "empty", scope.message || t(query ? "sidebar.noResults" : "sidebar.noSavedSessions")));
     }
     for (const session of matching) {
-        const row = button("saved-session", undefined, "resume", session.key,
-            `${t("command.resumeSession.title")}: ${session.title}\n${session.cwd}`);
+        const container = element("div", "saved-row");
+        if (selection.mode) {
+            const checkbox = element("input", "session-checkbox");
+            checkbox.type = "checkbox";
+            checkbox.checked = selected.has(session.key);
+            checkbox.disabled = selection.busy;
+            checkbox.setAttribute("aria-label", `${t("savedSessions.select")}: ${session.title}`);
+            checkbox.dataset.action = "toggleSelection";
+            checkbox.dataset.id = session.key;
+            checkbox.addEventListener("change", () => vscode.postMessage({ action: "toggleSelection", id: session.key }));
+            container.append(checkbox);
+        }
+        const row = button("saved-session", undefined, selection.mode ? "toggleSelection" : "resume", session.key,
+            `${t(selection.mode ? "savedSessions.select" : "command.resumeSession.title")}: ${session.title}\n${session.cwd}`);
+        row.disabled = selection.busy;
         const date = new Date(session.modified).toLocaleDateString(document.documentElement.lang);
         row.append(element("span", "saved-title", session.title),
             element("span", "saved-meta", `${session.harness} · ${session.project} · ${date}`));
-        saved.body.append(row);
+        const remove = button("icon-button delete-session", undefined, "delete", session.key, `${t("command.deleteSession.title")}: ${session.title}`);
+        const trash = document.createElementNS(svgNamespace, "svg");
+        trash.setAttribute("viewBox", "0 0 24 24");
+        trash.setAttribute("aria-hidden", "true");
+        const mark = document.createElementNS(svgNamespace, "path");
+        mark.setAttribute("d", "M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7");
+        trash.append(mark);
+        remove.append(trash);
+        remove.disabled = selection.busy;
+        container.append(row, remove);
+        saved.body.append(container);
     }
 }
 
@@ -182,14 +224,14 @@ function renderSessions() {
 window.addEventListener("message", (event) => {
     if (event.data?.type !== "state") return;
     const focused = document.activeElement;
-    const previous = focused?.dataset.action ? { action: focused.dataset.action, id: focused.dataset.id } : undefined;
+    const previous = focused?.dataset.action ? { action: focused.dataset.action, id: focused.dataset.id, type: focused.type } : undefined;
     state = event.data;
     renderSessions();
     renderSaved();
     renderAgents();
     if (previous) {
-        const replacement = Array.from(app.querySelectorAll("button[data-action]")).find((node) =>
-            node.dataset.action === previous.action && node.dataset.id === previous.id);
+        const replacement = [...app.querySelectorAll("button[data-action]"), ...app.querySelectorAll(".session-checkbox")].find((node) =>
+            node.dataset.action === previous.action && node.dataset.id === previous.id && node.type === previous.type);
         replacement?.focus();
     }
 });
