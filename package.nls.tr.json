@@ -82,7 +82,7 @@
   "primeAgent.arguments.description": "Prime Agent CLI'ına başlatma sırasında eklenen argümanlar.",
   "terminal.profile.primeAgent.title": "Prime Agent terminali aç",
   "view.savedSessions.name": "Oturumlar",
-  "view.savedSessions.welcome": "Kayıtlı oturum bulunamadı. Bu deneme sürümü Codex, Claude Code, Pi, Oh My Pi ve Prime Agent oturumlarını okur. Özel kayıt dizinlerini eklenti ayarlarından belirleyebilirsiniz.\n[Oturumları Yenile](command:multiHarness.refreshSessions)",
+  "view.savedSessions.welcome": "Seçili ajan ve bu proje klasörüyle eşleşen kayıtlı oturum bulunamadı.\n[Ajan Seç](command:multiHarness.selectSessionAgent)\n[Oturumları Yenile](command:multiHarness.refreshSessions)",
   "command.resumeSession.title": "Kayıtlı Oturuma Devam Et",
   "command.refreshSessions.title": "Oturumları Yenile",
   "savedSessions.unreadable": "Bazı oturum klasörleri okunamadı",
@@ -92,5 +92,10 @@
   "claudeCode.sessionDirectory.description": "Claude Code oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
   "pi.sessionDirectory.description": "Pi oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
   "ohMyPi.sessionDirectory.description": "Oh My Pi oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
-  "primeAgent.sessionDirectory.description": "Prime Agent oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın."
+  "primeAgent.sessionDirectory.description": "Prime Agent oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
+  "command.selectSessionAgent.title": "Oturumlar İçin Ajan Seç",
+  "sessionScope.selectAgent": "Kayıtlı oturumlarını görmek istediğiniz ajanı seçin",
+  "sessionScope.noAgent": "Bu projedeki kayıtlı oturumlarını görmek için bir ajan seçin.",
+  "sessionScope.noFolder": "Kayıtlı oturumları görmek için bir proje klasörü açın.",
+  "sessionScope.unsupported": "Seçili ajan için kayıtlı oturum geçmişi henüz desteklenmiyor."
 }

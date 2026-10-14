@@ -83,7 +83,8 @@
     "onTerminalProfile:multiHarness.primeAgent",
     "onView:multiHarness.savedSessions",
     "onCommand:multiHarness.resumeSession",
-    "onCommand:multiHarness.refreshSessions"
+    "onCommand:multiHarness.refreshSessions",
+    "onCommand:multiHarness.selectSessionAgent"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -278,6 +279,12 @@
         "title": "%command.refreshSessions.title%",
         "category": "%category%",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "multiHarness.selectSessionAgent",
+        "title": "%command.selectSessionAgent.title%",
+        "category": "%category%",
+        "icon": "$(filter)"
       }
     ],
     "menus": {
@@ -321,6 +328,11 @@
           "command": "multiHarness.refreshSessions",
           "when": "view == multiHarness.savedSessions",
           "group": "navigation"
+        },
+        {
+          "command": "multiHarness.selectSessionAgent",
+          "when": "view == multiHarness.savedSessions",
+          "group": "navigation@1"
         }
       ],
       "editor/title": [

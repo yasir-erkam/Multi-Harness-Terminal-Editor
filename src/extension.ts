@@ -6,12 +6,17 @@ import { registerAgentStatus } from "./status";
 import { registerAgentsView } from "./agentsView";
 import { registerSessionsView } from "./sessionsView";
 import { registerSavedSessionsView } from "./savedSessionsView";
+import { registerSessionContext } from "./sessionContext";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
+    const sessionContext = registerSessionContext(context);
     for (const harness of HARNESSES) {
         context.subscriptions.push(
-            vscode.commands.registerCommand(harness.commandId, () => openAgentTerminal(context, harness, status))
+            vscode.commands.registerCommand(harness.commandId, async () => {
+                await sessionContext.selectAgent(harness.id);
+                await openAgentTerminal(context, harness, status);
+            })
         );
         registerAgentProfile(context, harness);
     }
@@ -27,9 +32,9 @@ export function activate(context: vscode.ExtensionContext): void {
         })
     );
 
-    registerAgentsView(context);
+    registerAgentsView(context, sessionContext);
     registerSessionsView(context);
-    registerSavedSessionsView(context, status);
+    registerSavedSessionsView(context, status, sessionContext);
 
     context.subscriptions.push(
         vscode.commands.registerCommand("multiHarness.openSettings", () =>

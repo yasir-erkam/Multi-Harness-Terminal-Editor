@@ -24,7 +24,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -87,6 +87,10 @@ for (const command of commands) {
 // Icon files exist, picker has none
 for (const command of commands) {
     const icon = command.icon;
+    if (command.command === "multiHarness.selectSessionAgent") {
+        check(icon === "$(filter)", "session agent picker uses the filter icon");
+        continue;
+    }
     if (["multiHarness.addFavorite", "multiHarness.removeFavorite"].includes(command.command)) {
         check(icon === (command.command === "multiHarness.addFavorite" ? "$(star-empty)" : "$(star-full)"), `favorite command ${command.command} uses its star icon`);
         continue;
