@@ -120,7 +120,13 @@
       },
       {
         "view": "multiHarness.savedSessions",
-        "contents": "%view.savedSessions.welcome%"
+        "contents": "%view.savedSessions.welcome%",
+        "when": "multiHarness.hasSelectedSessionAgent"
+      },
+      {
+        "view": "multiHarness.savedSessions",
+        "contents": "%view.savedSessions.selectAgent%",
+        "when": "!multiHarness.hasSelectedSessionAgent"
       }
     ],
     "commands": [
