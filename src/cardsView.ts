@@ -104,8 +104,6 @@ export function registerCardsView(
                         }
                     } else if (action === "settings") {
                         await vscode.commands.executeCommand("multiHarness.openSettings");
-                    } else if (action === "layout") {
-                        await vscode.commands.executeCommand("multiHarness.toggleSidebarLayout");
                     } else if (action === "focus" && typeof id === "string") {
                         const session = sessions.getSessions().find((candidate) => candidate.id === id);
                         if (session) {

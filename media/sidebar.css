@@ -30,17 +30,8 @@ button { color: inherit; }
 }
 .icon-button { background: transparent; border: 0; border-radius: 4px; font-size: 19px; padding: 4px 6px; }
 .icon-button:hover, .star:hover { background: var(--vscode-toolbar-hoverBackground); }
-.layout-switch {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: 3px;
-    gap: 3px;
-    border: 1px solid var(--vscode-widget-border, var(--vscode-sideBarSectionHeader-border, transparent));
-    background: var(--vscode-editor-background);
-    border-radius: 6px;
-}
-.layout-button { border: 1px solid transparent; background: transparent; padding: 6px; border-radius: 4px; color: var(--vscode-descriptionForeground); }
-.layout-button.selected { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border-color: var(--vscode-contrastBorder, transparent); }
+.settings-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 30px; height: 30px; }
+.settings-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
 section { margin-top: 22px; }
 h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; }
 .count { color: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 400; letter-spacing: 0; }
@@ -98,6 +89,6 @@ h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 
     .launch { flex-direction: row; align-items: center; min-height: 74px; padding-right: 27px; }
 }
 @media (forced-colors: active) {
-    .agent-card, .layout-switch, .session { border-color: CanvasText; }
+    .agent-card, .session { border-color: CanvasText; }
     .agent-card.favorite, .session.active { border-color: Highlight; }
 }

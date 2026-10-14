@@ -30,16 +30,21 @@ const app = document.getElementById("app");
 const header = element("header", "brand");
 const name = element("h1", "brand-name", "Multi-Harness");
 name.append(element("span", "brand-mark", "YEÖ"));
-header.append(name, button("icon-button", "⚙", "settings", undefined, t("command.openSettings.title")));
-
-const switcher = element("div", "layout-switch");
-switcher.setAttribute("role", "group");
-switcher.setAttribute("aria-label", t("sidebar.layout"));
-const nativeButton = button("layout-button", t("sidebar.native"), "layout");
-nativeButton.setAttribute("aria-pressed", "false");
-const cardsButton = button("layout-button selected", t("sidebar.cards"));
-cardsButton.setAttribute("aria-pressed", "true");
-switcher.append(nativeButton, cardsButton);
+const settings = button("icon-button settings-button", undefined, "settings", undefined, t("command.openSettings.title"));
+const svgNamespace = "http://www.w3.org/2000/svg";
+const gear = document.createElementNS(svgNamespace, "svg");
+gear.setAttribute("viewBox", "0 0 24 24");
+gear.setAttribute("aria-hidden", "true");
+gear.setAttribute("focusable", "false");
+const teeth = document.createElementNS(svgNamespace, "path");
+teeth.setAttribute("d", "M10 2h4l.6 3 2.2 1.3 2.9-.9 2 3.4-2.3 2v2.5l2.3 2-2 3.4-2.9-.9-2.2 1.3-.6 3h-4l-.6-3-2.2-1.3-2.9.9-2-3.4 2.3-2v-2.5l-2.3-2 2-3.4 2.9.9L9.4 5Z");
+const center = document.createElementNS(svgNamespace, "circle");
+center.setAttribute("cx", "12");
+center.setAttribute("cy", "12");
+center.setAttribute("r", "3");
+gear.append(teeth, center);
+settings.append(gear);
+header.append(name, settings);
 
 function section(title) {
     const node = element("section");
@@ -74,7 +79,7 @@ search.addEventListener("input", () => {
 });
 agents.body.className = "agent-grid";
 sessions.body.className = "session-list";
-app.append(header, switcher, search, saved.node, sessions.node, agents.node);
+app.append(header, search, saved.node, sessions.node, agents.node);
 
 function renderSaved() {
     const scope = state.scope || {};
