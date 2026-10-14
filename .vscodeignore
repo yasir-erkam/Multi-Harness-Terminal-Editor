@@ -11,3 +11,4 @@ esbuild.mjs
 .gitignore
 vscd.png
 **/*.vsix
+artifacts/**/**

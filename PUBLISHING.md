@@ -22,8 +22,8 @@ Both galleries accept the same `.vsix` artifact, so package a single file and ha
 
 ```bash
 node --version                          # must be >= 22
-npx @vscode/vsce package --no-dependencies
-ls -1 ./*.vsix
+npm run package
+ls -1 artifacts/*.vsix
 ```
 
 `--no-dependencies` is correct here: the extension has **no runtime dependencies**, so no `node_modules` needs to be bundled.
@@ -51,7 +51,7 @@ The logged-in PAT is stored locally; you do not need to paste it for every `publ
 ### 3.3 Publish with the CLI
 
 ```bash
-npx @vscode/vsce publish --packagePath ./multi-harness-terminal-editor-0.1.0.vsix
+npx @vscode/vsce publish --packagePath ./artifacts/multi-harness-terminal-editor-0.3.0.vsix
 ```
 
 ### 3.4 Or upload manually
@@ -79,7 +79,7 @@ npx ovsx create-namespace yasir-erkam-ozdemir -p "$OVSX_PAT"
 ### 4.3 Publish the same VSIX
 
 ```bash
-npx ovsx publish ./multi-harness-terminal-editor-0.1.0.vsix -p "$OVSX_PAT"
+npx ovsx publish ./artifacts/multi-harness-terminal-editor-0.3.0.vsix -p "$OVSX_PAT"
 ```
 
 ### 4.4 Claim the namespace for the verified badge
@@ -128,7 +128,7 @@ Open VSX tokens are unaffected by this retirement; only the Marketplace's Azure 
 `.github/workflows/release.yml` runs on `v*` tags and automates everything above:
 
 1. checks out the repo, sets up Node 22, runs `npm ci` and `npm run package`;
-2. publishes the produced `*.vsix` to the Marketplace when the `VSCE_PAT` secret is set;
+2. selects `artifacts/<package-name>-<package-version>.vsix` from the manifest and publishes it to the Marketplace when the `VSCE_PAT` secret is set;
 3. publishes the same file to Open VSX when the `OVSX_PAT` secret is set;
 4. creates a **published** GitHub release with the VSIX attached.
 

@@ -584,9 +584,11 @@
   "scripts": {
     "check": "tsc -p tsconfig.json --noEmit",
     "build": "node ./esbuild.mjs",
-    "test": "node ./scripts/test.mjs",
-    "compile": "npm run check && npm run build && npm run test",
-    "package": "npm run compile && npx @vscode/vsce package --no-dependencies"
+    "test": "node ./scripts/test.mjs && node ./scripts/test-workflow.mjs",
+    "compile": "node ./scripts/dev.mjs compile",
+    "package": "node ./scripts/dev.mjs package",
+    "dev:install": "node ./scripts/dev.mjs install",
+    "icons": "node ./scripts/gen-icons.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

@@ -56,7 +56,8 @@ jobs:
 
       - name: Locate VSIX
         id: vsix
-        run: echo "path=$(ls -1 ./*.vsix | head -n 1)" >> "$GITHUB_OUTPUT"
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const p = JSON.parse(fs.readFileSync("package.json", "utf8")); const path = `artifacts/${p.name}-${p.version}.vsix`; fs.accessSync(path); fs.appendFileSync(process.env.GITHUB_OUTPUT, `path=${path}\n`);'
 
       # Release notes come from the CHANGELOG section matching the tag. When the
       # tag has no section (exit 2) the fallback below uses --generate-notes.
@@ -96,4 +97,4 @@ jobs:
           else
             EXTRA_ARGS+=(--generate-notes)
           fi
-          gh release create "$GITHUB_REF_NAME" *.vsix "${EXTRA_ARGS[@]}"
+          gh release create "$GITHUB_REF_NAME" "${{ steps.vsix.outputs.path }}" "${EXTRA_ARGS[@]}"

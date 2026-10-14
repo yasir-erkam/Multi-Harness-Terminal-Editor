@@ -236,7 +236,7 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
 2. Choose **Install from VSIX…** and select the downloaded `.vsix` file.
 3. Alternatively, from a terminal: `code --install-extension multi-harness-terminal-editor-0.1.0.vsix`.
 
-VSIX files are produced by `npm run package` (see [PUBLISHING.md](PUBLISHING.md)).
+VSIX files are produced in `artifacts/` by `npm run package` (see [PUBLISHING.md](PUBLISHING.md)).
 
 ## Development
 
@@ -246,12 +246,35 @@ npm run check   # type check (tsc --noEmit)
 npm run build   # bundle src/extension.ts to dist/extension.js with esbuild
 npm run test    # unit tests plus manifest validation
 npm run compile # check + build + test
-npm run package # compile, then produce a .vsix with @vscode/vsce
+npm run package # check + build + test, then artifacts/<name>-<version>.vsix
+npm run dev:install # same validation and packaging, then install into local code-server
+npm run icons   # regenerate all themed harness icons from vendored sources
 ```
 
-Then press <kbd>F5</kbd> in VS Code to launch the **Extension Development Host** with the extension loaded.
+For browser-based code-server (including Docker on Ubuntu Server), use
+`npm run dev:install`, then run **Developer: Reload Window** in the Command
+Palette. Enable the desired `multiHarness.show<Id>Icon` settings, check the icons
+in light/dark themes and click a button to verify its terminal opens. Installation
+uses `/usr/local/bin/install-extension` when available, otherwise the bundled
+`/app/code-server/bin/code-server` CLI. These commands only install locally.
 
-`.github/workflows/ci.yml` runs `npm run check`, `npm run build`, `npm run test` and `npm run package` on every push and pull request; `.github/workflows/release.yml` packages and publishes on `v*` tags, attaching the VSIX to a published GitHub release.
+If Node/npm are not on PATH in the container, run the same workflow directly:
+
+```bash
+/app/code-server/lib/node scripts/dev.mjs install
+```
+
+The workflow reports its actual Node version. Node 22 remains the CI standard.
+Build output belongs in `dist/`, temporary test bundles in `.build/`, and VSIX
+packages in `artifacts/`. These directories are ignored by Git; old packages can
+be retained in `artifacts/`, and rebuilding the same version replaces its package.
+
+For desktop VS Code, press <kbd>F5</kbd> to launch the **Extension Development Host**.
+
+`.github/workflows/ci.yml` runs `npm run package` (including check, build and tests)
+on every push and pull request. `.github/workflows/release.yml` uses the same
+package command on `v*` tags and publishes the exact versioned file from
+`artifacts/`, attaching it to the GitHub release.
 
 ### Source repository
 
