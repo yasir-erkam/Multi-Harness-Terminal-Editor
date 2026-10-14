@@ -1,11 +1,16 @@
 import * as vscode from "vscode";
 import { HARNESSES, type Harness, iconFile } from "./harnesses";
 
+export interface FavoriteAgents {
+    readonly onDidChange: vscode.Event<void>;
+    isFavorite(harness: Harness): boolean;
+}
+
 /** Activity Bar launcher reuses the same commands as the editor buttons. */
-export function registerAgentsView(context: vscode.ExtensionContext): void {
+export function registerAgentsView(context: vscode.ExtensionContext): FavoriteAgents {
     const favoritesKey = "favoriteAgents";
     const favorites = new Set(context.globalState.get<string[]>(favoritesKey, []));
-    const changes = new vscode.EventEmitter<Harness | undefined | null | void>();
+    const changes = new vscode.EventEmitter<void>();
     const provider: vscode.TreeDataProvider<Harness> = {
         onDidChangeTreeData: changes.event,
         getChildren(element) {
@@ -54,4 +59,5 @@ export function registerAgentsView(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand("multiHarness.addFavorite", (harness?: Harness) => setFavorite(harness, true)),
         vscode.commands.registerCommand("multiHarness.removeFavorite", (harness?: Harness) => setFavorite(harness, false))
     );
+    return { onDidChange: changes.event, isFavorite: (harness) => favorites.has(harness.id) };
 }

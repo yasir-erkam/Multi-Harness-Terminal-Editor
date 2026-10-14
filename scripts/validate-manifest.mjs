@@ -24,7 +24,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.toggleSidebarLayout"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -67,6 +67,11 @@ check(typeof activityContainer?.icon === "string" && existsSync(join(root, activ
 const agentsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.agents");
 check(agentsView?.name === "%view.agents.name%" && typeof nls["view.agents.name"] === "string", "Agents view has a localized name");
 check(activationEvents.includes("onView:multiHarness.agents"), "opening the Agents view activates the extension on VS Code 1.67+");
+const sessionsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.sessions");
+check(sessionsView?.name === "%view.sessions.name%" && typeof nls["view.sessions.name"] === "string", "Open Sessions view has a localized name");
+check(activationEvents.includes("onView:multiHarness.sessions"), "opening the sessions view activates the extension");
+check(manifest.contributes.viewsWelcome?.some((entry) => entry.view === "multiHarness.sessions" && entry.contents === "%view.sessions.welcome%") && typeof nls["view.sessions.welcome"] === "string", "sessions view has a localized empty state");
+check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.focusSession" && entry.when === "false"), "session focus command is hidden from the palette because it requires a terminal");
 for (const id of allCommandIds) {
     check(commandIdList.includes(id), `command ${id} exists`);
     check(activationEvents.includes(`onCommand:${id}`), `activation event onCommand:${id} exists`);
@@ -82,6 +87,10 @@ for (const command of commands) {
 // Icon files exist, picker has none
 for (const command of commands) {
     const icon = command.icon;
+    if (command.command === "multiHarness.toggleSidebarLayout") {
+        check(icon === "$(layout)", "sidebar layout command uses the layout icon");
+        continue;
+    }
     if (["multiHarness.addFavorite", "multiHarness.removeFavorite"].includes(command.command)) {
         check(icon === (command.command === "multiHarness.addFavorite" ? "$(star-empty)" : "$(star-full)"), `favorite command ${command.command} uses its star icon`);
         continue;
@@ -90,8 +99,8 @@ for (const command of commands) {
         check(icon === "$(gear)", "settings command uses the gear icon");
         continue;
     }
-    if (command.command === "multiHarness.openAgentPicker") {
-        check(icon === undefined, "picker command has no icon");
+    if (["multiHarness.openAgentPicker", "multiHarness.focusSession"].includes(command.command)) {
+        check(icon === undefined, `${command.command} has no icon`);
         continue;
     }
     check(typeof icon === "object" && typeof icon.light === "string" && typeof icon.dark === "string", `command ${command.command} declares light+dark icons`);
@@ -101,7 +110,12 @@ for (const command of commands) {
 
 // Menu entries: all agent commands, same ordering/when as harnesses
 const settingsButton = manifest.contributes.menus?.["view/title"]?.find((entry) => entry.command === "multiHarness.openSettings");
-check(settingsButton?.when === "view == multiHarness.agents" && settingsButton?.group === "navigation", "settings button appears in the Agents view toolbar");
+check(settingsButton?.when === "view == multiHarness.agents || view == multiHarness.cards" && settingsButton?.group === "navigation", "settings button appears in both sidebar layouts");
+const cardsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.cards");
+check(cardsView?.type === "webview" && cardsView?.when === "config.multiHarness.sidebarLayout == cards", "card layout has a conditional webview");
+check(agentsView?.when === "config.multiHarness.sidebarLayout != cards" && sessionsView?.when === agentsView.when, "native views share the opposite layout condition");
+check(activationEvents.includes("onView:multiHarness.cards"), "card view activates the extension");
+check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === "multiHarness.toggleSidebarLayout" && entry.when === "view == multiHarness.agents || view == multiHarness.cards"), "both sidebar layouts expose the switch button");
 for (const [command, contextValue] of [["multiHarness.addFavorite", "agent"], ["multiHarness.removeFavorite", "favoriteAgent"]]) {
     const button = manifest.contributes.menus?.["view/item/context"]?.find((entry) => entry.command === command);
     check(button?.when === `view == multiHarness.agents && viewItem == ${contextValue}` && button?.group === "inline", `${command} appears on the matching agent row`);
@@ -223,7 +237,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.5.0", "manifest version matches the 0.5.0 development version");
+check(manifest.version === "0.6.0", "manifest version matches the 0.6.0 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

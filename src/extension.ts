@@ -4,6 +4,8 @@ import { openAgentTerminal } from "./launch";
 import { registerAgentProfile } from "./profiles";
 import { registerAgentStatus } from "./status";
 import { registerAgentsView } from "./agentsView";
+import { registerSessionsView } from "./sessionsView";
+import { registerCardsView } from "./cardsView";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
@@ -25,7 +27,17 @@ export function activate(context: vscode.ExtensionContext): void {
         })
     );
 
-    registerAgentsView(context);
+    const favorites = registerAgentsView(context);
+    const sessions = registerSessionsView(context);
+    registerCardsView(context, favorites, sessions);
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("multiHarness.toggleSidebarLayout", async () => {
+            const config = vscode.workspace.getConfiguration("multiHarness");
+            const layout = config.get<string>("sidebarLayout", "cards") === "native" ? "cards" : "native";
+            await config.update("sidebarLayout", layout, vscode.ConfigurationTarget.Global);
+        })
+    );
 
     context.subscriptions.push(
         vscode.commands.registerCommand("multiHarness.openSettings", () =>

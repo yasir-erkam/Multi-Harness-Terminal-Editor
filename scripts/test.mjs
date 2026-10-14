@@ -126,9 +126,15 @@ test("win32 explicit .ps1 path resolves without adding suffixes", (dir) => {
 // ---------------------------------------------------------------------------
 
 const VSCODE_STUB = `
-const calls = { commands: [], profiles: [], views: [], created: [], errors: [], infos: [], executed: [], configGets: [],
+const calls = { commands: [], profiles: [], views: [], webviews: [], configUpdates: [], created: [], errors: [], infos: [], executed: [], configGets: [],
     terminals: [], sendTexts: [], statusItems: [], statusShown: [], statusHidden: [], statusDisposed: 0,
-    shellIntegrationHandlers: [], executionStartHandlers: [], executionEndHandlers: [] };
+    shellIntegrationHandlers: [], executionStartHandlers: [], executionEndHandlers: [],
+    terminalOpenHandlers: [], terminalCloseHandlers: [], activeTerminalHandlers: [] };
+
+function subscribeTerminalEvent(handlers, handler) {
+    handlers.push(handler);
+    return { dispose() { const index = handlers.indexOf(handler); if (index >= 0) handlers.splice(index, 1); } };
+}
 
 // Mirrors the real semantics: getConfiguration(section) hands back the subtree
 // at \`section\`, and get(key) walks the (dotted) key RELATIVE to that subtree.
@@ -165,6 +171,10 @@ function getConfiguration(section, _scope) {
             return value === undefined ? fallback : value;
         },
         has(key) { return walk(base, key) !== undefined; },
+        async update(key, value, target) {
+            calls.configUpdates.push({ section, key, value, target });
+            base[key] = value;
+        },
     };
 }
 
@@ -172,6 +182,8 @@ module.exports = {
     __calls: calls,
     __fixture: FIXTURE,
     StatusBarAlignment: { Left: 1, Right: 2 },
+    ConfigurationTarget: { Global: 1 },
+    env: { language: "en" },
     EventEmitter: class EventEmitter {
         listeners = new Set();
         event = (listener) => {
@@ -190,12 +202,15 @@ module.exports = {
         activeTerminal: undefined,
         activeTextEditor: undefined,
         registerTerminalProfileProvider(id, provider) { calls.profiles.push({ id, provider }); return { dispose() {} }; },
+        registerWebviewViewProvider(id, provider) { calls.webviews.push({ id, provider }); return { dispose() {} }; },
         registerTreeDataProvider(id, provider) {
             const view = { id, provider, disposed: false };
             calls.views.push(view);
             return { dispose() { view.disposed = true; } };
         },
-        onDidCloseTerminal() { return { dispose() {} }; },
+        onDidOpenTerminal(handler) { return subscribeTerminalEvent(calls.terminalOpenHandlers, handler); },
+        onDidCloseTerminal(handler) { return subscribeTerminalEvent(calls.terminalCloseHandlers, handler); },
+        onDidChangeActiveTerminal(handler) { return subscribeTerminalEvent(calls.activeTerminalHandlers, handler); },
         showQuickPick() { return Promise.resolve(undefined); },
         showErrorMessage(message) { calls.errors.push(message); return Promise.resolve(undefined); },
         showInformationMessage(message) { calls.infos.push(message); return Promise.resolve(undefined); },
@@ -299,14 +314,14 @@ try {
     console.log(`ok: activation registers exactly the ${contributedCommands.length} contributed command ids`);
 
     // The sidebar lists every harness even while editor-title icons are disabled.
-    assert.equal(vscodeStub.__calls.views.length, 1);
+    assert.equal(vscodeStub.__calls.views.length, 2);
     const agentsView = vscodeStub.__calls.views[0];
     assert.equal(agentsView.id, manifest.contributes.views.multiHarness[0].id);
     const agents = agentsView.provider.getChildren();
     assert.equal(agents.length, contributedProfiles.length);
     assert.deepEqual(
         agents.map((agent) => agentsView.provider.getTreeItem(agent).command.command).sort(),
-        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite"].includes(id))
+        contributedCommands.filter((id) => !["multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.toggleSidebarLayout"].includes(id))
     );
     for (const agent of agents) {
         const item = agentsView.provider.getTreeItem(agent);
@@ -371,6 +386,105 @@ try {
     await removeFavorite.handler(primeAgent);
     passed += 1;
     console.log("ok: Prime Agent command, profile and favorites use the configured executable and arguments");
+
+    const sessionsView = vscodeStub.__calls.views.find((view) => view.id === "multiHarness.sessions");
+    assert.deepEqual(sessionsView.provider.getChildren(), []);
+    let sessionRefreshes = 0;
+    sessionsView.provider.onDidChangeTreeData(() => { sessionRefreshes += 1; });
+    const firstPrime = { name: "Prime Agent", shown: 0, show() { this.shown += 1; } };
+    const secondPrime = { name: "Prime Agent", shown: 0, show() { this.shown += 1; } };
+    vscodeStub.window.terminals = [firstPrime, { name: "bash" }, secondPrime];
+    vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(secondPrime));
+    const openSessions = sessionsView.provider.getChildren();
+    assert.equal(openSessions.length, 2, "ordinary shell terminals are excluded");
+    assert.equal(sessionsView.provider.getTreeItem(openSessions[0]).label, "Prime Agent #1");
+    assert.equal(sessionsView.provider.getTreeItem(openSessions[1]).label, "Prime Agent #2");
+    assert.notEqual(openSessions[0].id, openSessions[1].id);
+    assert.equal(sessionsView.provider.getChildren()[0].id, openSessions[0].id, "refresh preserves session identity");
+    vscodeStub.window.activeTerminal = secondPrime;
+    vscodeStub.__calls.activeTerminalHandlers.forEach((handler) => handler(secondPrime));
+    assert.equal(sessionsView.provider.getTreeItem(openSessions[1]).description, "●");
+    assert.equal(sessionsView.provider.getTreeItem(openSessions[0]).description, undefined);
+    const sessionItem = sessionsView.provider.getTreeItem(openSessions[1]);
+    const focusSession = vscodeStub.__calls.commands.find((command) => command.id === sessionItem.command.command);
+    const createdBeforeFocus = vscodeStub.__calls.created.length;
+    await focusSession.handler(...sessionItem.command.arguments);
+    assert.equal(secondPrime.shown, 1);
+    assert.equal(firstPrime.shown, 0, "focus selects the exact terminal even when names match");
+    vscodeStub.window.terminals = [firstPrime];
+    vscodeStub.__calls.terminalCloseHandlers.forEach((handler) => handler(secondPrime));
+    await focusSession.handler(secondPrime);
+    await focusSession.handler();
+    assert.equal(secondPrime.shown, 1, "stale session clicks do not focus closed terminals");
+    assert.equal(vscodeStub.__calls.created.length, createdBeforeFocus, "focusing sessions never launches new terminals");
+    assert.equal(sessionsView.provider.getChildren().length, 1);
+    assert.equal(sessionsView.provider.getTreeItem(openSessions[0]).label, "Prime Agent");
+    assert.equal(sessionRefreshes, 3, "open, focus and close events refresh sessions");
+    vscodeStub.window.terminals = [];
+    vscodeStub.window.activeTerminal = undefined;
+    passed += 1;
+    console.log("ok: sessions track terminal lifecycle and focus exact terminals without launching duplicates");
+
+    const layoutCommand = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.toggleSidebarLayout");
+    vscodeStub.__fixture.multiHarness.sidebarLayout = "native";
+    await layoutCommand.handler();
+    assert.equal(vscodeStub.__fixture.multiHarness.sidebarLayout, "cards");
+    await layoutCommand.handler();
+    assert.equal(vscodeStub.__fixture.multiHarness.sidebarLayout, "native");
+    assert.equal(vscodeStub.__calls.configUpdates.at(-1).target, vscodeStub.ConfigurationTarget.Global);
+
+    const cardMessages = [];
+    let receiveCardMessage;
+    const cardsWebview = {
+        cspSource: "https://local-webview.invalid",
+        asWebviewUri(uri) { return { toString() { return `https://local-webview.invalid${uri.fsPath}`; } }; },
+        postMessage(message) { cardMessages.push(message); return Promise.resolve(true); },
+        onDidReceiveMessage(handler) { receiveCardMessage = handler; return { dispose() {} }; },
+    };
+    const cardsProvider = vscodeStub.__calls.webviews.find((view) => view.id === "multiHarness.cards").provider;
+    cardsProvider.resolveWebviewView({
+        webview: cardsWebview,
+        onDidChangeVisibility() { return { dispose() {} }; },
+        onDidDispose() { return { dispose() {} }; },
+    });
+    assert.ok(cardsWebview.options.enableScripts);
+    assert.equal(cardsWebview.options.localResourceRoots[0].fsPath, join(projectRoot, "media"));
+    assert.ok(cardsWebview.html.includes("default-src 'none'"));
+    assert.ok(cardsWebview.html.includes("script-src 'nonce-"));
+    await receiveCardMessage({ action: "ready" });
+    assert.equal(cardMessages.at(-1).agents.length, agents.length);
+    assert.equal(cardMessages.at(-1).agents[0].id, "codex");
+    assert.equal(cardMessages.at(-1).agents[0].favorite, true);
+    assert.equal(cardMessages.at(-1).sessions.length, 0);
+    const messagesBeforeFavorite = cardMessages.length;
+    await addFavorite.handler(primeAgent);
+    assert.equal(cardMessages.length, messagesBeforeFavorite + 1, "native favorite updates refresh the card model");
+    assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "primeAgent").favorite, true);
+    await removeFavorite.handler(primeAgent);
+    vscodeStub.__calls.executed.length = 0;
+    await receiveCardMessage({ action: "open", id: "primeAgent" });
+    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openPrimeAgent"]);
+    vscodeStub.__calls.executed.length = 0;
+    await receiveCardMessage({ action: "favorite", id: "codex" });
+    assert.equal(vscodeStub.__calls.executed[0], "multiHarness.removeFavorite");
+    vscodeStub.__calls.executed.length = 0;
+    await receiveCardMessage({ action: "settings" });
+    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openSettings"]);
+    vscodeStub.window.terminals = [firstPrime, secondPrime];
+    vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(firstPrime));
+    const cardSession = cardMessages.at(-1).sessions[1];
+    assert.equal(cardSession.label, "Prime Agent #2");
+    vscodeStub.__calls.executed.length = 0;
+    await receiveCardMessage({ action: "focus", id: cardSession.id });
+    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.focusSession", secondPrime]);
+    vscodeStub.window.terminals = [];
+    vscodeStub.__calls.executed.length = 0;
+    for (const message of [null, {}, {action: "open", id: "unknown"}, {action: "focus", id: cardSession.id}, {action: "executeCommand", id: "workbench.action.closeWindow"}]) {
+        await receiveCardMessage(message);
+    }
+    assert.deepEqual(vscodeStub.__calls.executed, [], "unrecognized messages and stale sessions cannot execute commands");
+    passed += 1;
+    console.log("ok: card and native layouts share favorites, validate actions and focus exact sessions");
 
     // The user's click path: the handler registered for the literal id must run
     // without throwing (resolution failure is fine — it reports an error).
@@ -585,11 +699,15 @@ try {
     passed += 1;
     console.log("ok: disposing the extension cancels the pending status timer and disposes the item");
     assert.equal(agentsView.disposed, true, "extension disposal unregisters the Activity Bar provider");
+    assert.equal(sessionsView.disposed, true);
+    assert.equal(vscodeStub.__calls.terminalOpenHandlers.length, 0);
+    assert.equal(vscodeStub.__calls.terminalCloseHandlers.length, 0);
+    assert.equal(vscodeStub.__calls.activeTerminalHandlers.length, 0);
 
     // A new activation must restore favorites without depending on old module state.
     const reloadedContext = { ...context, subscriptions: [] };
     extension.activate(reloadedContext);
-    const reloadedView = vscodeStub.__calls.views.at(-1);
+    const reloadedView = vscodeStub.__calls.views.filter((view) => view.id === "multiHarness.agents").at(-1);
     assert.equal(reloadedView.provider.getChildren()[0].id, "codex");
     assert.equal(reloadedView.provider.getTreeItem(codex).contextValue, "favoriteAgent");
     assert.equal(reloadedView.provider.getChildren().length, agents.length);
