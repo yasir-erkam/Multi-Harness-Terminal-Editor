@@ -10,5 +10,6 @@ tsconfig.json
 esbuild.mjs
 .gitignore
 vscd.png
+Screenshot*.png
 **/*.vsix
 artifacts/**/**

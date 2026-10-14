@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { type Harness } from "./harnesses";
-import { resolveAgentLaunch, workspaceFolder } from "./launch";
+import { resolveAgentLaunch } from "./launch";
 import { resolveExecutable } from "./resolveExecutable";
 
 /**
@@ -15,7 +15,7 @@ export function registerAgentProfile(
     const provider: vscode.TerminalProfileProvider = {
         provideTerminalProfile(_token: vscode.CancellationToken): vscode.ProviderResult<vscode.TerminalProfile> {
             const launch = resolveAgentLaunch(context, harness);
-            const executable = resolveExecutable(launch.executable, { rootFolder: workspaceFolder()?.uri.fsPath });
+            const executable = resolveExecutable(launch.executable, { rootFolder: launch.cwd });
             if (!executable) {
                 return undefined;
             }

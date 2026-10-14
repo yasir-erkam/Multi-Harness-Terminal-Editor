@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { HARNESSES, harnessForTerminalName, type Harness } from "./harnesses";
 import { extensionStrings } from "./localization";
+import { registerWorkspaceContext, workspaceFolder } from "./workspaceContext";
 
 export interface SessionScope {
     readonly agent: Harness | undefined;
@@ -15,21 +16,10 @@ export interface SessionContext {
 
 /** Selected agent is local to this workspace; the folder follows editor focus. */
 export function registerSessionContext(context: vscode.ExtensionContext): SessionContext {
+    registerWorkspaceContext(context);
     const changes = new vscode.EventEmitter<void>();
     const strings = extensionStrings(context);
-    let currentCwd: string | undefined;
     let lastActivation: { id: string; time: number } | undefined;
-    function getCwd(): string | undefined {
-        const folders = vscode.workspace.workspaceFolders ?? [];
-        const activeUri = vscode.window.activeTextEditor?.document.uri;
-        const activeFolder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined;
-        if (activeFolder) {
-            currentCwd = activeFolder.uri.fsPath;
-        } else if (!folders.some((folder) => folder.uri.fsPath === currentCwd)) {
-            currentCwd = folders[0]?.uri.fsPath;
-        }
-        return currentCwd;
-    }
     let selectedId = context.workspaceState.get<string>("selectedSessionAgent");
     if (!HARNESSES.some((agent) => agent.id === selectedId)) {
         selectedId = vscode.window.activeTerminal ? harnessForTerminalName(vscode.window.activeTerminal.name)?.id : undefined;
@@ -88,7 +78,7 @@ export function registerSessionContext(context: vscode.ExtensionContext): Sessio
     );
     return {
         onDidChange: changes.event,
-        getScope: () => ({ agent: HARNESSES.find((agent) => agent.id === selectedId), cwd: getCwd() }),
+        getScope: () => ({ agent: HARNESSES.find((agent) => agent.id === selectedId), cwd: workspaceFolder()?.uri.fsPath }),
         selectAgent,
     };
 }

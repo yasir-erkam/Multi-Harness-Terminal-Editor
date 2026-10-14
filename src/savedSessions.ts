@@ -124,7 +124,9 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
             if (message && (message.role === "user" || row.type === "user") && !row.isMeta) {
                 const content = message.content;
                 title = clean(typeof content === "string" ? content : Array.isArray(content)
-                    ? content.filter((part: any) => part.type === "text").map((part: any) => part.text).join(" ") : "");
+                    ? content.filter((part: unknown): part is { type: "text"; text: string } =>
+                        part !== null && typeof part === "object" && "type" in part && part.type === "text"
+                        && "text" in part && typeof part.text === "string").map((part) => part.text).join(" ") : "");
                 if (title) {
                     break;
                 }

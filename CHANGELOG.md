@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+
+- Keep agent commands, terminal profiles and saved-session filtering on the last focused project when switching from a text editor to a terminal in a multi-root workspace.
+- Resume saved conversations using their recorded project's executable path, arguments and local CLI lookup, even when another project's editor is active.
+- Ignore malformed message content blocks while retaining valid saved conversations and readable titles.
+
 ## 0.6.0
 
 - Added two sidebar layouts: native VS Code lists by default, or cards with search, larger agent icons and integrated session lists. Switch layouts from the view header or extension settings; both share favorites, selected agent and project scope.

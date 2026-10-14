@@ -181,6 +181,24 @@ try {
     assert.equal((await scanSavedSessions(roots, 100, { harnessId: "codex", cwd: alias })).sessions[0].id, "matching-project", "symlink aliases resolve to the same project");
     passed += 1;
     console.log("ok: saved sessions read real metadata independently of terminals, tolerate partial files and use provider resume arguments");
+
+    const piRoot = roots.find((root) => root.harnessId === "pi");
+    const piFile = join(piRoot.directory, "malformed-content.jsonl");
+    for (const content of [
+        [null, 7, {}, { type: "text", text: {} }, { type: "text", text: "Valid title" }],
+        [null, { type: "text", text: 42 }],
+    ]) {
+        writeFileSync(piFile, [
+            { type: "session", id: "malformed-content", cwd: workspace },
+            { type: "message", message: { role: "user", content } },
+        ].map((row) => JSON.stringify(row)).join("\n"));
+        const result = await scanSavedSessions([piRoot], 100, { harnessId: "pi", cwd: workspace });
+        assert.deepEqual(result.unreadable, [], "malformed blocks do not make a readable session unreadable");
+        assert.equal(result.sessions.length, 1);
+        assert.equal(result.sessions[0].title, content.length === 5 ? "Valid title" : "malformed-content");
+    }
+    passed += 1;
+    console.log("ok: malformed content blocks preserve valid saved sessions and readable titles");
 } finally {
     rmSync(savedDir, { recursive: true, force: true });
 }
@@ -203,7 +221,8 @@ const VSCODE_STUB = `
 const calls = { commands: [], profiles: [], views: [], webviews: [], configUpdates: [], created: [], errors: [], infos: [], executed: [], configGets: [],
     terminals: [], sendTexts: [], statusItems: [], statusShown: [], statusHidden: [], statusDisposed: 0,
     shellIntegrationHandlers: [], executionStartHandlers: [], executionEndHandlers: [],
-    terminalOpenHandlers: [], terminalCloseHandlers: [], activeTerminalHandlers: [], activeEditorHandlers: [] };
+    terminalOpenHandlers: [], terminalCloseHandlers: [], activeTerminalHandlers: [], activeEditorHandlers: [], workspaceFolderHandlers: [] };
+const scopedFixtures = new Map();
 
 function subscribeTerminalEvent(handlers, handler) {
     handlers.push(handler);
@@ -236,12 +255,13 @@ function walk(tree, key) {
     return node;
 }
 
-function getConfiguration(section, _scope) {
+function getConfiguration(section, scope) {
     const base = section ? walk(FIXTURE, section) : FIXTURE;
+    const scoped = section ? walk(scopedFixtures.get(scope?.fsPath), section) : scopedFixtures.get(scope?.fsPath);
     return {
         get(key, fallback) {
-            calls.configGets.push({ section, key });
-            const value = walk(base, key);
+            calls.configGets.push({ section, key, scope: scope?.fsPath });
+            const value = walk(scoped, key) ?? walk(base, key);
             return value === undefined ? fallback : value;
         },
         has(key) { return walk(base, key) !== undefined; },
@@ -252,6 +272,7 @@ function getConfiguration(section, _scope) {
 module.exports = {
     __calls: calls,
     __fixture: FIXTURE,
+    __scopedFixtures: scopedFixtures,
     StatusBarAlignment: { Left: 1, Right: 2 },
     ConfigurationTarget: { Global: 1 },
     env: { language: "en" },
@@ -327,9 +348,9 @@ module.exports = {
         onDidEndTerminalShellExecution(handler) { calls.executionEndHandlers.push(handler); return { dispose() {} }; },
     },
     workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration,
-        onDidChangeWorkspaceFolders() { return { dispose() {} }; },
+        onDidChangeWorkspaceFolders(handler) { return subscribeTerminalEvent(calls.workspaceFolderHandlers, handler); },
         onDidChangeConfiguration() { return { dispose() {} }; } },
-    Uri: { joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
+    Uri: { file: (fsPath) => ({ fsPath }), joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
     ViewColumn: { Beside: -2 },
     TerminalProfile: class TerminalProfile { constructor(options) { this.options = options; } },
 };
@@ -687,6 +708,88 @@ try {
     passed += 1;
     console.log("ok: card and native layouts share favorites, validate actions and focus exact sessions");
 
+    // Editor focus may move to an editor-area terminal. All launch surfaces and
+    // the saved-session filter must retain the last focused workspace folder.
+    const folderA = { uri: { fsPath: join(activationDir, "project-a") } };
+    const folderB = { uri: { fsPath: join(activationDir, "project-b") } };
+    for (const folder of [folderA, folderB]) {
+        mkdirSync(join(folder.uri.fsPath, "node_modules", ".bin"), { recursive: true });
+        const cli = join(folder.uri.fsPath, "node_modules", ".bin", "workspace-omp");
+        writeFileSync(cli, "#!/bin/sh\n");
+        chmodSync(cli, 0o755);
+        vscodeStub.__scopedFixtures.set(folder.uri.fsPath, { multiHarness: {
+            ohMyPi: { executablePath: "workspace-omp", arguments: ["--project", folder.uri.fsPath] },
+        } });
+    }
+    const previousGetFolder = vscodeStub.workspace.getWorkspaceFolder;
+    vscodeStub.workspace.getWorkspaceFolder = (uri) => vscodeStub.workspace.workspaceFolders.find((folder) =>
+        uri.fsPath === folder.uri.fsPath || uri.fsPath.startsWith(folder.uri.fsPath + "/"));
+    vscodeStub.workspace.workspaceFolders = [folderA, folderB];
+    const focusEditor = (folder) => {
+        vscodeStub.window.activeTextEditor = folder ? { document: { uri: { fsPath: join(folder.uri.fsPath, "file.ts") } } } : undefined;
+        vscodeStub.__calls.activeEditorHandlers.forEach((handler) => handler(vscodeStub.window.activeTextEditor));
+    };
+    focusEditor(folderB);
+    focusEditor(undefined);
+    assert.ok(savedView.description.includes("project-b"));
+    const workspaceOpen = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.openOhMyPi");
+    await workspaceOpen.handler();
+    const workspaceLaunch = vscodeStub.__calls.created.at(-1).options;
+    assert.equal(workspaceLaunch.cwd, folderB.uri.fsPath);
+    assert.equal(workspaceLaunch.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", "workspace-omp"));
+    assert.deepEqual(workspaceLaunch.shellArgs, ["--project", folderB.uri.fsPath]);
+    const ompProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.ohMyPi");
+    const workspaceProfile = ompProfile.provider.provideTerminalProfile({});
+    assert.equal(workspaceProfile.options.cwd, folderB.uri.fsPath);
+    assert.equal(workspaceProfile.options.shellPath, workspaceLaunch.shellPath);
+    vscodeStub.workspace.workspaceFolders = [folderA];
+    vscodeStub.__calls.workspaceFolderHandlers.forEach((handler) => handler({}));
+    assert.ok(savedView.description.includes("project-a"), "removed folders are no longer retained");
+    assert.equal(ompProfile.provider.provideTerminalProfile({}).options.cwd, folderA.uri.fsPath);
+    passed += 1;
+    console.log("ok: command, profile and sidebar keep the last focused project and forget removed folders");
+
+    // Resume must use the recorded project's resource settings and local CLI,
+    // even if another project's editor becomes active after listing sessions.
+    vscodeStub.workspace.workspaceFolders = [folderA, folderB];
+    const ompSessions = vscodeStub.__fixture.multiHarness.ohMyPi.sessionDirectory;
+    mkdirSync(ompSessions, { recursive: true });
+    const ompFile = join(ompSessions, "project-b-session.jsonl");
+    writeFileSync(ompFile, JSON.stringify({ type: "session", id: "project-b-session", cwd: folderB.uri.fsPath }) + "\n");
+    focusEditor(folderB);
+    const projectBSession = (await savedView.provider.getChildren()).find((session) => session.id === "project-b-session");
+    assert.ok(projectBSession);
+    // Set the editor directly while retaining the listed session, reproducing
+    // the window between a focus change and the view's next refresh.
+    vscodeStub.window.activeTextEditor = { document: { uri: { fsPath: join(folderA.uri.fsPath, "file.ts") } } };
+    vscodeStub.window.terminals = [];
+    await resume.handler({ harnessId: "ohMyPi", id: projectBSession.id });
+    const projectBResume = vscodeStub.__calls.created.at(-1).options;
+    assert.equal(projectBResume.cwd, folderB.uri.fsPath);
+    assert.equal(projectBResume.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", "workspace-omp"));
+    assert.deepEqual(projectBResume.shellArgs, ["--resume", ompFile, "--project", folderB.uri.fsPath]);
+    // External recorded directories use their own resource scope, not the
+    // first workspace folder's settings.
+    const externalFolder = join(activationDir, "external-project");
+    mkdirSync(externalFolder);
+    vscodeStub.__scopedFixtures.set(externalFolder, { multiHarness: { ohMyPi: { executablePath: fakeCli, arguments: ["--external"] } } });
+    writeFileSync(ompFile, JSON.stringify({ type: "session", id: "external-session", cwd: externalFolder }) + "\n");
+    vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: externalFolder } }];
+    focusEditor(undefined);
+    assert.equal((await savedView.provider.getChildren())[0].id, "external-session");
+    vscodeStub.workspace.workspaceFolders = [folderA];
+    await resume.handler({ harnessId: "ohMyPi", id: "external-session" });
+    const externalResume = vscodeStub.__calls.created.at(-1).options;
+    assert.equal(externalResume.cwd, externalFolder);
+    assert.equal(externalResume.shellPath, fakeCli);
+    assert.deepEqual(externalResume.shellArgs, ["--resume", ompFile, "--external"]);
+    passed += 1;
+    console.log("ok: resuming sessions uses recorded project settings and executable lookup across editor focus changes");
+
+    vscodeStub.__scopedFixtures.clear();
+    vscodeStub.workspace.getWorkspaceFolder = previousGetFolder;
+    vscodeStub.window.terminals = [];
+    focusEditor(undefined);
     vscodeStub.workspace.workspaceFolders = [];
     // The user's click path: the handler registered for the literal id must run
     // without throwing (resolution failure is fine — it reports an error).

@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { fullSettingKey, iconFile, settingKey, type Harness } from "./harnesses";
 import { resolveExecutable } from "./resolveExecutable";
 import { hasShellIntegrationApi, type AgentStatus } from "./status";
+import { workspaceFolder } from "./workspaceContext";
 
 /** How long shell mode waits for shell integration before degrading. */
 export const SHELL_INTEGRATION_TIMEOUT_MS = 10_000;
@@ -24,23 +25,15 @@ export interface ResumeLaunch {
     readonly args: readonly string[];
 }
 
-/** Workspace folder backing the next agent launch (active editor first). */
-export function workspaceFolder(): vscode.WorkspaceFolder | undefined {
-    const activeUri = vscode.window.activeTextEditor?.document.uri;
-    return activeUri
-        ? vscode.workspace.getWorkspaceFolder(activeUri) ?? vscode.workspace.workspaceFolders?.[0]
-        : vscode.workspace.workspaceFolders?.[0];
-}
-
 /**
  * Shared resolution for a harness launch: settings (path + arguments + launch
  * mode), the workspace-aware cwd and the themed icon paths. Used by the open
  * command and the terminal profile provider so both stay on one code path.
  */
-export function resolveAgentLaunch(context: vscode.ExtensionContext, harness: Harness): AgentLaunch {
-    const folder = workspaceFolder();
-    const cwd = folder?.uri.fsPath ?? os.homedir();
-    const config = vscode.workspace.getConfiguration("multiHarness", folder?.uri);
+export function resolveAgentLaunch(context: vscode.ExtensionContext, harness: Harness, projectDirectory?: string): AgentLaunch {
+    const resource = projectDirectory ? vscode.Uri.file(projectDirectory) : workspaceFolder()?.uri;
+    const cwd = resource?.fsPath ?? os.homedir();
+    const config = vscode.workspace.getConfiguration("multiHarness", resource);
     const configuredPath = config.get<string>(settingKey(harness, "executablePath"), harness.defaultExecutable);
     const args: readonly string[] = config.get<string[]>(settingKey(harness, "arguments"), []);
     const configuredMode = config.get<string>("launchMode", "direct");
@@ -172,13 +165,12 @@ export async function openAgentTerminal(
         return;
     }
 
-    const launch = resolveAgentLaunch(context, harness);
+    const launch = resolveAgentLaunch(context, harness, resume?.cwd);
     if (resume) {
         launch.name = resume.terminalName;
-        launch.cwd = resume.cwd;
         launch.args = [...resume.args, ...(launch.args ?? [])];
     }
-    const executable = resolveExecutable(launch.executable, { rootFolder: workspaceFolder()?.uri.fsPath });
+    const executable = resolveExecutable(launch.executable, { rootFolder: launch.cwd });
     if (!executable) {
         await offerOpenSettings(launch.name, launch.executable, harness);
         return;
