@@ -6,6 +6,12 @@ Run fourteen AI coding-agent CLIs in native editor-area terminals. Select an age
 
 ![Workflow overview: select an agent, open a new terminal or resume a supported saved session, and switch between editor-area terminal tabs.](media/readme-overview.png)
 
+![Demo: single-click an agent to list its saved sessions for the project, then select a session to resume it in an editor-area terminal tab.](docs/images/demo.gif)
+
+<!-- Screenshot placeholder: uncomment once a clean capture exists in docs/images/ (see docs/images/README.md).
+![Several agent CLIs running side by side as editor-area terminal tabs.](docs/images/editor-terminals.png)
+-->
+
 ## Quick start
 
 1. Install the extension and the agent CLI you want to use. If the CLI is not on `PATH`, set `multiHarness.<id>.executablePath` to its absolute path.

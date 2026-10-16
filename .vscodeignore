@@ -1,5 +1,6 @@
 .vscode/**/**
 PUBLISHING.md
+docs/**/**
 src/**/**
 scripts/**/**
 .github/**/**
