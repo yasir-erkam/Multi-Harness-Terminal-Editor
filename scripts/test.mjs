@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import process from "node:process";
 import { DatabaseSync } from "node:sqlite";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(here);
@@ -600,6 +600,7 @@ module.exports = {
         createTerminal(options) {
             const terminal = {
                 name: options.name,
+                creationOptions: options,
                 shellIntegration: undefined,
                 shown: 0,
                 show() { this.shown += 1; },
@@ -1350,6 +1351,7 @@ try {
     const ompProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.ohMyPi");
     const workspaceProfile = ompProfile.provider.provideTerminalProfile({});
     assert.equal(workspaceProfile.options.cwd, folderB.uri.fsPath);
+    assert.equal(workspaceProfile.options.isTransient, false, "profile terminals allow persistence across reloads");
     assert.deepEqual(workspaceProfile.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "terminal profiles use the active editor group");
     assert.equal(workspaceProfile.options.shellPath, workspaceLaunch.shellPath);
     vscodeStub.workspace.workspaceFolders = [folderA];
@@ -1381,6 +1383,7 @@ try {
     });
     const projectBResume = vscodeStub.__calls.created.at(-1).options;
     assert.equal(projectBResume.cwd, folderB.uri.fsPath);
+    assert.equal(projectBResume.isTransient, false, "resumed conversation terminals allow persistence across reloads");
     assert.equal(projectBResume.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", "workspace-omp"));
     assert.deepEqual(projectBResume.shellArgs, ["--resume", ompFile, "--project", folderB.uri.fsPath]);
     // External recorded directories use their own resource scope, not the
@@ -1554,6 +1557,7 @@ try {
     await ohMyPi.handler();
     const directOptions = vscodeStub.__calls.created.at(-1)?.options;
     assert.equal(directOptions?.shellPath, fakeCli, "direct mode must still set shellPath");
+    assert.equal(directOptions.isTransient, false, "direct terminals allow persistence across reloads");
     assert.equal(vscodeStub.__calls.statusItems.length, 0, "direct mode must not create a status-bar item");
     assert.equal(vscodeStub.__calls.infos.length, 0, "direct mode must not announce shell-integration fallback");
     passed += 1;
@@ -1568,6 +1572,7 @@ try {
     await new Promise((resolve) => setImmediate(resolve));
     const shellOptions = vscodeStub.__calls.created.at(-1)?.options;
     assert.ok(shellOptions, "shell mode must create a terminal");
+    assert.equal(shellOptions.isTransient, false, "shell terminals allow persistence across reloads");
     assert.equal(vscodeStub.window.tabGroups.all.length, 1, "shell-mode sessions join existing editor splits");
     assert.equal(shellOptions.shellPath, undefined, "shell mode must not override shellPath");
     assert.deepEqual(shellOptions.location, { viewColumn: vscodeStub.ViewColumn.Active }, "shell launches use the active editor group");
@@ -1679,9 +1684,57 @@ try {
     assert.equal(vscodeStub.__calls.terminalCloseHandlers.length, 0);
     assert.equal(vscodeStub.__calls.activeTerminalHandlers.length, 0);
 
-    // A new activation must restore favorites without depending on old module state.
+    // Recreate API objects and reload the bundle, as an extension-host restart
+    // does. Only VS Code's persisted creation options survive, not object identity.
+    const restoredTerminal = (options, name = options.name) => ({
+        name, creationOptions: JSON.parse(JSON.stringify(options)), shown: 0,
+        show() { this.shown += 1; }, dispose() {},
+    });
+    const restoredConversation = restoredTerminal(resumed.options, "renamed after reload");
+    const restoredSameTitle = restoredTerminal(sameTitleTerminal.options, restoredConversation.name);
+    const restoredShell = restoredTerminal(shellOptions, "renamed shell");
+    const restoredDirect = restoredTerminal(directOptions, "renamed direct");
+    const invalidMetadata = restoredTerminal({ env: { MULTI_HARNESS_TERMINAL_IDENTITY: "{broken" } }, "Oh My Pi");
+    const foreignTerminal = restoredTerminal({ name: "Oh My Pi" });
+    vscodeStub.window.terminals = [restoredSameTitle, restoredConversation, restoredDirect,
+        invalidMetadata, foreignTerminal];
+    const statusBeforeReload = vscodeStub.__calls.statusItems.length;
+    delete requireFrom.cache[requireFrom.resolve(join(activationDir, "extension.cjs"))];
+    const freshExtension = requireFrom(join(activationDir, "extension.cjs"));
     const reloadedContext = { ...context, subscriptions: [] };
-    extension.activate(reloadedContext);
+    freshExtension.activate(reloadedContext);
+    assert.equal(vscodeStub.__calls.statusItems.length, statusBeforeReload, "direct, unmarked and malformed terminals do not acquire shell tracking");
+    const countBeforeRestore = vscodeStub.__calls.created.length;
+    const primeHarness = agents.find((agent) => agent.id === "primeAgent");
+    await resumeLauncher.openAgentTerminal(reloadedContext, primeHarness, undefined, {
+        sessionId: "recorded-prime", terminalName: "a changed conversation title", cwd: projectDirectory, args: [],
+    });
+    assert.equal(vscodeStub.__calls.created.length, countBeforeRestore, "cold reload reuses the saved identity without starting a process");
+    assert.equal(restoredConversation.shown, 1);
+    assert.equal(restoredSameTitle.shown, 0, "identical titles cannot select another conversation");
+    await resumeLauncher.openAgentTerminal(reloadedContext, agents.find((agent) => agent.id === "ohMyPi"));
+    assert.equal(restoredDirect.shown, 1, "renamed direct terminals retain agent identity");
+    assert.equal(foreignTerminal.shown, 0);
+
+    // A terminal can arrive after activation. Restoring tracking must never
+    // send or execute the agent command a second time.
+    const sendsBeforeRestore = vscodeStub.__calls.sendTexts.length;
+    vscodeStub.window.terminals.push(restoredShell);
+    for (const handler of vscodeStub.__calls.terminalOpenHandlers) handler(restoredShell);
+    for (const handler of vscodeStub.__calls.terminalOpenHandlers) handler(restoredShell);
+    assert.equal(vscodeStub.__calls.statusItems.length, statusBeforeReload + 1, "late shell restoration registers tracking once");
+    assert.equal(vscodeStub.__calls.sendTexts.length, sendsBeforeRestore);
+    assert.equal(vscodeStub.__calls.created.length, countBeforeRestore);
+    const restoredStatus = vscodeStub.__calls.statusItems.at(-1);
+    vscodeStub.__calls.executionEndHandlers.at(-1)({ terminal: restoredShell, execution: {}, exitCode: 0 });
+    assert.ok(restoredStatus.text.includes("— ?s (exit 0)"), "commands started before reload report unknown duration");
+    const restoredExecution = {};
+    vscodeStub.__calls.executionStartHandlers.at(-1)({ terminal: restoredShell, execution: restoredExecution });
+    assert.equal(restoredStatus.text, "$(sync~spin) Oh My Pi");
+    vscodeStub.__calls.executionEndHandlers.at(-1)({ terminal: restoredShell, execution: restoredExecution, exitCode: 0 });
+    assert.ok(!restoredStatus.text.includes("?s"), "new commands retain duration tracking after reload");
+    passed += 1;
+    console.log("ok: cold reload and late restoration preserve conversation identity and shell tracking without relaunching agents");
     const reloadedView = vscodeStub.__calls.views.filter((view) => view.id === "multiHarness.agents").at(-1);
     assert.equal(reloadedView.provider.getChildren()[0].id, "codex");
     assert.equal(reloadedView.provider.getTreeItem(codex).contextValue, "favoriteAgent");
@@ -1691,6 +1744,65 @@ try {
     }
     passed += 1;
     console.log("ok: favorites survive extension reactivation through persisted global state");
+    const startupContext = { ...context, subscriptions: [] };
+    const beforeStartupRestore = vscodeStub.__calls.statusItems.length;
+    freshExtension.activate(startupContext);
+    assert.equal(vscodeStub.__calls.statusItems.length, beforeStartupRestore + 1, "shell terminals already present at activation regain tracking");
+    for (const subscription of startupContext.subscriptions) subscription.dispose();
+    vscodeStub.window.terminals = [];
+
+    if (process.platform === "linux") {
+        await build({
+            entryPoints: [join(projectRoot, "src", "terminalIdentity.ts")],
+            outfile: join(activationDir, "identity.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent",
+        });
+        const identities = requireFrom(join(activationDir, "identity.cjs"));
+        const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+            env: { ...process.env, ...resumed.options.env }, stdio: "ignore",
+        });
+        const shellChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+            env: { ...process.env, ...shellOptions.env }, stdio: "ignore",
+        });
+        const procContext = { ...context, subscriptions: [] };
+        try {
+            await Promise.all([child, shellChild].map((process) => new Promise((resolve, reject) => {
+                process.once("spawn", resolve); process.once("error", reject);
+            })));
+            // Browser reconnection can return no original launch options at all.
+            const procConversation = restoredTerminal({}, "renamed reconnected conversation");
+            procConversation.processId = Promise.resolve(child.pid);
+            const procShell = restoredTerminal({}, "renamed reconnected shell");
+            procShell.processId = Promise.resolve(shellChild.pid);
+            vscodeStub.window.terminals = [procConversation, procShell];
+            const countBeforeProc = vscodeStub.__calls.created.length;
+            const statusBeforeProc = vscodeStub.__calls.statusItems.length;
+            freshExtension.activate(procContext);
+            await resumeLauncher.openAgentTerminal(procContext, primeHarness, undefined, {
+                sessionId: "recorded-prime", terminalName: "changed title", cwd: projectDirectory, args: [],
+            });
+            assert.equal(vscodeStub.__calls.created.length, countBeforeProc);
+            assert.equal(procConversation.shown, 1, "Linux process metadata reuses a conversation without creation options");
+            for (let attempt = 0; attempt < 100 && vscodeStub.__calls.statusItems.length === statusBeforeProc; attempt++) {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            assert.equal(vscodeStub.__calls.statusItems.length, statusBeforeProc + 1, "Linux shell process metadata restores tracking");
+            assert.equal((await identities.restoreTerminalIdentity(procConversation)).sessionId, "recorded-prime");
+            for (const value of [null, "{broken", "[]", '{"version":2}', '{"version":1,"harnessId":"unknown","launchMode":"shell"}']) {
+                assert.equal(await identities.restoreTerminalIdentity(restoredTerminal({ env: { MULTI_HARNESS_TERMINAL_IDENTITY: value } })), undefined);
+            }
+            assert.equal(await identities.restoreTerminalIdentity({ creationOptions: {}, processId: Promise.resolve(-1) }), undefined);
+            assert.equal(await identities.restoreTerminalIdentity({ creationOptions: {}, processId: Promise.resolve(2147483647) }), undefined, "vanished processes fail gracefully");
+            passed += 1;
+            console.log("ok: real Linux processes restore conversation identity and shell tracking when code-server omits launch metadata");
+        } finally {
+            for (const subscription of procContext.subscriptions) subscription.dispose();
+            const exits = [child, shellChild].map((process) => process.exitCode === null
+                ? new Promise((resolve) => process.once("exit", resolve)) : Promise.resolve());
+            child.kill(); shellChild.kill();
+            await Promise.all(exits);
+            vscodeStub.window.terminals = [];
+        }
+    }
 } catch (error) {
     console.error(`FAIL: headless activation test — ${error.message}`);
     process.exit(1);

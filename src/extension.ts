@@ -68,5 +68,5 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-    // Nothing to clean up; transient terminals die with the window.
+    // Terminal persistence and process reconnection are managed by VS Code.
 }

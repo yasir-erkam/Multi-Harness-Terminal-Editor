@@ -62,6 +62,7 @@ const commandIdList = commands.map((command) => command.command);
 check(commandIdList.length === allCommandIds.length, "all agent and utility commands are contributed");
 check(new Set(commandIdList).size === commandIdList.length, "no duplicate command ids");
 const activationEvents = manifest.activationEvents ?? [];
+check(activationEvents.includes("onStartupFinished"), "startup activates terminal restoration even when the sidebar is hidden");
 const activityContainer = manifest.contributes.viewsContainers?.activitybar?.find((container) => container.id === "multiHarness");
 check(activityContainer?.title === "%viewContainer.title%" && typeof nls["viewContainer.title"] === "string", "Activity Bar container uses its localized title");
 check(typeof activityContainer?.icon === "string" && existsSync(join(root, activityContainer.icon)), "Activity Bar icon exists");
@@ -275,7 +276,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.8.4", "manifest version matches the 0.8.4 development version");
+check(manifest.version === "0.8.5", "manifest version matches the 0.8.5 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

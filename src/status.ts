@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
-import { type Harness, harnessForTerminalName } from "./harnesses";
+import { HARNESSES, type Harness, harnessForTerminalName } from "./harnesses";
+import { restoreTerminalIdentity, terminalIdentity } from "./terminalIdentity";
 
 /** How long a finished status stays visible before the item hides itself. */
 export const STATUS_HIDE_DELAY_MS = 30_000;
@@ -29,7 +30,7 @@ export function hasShellIntegrationApi(): boolean {
  *
  * All wiring is lazy: nothing is created or subscribed until the first
  * shell-mode terminal is tracked, so direct mode never touches the status bar.
- * Terminals are tracked by identity (a Set of the objects we created), not by
+ * Terminals are tracked by identity (a WeakMap of marked terminal objects), not by
  * name, so a terminal the user opened themselves can never drive the item.
  */
 export class AgentStatus implements vscode.Disposable {
@@ -42,6 +43,9 @@ export class AgentStatus implements vscode.Disposable {
 
     /** Remember a shell-mode terminal and enable the status surface lazily. */
     track(terminal: vscode.Terminal, harness: Harness): void {
+        if (this.tracked.has(terminal)) {
+            return;
+        }
         this.tracked.set(terminal, harness);
         if (!this.item) {
             this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
@@ -114,6 +118,32 @@ export class AgentStatus implements vscode.Disposable {
 export function registerAgentStatus(context: vscode.ExtensionContext): AgentStatus {
     const status = new AgentStatus();
     context.subscriptions.push(status);
+    let disposed = false;
+    const trackRestored = (terminal: vscode.Terminal): void => {
+        const identity = terminalIdentity(terminal);
+        if (terminal.exitStatus || identity?.launchMode !== "shell" || !hasShellIntegrationApi()) {
+            return;
+        }
+        const harness = HARNESSES.find((candidate) => candidate.id === identity.harnessId);
+        if (harness) {
+            status.track(terminal, harness);
+        }
+    };
+    const restore = (terminal: vscode.Terminal): void => {
+        if (terminalIdentity(terminal)) {
+            trackRestored(terminal);
+        } else {
+            void restoreTerminalIdentity(terminal).then(() => {
+                if (!disposed && vscode.window.terminals.includes(terminal)) {
+                    trackRestored(terminal);
+                }
+            });
+        }
+    };
+    context.subscriptions.push({ dispose: () => { disposed = true; } });
+    // Restoration can happen before activation or later as terminals reconnect.
+    context.subscriptions.push(vscode.window.onDidOpenTerminal(restore));
+    vscode.window.terminals.forEach(restore);
     context.subscriptions.push(vscode.window.onDidCloseTerminal((terminal) => status.onTerminalClosed(terminal)));
     return status;
 }

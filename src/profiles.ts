@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { type Harness } from "./harnesses";
 import { resolveAgentLaunch } from "./launch";
 import { resolveExecutable } from "./resolveExecutable";
+import { terminalIdentityEnv } from "./terminalIdentity";
 
 /**
  * Terminal profile provider for one harness: resolves the configured
@@ -25,7 +26,8 @@ export function registerAgentProfile(
                 shellArgs: launch.args,
                 cwd: launch.cwd,
                 location: { viewColumn: vscode.ViewColumn.Active },
-                isTransient: true,
+                isTransient: false,
+                env: terminalIdentityEnv(harness, "direct"),
                 iconPath: launch.iconPath,
             });
         },

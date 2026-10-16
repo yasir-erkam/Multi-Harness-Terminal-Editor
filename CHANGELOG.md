@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.5
+
+- Allow agent terminals to persist across window reloads and browser reconnections when terminal persistence is enabled, including direct launches, shell launches, saved conversations and terminal profiles.
+- Preserve saved-conversation identity independently of terminal titles so restored sessions reuse the correct terminal. On Linux/code-server, recover identity from the running process when restored launch options are unavailable.
+- Restore shell status tracking for terminals present at startup or reconnected later without rerunning agent commands. Commands whose start event was missed show an unknown duration. Existing terminals must be reopened once to receive the new persistence and identity options.
+
 ## 0.8.4
 
 - Show Antigravity CLI saved conversations for the current project in native and card layouts, reading its SQLite summary index locally and resuming the selected conversation with `agy --conversation <id>`.
