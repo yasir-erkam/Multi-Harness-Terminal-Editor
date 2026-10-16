@@ -5,6 +5,7 @@
   "view.sessions.name": "Açık Terminaller",
   "view.sessions.welcome": "Açık ajan terminali yok. Başlatmak için Ajanlar görünümünden bir ajan seçin.\n[Ajan Aç...](command:multiHarness.openAgentPicker)",
   "command.focusSession.title": "Ajan Oturumuna Geç",
+  "command.closeSession.title": "Terminali Kapat",
   "command.addFavorite.title": "Favorilere Ekle",
   "command.removeFavorite.title": "Favorilerden Çıkar",
   "viewContainer.title": "Multi-Harness YEÖ",

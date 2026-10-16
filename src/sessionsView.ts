@@ -49,6 +49,7 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
         getTreeItem(session) {
             return {
                 id: session.id,
+                contextValue: "openTerminal",
                 label: sessionLabel(session),
                 description: session.terminal === vscode.window.activeTerminal ? "●" : undefined,
                 iconPath: {
@@ -69,6 +70,11 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
         vscode.commands.registerCommand("multiHarness.focusSession", async (terminal?: vscode.Terminal) => {
             if (terminal && vscode.window.terminals.includes(terminal)) {
                 await showEditorTerminal(terminal);
+            }
+        }),
+        vscode.commands.registerCommand("multiHarness.closeSession", (session?: AgentSession) => {
+            if (session && getSessions().includes(session)) {
+                session.terminal.dispose();
             }
         }),
         vscode.window.onDidOpenTerminal(() => changes.fire()),

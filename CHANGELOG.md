@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.2
+
+- Close individual Open Terminals directly from list and card layouts, with English and Turkish labels. Closing a terminal stops its running process and keeps saved conversation files.
+
 ## 0.8.1
 
 - Order agents by a documented adoption snapshot across the native list, cards, pickers, terminal profile contributions and optional editor buttons. Keep favorites first and place agents without comparable usage data last alphabetically.

@@ -210,6 +210,7 @@ function renderSessions() {
         sessions.body.append(element("p", "empty", t(query ? "sidebar.noResults" : "sidebar.noSessions")));
     }
     for (const session of matching) {
+        const container = element("div", "terminal-row");
         const row = button(`session${session.active ? " active" : ""}`, undefined, "focus", session.id,
             `${t("command.focusSession.title")}: ${session.label}`);
         row.append(element("span", "session-dot", "●"), element("span", "session-name", session.label));
@@ -217,7 +218,10 @@ function renderSessions() {
             row.setAttribute("aria-current", "true");
             row.append(element("span", "active-label", t("sidebar.active")));
         }
-        sessions.body.append(row);
+        const close = button("icon-button close-terminal", "×", "close", session.id,
+            `${t("command.closeSession.title")}: ${session.label}`);
+        container.append(row, close);
+        sessions.body.append(container);
     }
 }
 

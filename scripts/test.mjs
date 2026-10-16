@@ -825,8 +825,8 @@ try {
     assert.deepEqual(sessionsView.provider.getChildren(), []);
     let sessionRefreshes = 0;
     sessionsView.provider.onDidChangeTreeData(() => { sessionRefreshes += 1; });
-    const firstPrime = { name: "Prime Agent", shown: 0, show() { this.shown += 1; } };
-    const secondPrime = { name: "Prime Agent", shown: 0, show() { this.shown += 1; } };
+    const firstPrime = { name: "Prime Agent", shown: 0, disposed: 0, show() { this.shown += 1; }, dispose() { this.disposed += 1; } };
+    const secondPrime = { name: "Prime Agent", shown: 0, disposed: 0, show() { this.shown += 1; }, dispose() { this.disposed += 1; } };
     vscodeStub.window.terminals = [firstPrime, { name: "bash" }, secondPrime];
     vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(secondPrime));
     const openSessions = sessionsView.provider.getChildren();
@@ -864,6 +864,20 @@ try {
     assert.equal(sessionsView.provider.getChildren().length, 1);
     assert.equal(sessionsView.provider.getTreeItem(openSessions[0]).label, "Prime Agent");
     assert.equal(sessionRefreshes, 3, "open, focus and close events refresh sessions");
+    const closeSession = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.closeSession");
+    assert.equal(sessionItem.contextValue, "openTerminal");
+    vscodeStub.window.terminals = [firstPrime, secondPrime];
+    closeSession.handler(openSessions[1]);
+    assert.equal(secondPrime.disposed, 1, "closing a row targets the exact terminal when names match");
+    assert.equal(firstPrime.disposed, 0, "closing a row leaves the other terminal running");
+    vscodeStub.window.terminals = [firstPrime];
+    vscodeStub.__calls.terminalCloseHandlers.forEach((handler) => handler(secondPrime));
+    assert.deepEqual(sessionsView.provider.getChildren(), [openSessions[0]], "close event removes the closed terminal row");
+    closeSession.handler(openSessions[1]);
+    closeSession.handler();
+    closeSession.handler({ terminal: firstPrime });
+    assert.equal(secondPrime.disposed, 1, "stale close actions are ignored");
+    assert.equal(firstPrime.disposed, 0, "unrecognized close arguments cannot close terminals");
     vscodeStub.window.terminals = [];
     vscodeStub.window.activeTerminal = undefined;
     passed += 1;
@@ -1091,9 +1105,13 @@ try {
     vscodeStub.__calls.executed.length = 0;
     await receiveCardMessage({ action: "focus", id: cardSession.id });
     assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.focusSession", secondPrime]);
+    vscodeStub.__calls.executed.length = 0;
+    await receiveCardMessage({ action: "close", id: cardSession.id });
+    assert.equal(vscodeStub.__calls.executed[0], "multiHarness.closeSession");
+    assert.equal(vscodeStub.__calls.executed[1].terminal, secondPrime, "cards close the exact terminal by session identity");
     vscodeStub.window.terminals = [];
     vscodeStub.__calls.executed.length = 0;
-    for (const message of [null, {}, {action: "open", id: "unknown"}, {action: "focus", id: cardSession.id}, {action: "resume", id: "primeAgent:unlisted"}, {action: "executeCommand", id: "workbench.action.closeWindow"}]) {
+    for (const message of [null, {}, {action: "open", id: "unknown"}, {action: "focus", id: cardSession.id}, {action: "close", id: cardSession.id}, {action: "close", id: "unknown"}, {action: "resume", id: "primeAgent:unlisted"}, {action: "executeCommand", id: "workbench.action.closeWindow"}]) {
         await receiveCardMessage(message);
     }
     assert.deepEqual(vscodeStub.__calls.executed, [], "unrecognized messages and stale sessions cannot execute commands");

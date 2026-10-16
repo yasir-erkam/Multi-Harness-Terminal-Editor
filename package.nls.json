@@ -5,6 +5,7 @@
   "view.sessions.name": "Open Terminals",
   "view.sessions.welcome": "No open agent terminals. Select an agent in the Agents view to start one.\n[Open Agent...](command:multiHarness.openAgentPicker)",
   "command.focusSession.title": "Focus Agent Session",
+  "command.closeSession.title": "Close Terminal",
   "command.addFavorite.title": "Add to Favorites",
   "command.removeFavorite.title": "Remove from Favorites",
   "viewContainer.title": "Multi-Harness YEÖ",

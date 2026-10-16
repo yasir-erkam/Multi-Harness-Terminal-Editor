@@ -112,10 +112,14 @@ export function registerCardsView(
                         }
                     } else if (action === "settings") {
                         await vscode.commands.executeCommand("multiHarness.openSettings");
-                    } else if (action === "focus" && typeof id === "string") {
+                    } else if ((action === "focus" || action === "close") && typeof id === "string") {
                         const session = sessions.getSessions().find((candidate) => candidate.id === id);
                         if (session) {
-                            await vscode.commands.executeCommand("multiHarness.focusSession", session.terminal);
+                            if (action === "close") {
+                                await vscode.commands.executeCommand("multiHarness.closeSession", session);
+                            } else {
+                                await vscode.commands.executeCommand("multiHarness.focusSession", session.terminal);
+                            }
                         }
                     } else if (typeof id === "string") {
                         const harness = HARNESSES.find((candidate) => candidate.id === id);

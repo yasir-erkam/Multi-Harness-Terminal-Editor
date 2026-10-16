@@ -25,7 +25,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSidebarLayout", "multiHarness.toggleSessionSelectionMode", "multiHarness.cancelSessionSelection", "multiHarness.toggleSessionSelection", "multiHarness.selectAllSessions", "multiHarness.deleteSession", "multiHarness.deleteSelectedSessions"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.closeSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSidebarLayout", "multiHarness.toggleSessionSelectionMode", "multiHarness.cancelSessionSelection", "multiHarness.toggleSessionSelection", "multiHarness.selectAllSessions", "multiHarness.deleteSession", "multiHarness.deleteSelectedSessions"];
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -73,6 +73,10 @@ check(sessionsView?.name === "%view.sessions.name%" && typeof nls["view.sessions
 check(activationEvents.includes("onView:multiHarness.sessions"), "opening the sessions view activates the extension");
 check(manifest.contributes.viewsWelcome?.some((entry) => entry.view === "multiHarness.sessions" && entry.contents === "%view.sessions.welcome%") && typeof nls["view.sessions.welcome"] === "string", "sessions view has a localized empty state");
 check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.focusSession" && entry.when === "false"), "session focus command is hidden from the palette because it requires a terminal");
+check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.closeSession" && entry.when === "false"), "terminal close command is hidden from the palette because it requires a session");
+for (const group of ["inline", "terminal"]) {
+    check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.closeSession" && entry.when === "view == multiHarness.sessions && viewItem == openTerminal" && entry.group === group), "open terminal rows expose a close action in " + group);
+}
 for (const id of allCommandIds) {
     check(commandIdList.includes(id), `command ${id} exists`);
     check(activationEvents.includes(`onCommand:${id}`), `activation event onCommand:${id} exists`);
@@ -89,6 +93,7 @@ for (const command of commands) {
 for (const command of commands) {
     const icon = command.icon;
     const sessionIcons = {
+        "multiHarness.closeSession": "$(close)",
         "multiHarness.toggleSessionSelectionMode": "$(checklist)",
         "multiHarness.cancelSessionSelection": "$(close)",
         "multiHarness.toggleSessionSelection": "$(check)",
@@ -268,7 +273,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.8.1", "manifest version matches the 0.8.1 development version");
+check(manifest.version === "0.8.2", "manifest version matches the 0.8.2 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

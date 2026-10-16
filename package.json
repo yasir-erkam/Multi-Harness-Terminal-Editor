@@ -2,7 +2,7 @@
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI) in native editor-area terminal tabs.",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -52,6 +52,7 @@
   "activationEvents": [
     "onView:multiHarness.sessions",
     "onCommand:multiHarness.focusSession",
+    "onCommand:multiHarness.closeSession",
     "onCommand:multiHarness.addFavorite",
     "onCommand:multiHarness.removeFavorite",
     "onCommand:multiHarness.openSettings",
@@ -155,6 +156,12 @@
         "command": "multiHarness.focusSession",
         "title": "%command.focusSession.title%",
         "category": "%category%"
+      },
+      {
+        "command": "multiHarness.closeSession",
+        "title": "%command.closeSession.title%",
+        "category": "%category%",
+        "icon": "$(close)"
       },
       {
         "command": "multiHarness.addFavorite",
@@ -378,6 +385,10 @@
           "when": "false"
         },
         {
+          "command": "multiHarness.closeSession",
+          "when": "false"
+        },
+        {
           "command": "multiHarness.addFavorite",
           "when": "false"
         },
@@ -434,6 +445,16 @@
           "command": "multiHarness.deleteSession",
           "when": "view == multiHarness.savedSessions && viewItem == savedSession && !multiHarness.deletingSessions",
           "group": "session"
+        },
+        {
+          "command": "multiHarness.closeSession",
+          "when": "view == multiHarness.sessions && viewItem == openTerminal",
+          "group": "inline"
+        },
+        {
+          "command": "multiHarness.closeSession",
+          "when": "view == multiHarness.sessions && viewItem == openTerminal",
+          "group": "terminal"
         }
       ],
       "view/title": [

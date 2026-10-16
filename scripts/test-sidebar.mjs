@@ -91,6 +91,29 @@ launch.dispatch("keydown", { key: "Enter", preventDefault() {} });
 assert.equal(messages[0].action, "open", "Enter remains an explicit keyboard launch");
 console.log("ok: card single click selects history; refresh preserves double click and keyboard launch");
 
+const terminals = [
+    { id: "terminal-1", label: "Prime Agent #1", active: false },
+    { id: "terminal-2", label: "Prime Agent #2", active: true },
+];
+receive({ data: { ...state, sessions: terminals } });
+const closeButtons = app.querySelectorAll(".close-terminal");
+assert.equal(closeButtons.length, 2, "each open terminal has a close button");
+assert.equal(closeButtons[1].attributes["aria-label"], "Close Terminal: Prime Agent #2");
+assert.equal(closeButtons[1].parent, app.querySelectorAll(".session")[1].parent);
+assert.equal(closeButtons[1].closest(".session"), undefined, "close is separate from the focus button");
+messages.length = 0;
+closeButtons[1].dispatch("click");
+assert.equal(messages.length, 1);
+assert.equal(messages[0].action, "close");
+assert.equal(messages[0].id, "terminal-2", "close targets the selected terminal identity");
+receive({ data: { ...state, sessions: [terminals[0]] } });
+assert.equal(app.querySelectorAll(".close-terminal").length, 1, "closed terminals disappear after refresh");
+messages.length = 0;
+app.querySelector(".session").dispatch("click");
+assert.equal(messages[0].action, "focus", "the remaining terminal can still be focused");
+assert.equal(messages[0].id, "terminal-1");
+console.log("ok: each card terminal closes by identity with an accessible button separate from focus");
+
 const savedRows = [
     { key: "codex:first", title: "First conversation", harness: "Codex", project: "example", cwd: "/example", modified: Date.now() },
     { key: "codex:second", title: "Second conversation", harness: "Codex", project: "example", cwd: "/example", modified: Date.now() },
