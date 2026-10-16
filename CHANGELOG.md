@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.4
+
+- Show Antigravity CLI saved conversations for the current project in native and card layouts, reading its SQLite summary index locally and resuming the selected conversation with `agy --conversation <id>`.
+- Add an Antigravity session directory setting with English and Turkish descriptions. Skip subagent, empty, malformed and missing conversations; resolve encoded workspace paths and symlink aliases.
+- Keep Antigravity history read-only and disable its deletion controls. Other session providers retain their existing deletion workflow. Antigravity history requires `node:sqlite` in the extension host.
+
 ## 0.8.3
 
 - Show saved conversation titles in resumed terminal tabs instead of session IDs, while reusing terminals by saved identity so duplicate titles stay separate.

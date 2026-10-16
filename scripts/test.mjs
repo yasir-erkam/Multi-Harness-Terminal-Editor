@@ -7,6 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import process from "node:process";
+import { DatabaseSync } from "node:sqlite";
 import { execFileSync } from "node:child_process";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -276,7 +277,7 @@ const { validateSessionDeletion } = await import(pathToFileURL(join(outdir, "del
 const deletionDir = mkdtempSync(join(tmpdir(), "mhte-delete-"));
 try {
     const roots = sessionRoots(deletionDir, {});
-    for (const root of roots) {
+    for (const root of roots.filter((root) => root.harnessId !== "antigravity")) {
         mkdirSync(root.directory, { recursive: true });
         const id = `delete-${root.harnessId}`;
         const header = root.harnessId === "codex" ? { type: "session_meta", payload: { id, cwd: deletionDir } }
@@ -313,7 +314,7 @@ try {
 }
 const savedDir = mkdtempSync(join(tmpdir(), "mhte-saved-"));
 try {
-    const roots = sessionRoots(savedDir, {});
+    const roots = sessionRoots(savedDir, {}).filter((root) => root.harnessId !== "antigravity");
     const fixture = (harnessId, id, cwd, title, modified) => {
         const root = roots.find((candidate) => candidate.harnessId === harnessId);
         mkdirSync(root.directory, { recursive: true });
@@ -418,6 +419,59 @@ try {
 } finally {
     rmSync(savedDir, { recursive: true, force: true });
 }
+
+function antigravityFixture(directory, cwd) {
+    mkdirSync(join(directory, "conversations"), { recursive: true });
+    const db = new DatabaseSync(join(directory, "conversation_summaries.db"));
+    db.exec("CREATE TABLE conversation_summaries (conversation_id TEXT PRIMARY KEY, title TEXT, preview TEXT, last_modified_time TEXT, workspace_uris TEXT, parent_conversation_id TEXT, nesting_depth INTEGER, step_count INTEGER)");
+    const insert = db.prepare("INSERT INTO conversation_summaries VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    const add = (id, overrides = {}) => {
+        const row = { title: "Antigravity conversation", preview: "Preview", time: "2026-10-16 16:50:09.831811299+00:00", uris: JSON.stringify([pathToFileURL(cwd).href]), parent: "", depth: 0, steps: 3, ...overrides };
+        insert.run(id, row.title, row.preview, row.time, row.uris, row.parent, row.depth, row.steps);
+        if (!id.includes("/")) writeFileSync(join(directory, "conversations", id + ".db"), "fixture trajectory");
+    };
+    return { db, add };
+}
+const agyDir = mkdtempSync(join(tmpdir(), "mhte-agy-"));
+try {
+    const cwd = join(agyDir, "project with spaces");
+    mkdirSync(cwd);
+    const directory = join(agyDir, "store");
+    const { db, add } = antigravityFixture(directory, cwd);
+    try {
+        add("main");
+        add("preview", { title: "", time: "2026-10-15 16:50:09+00:00" });
+        add("child", { parent: "main", depth: 1 });
+        add("empty", { steps: 0 });
+        add("other-project", { uris: JSON.stringify([pathToFileURL(agyDir).href]) });
+        add("multi-workspace", { uris: JSON.stringify([pathToFileURL(agyDir).href, pathToFileURL(cwd).href]) });
+        add("malformed", { uris: "not JSON" });
+        add("remote", { uris: '["https://example.com"]' });
+        add("../escape");
+        add("missing");
+        rmSync(join(directory, "conversations", "missing.db"));
+    } finally { db.close(); }
+    const roots = [{ harnessId: "antigravity", directory }];
+    const scan = await scanSavedSessions(roots, 100, { harnessId: "antigravity", cwd });
+    assert.deepEqual(scan.unreadable, []);
+    assert.deepEqual(scan.sessions.map((session) => session.id).sort(), ["main", "multi-workspace", "preview"]);
+    assert.equal(scan.sessions[0].modified, Date.parse("2026-10-16T16:50:09.831Z"));
+    assert.equal(scan.sessions.find((session) => session.id === "preview").title, "Preview");
+    assert.deepEqual(resumeArguments(scan.sessions[0]), ["--conversation", scan.sessions[0].id]);
+    assert.equal((await scanSavedSessions(roots, 1, { harnessId: "antigravity", cwd })).sessions.length, 1);
+    const alias = join(agyDir, "alias");
+    symlinkSync(cwd, alias);
+    assert.equal((await scanSavedSessions(roots, 100, { harnessId: "antigravity", cwd: alias })).sessions.length, 3);
+    assert.equal(sessionRoots(agyDir, {}).find((root) => root.harnessId === "antigravity").directory, join(agyDir, ".gemini", "antigravity-cli"));
+    const before = readFileSync(join(directory, "conversation_summaries.db"));
+    await scanSavedSessions(roots);
+    assert.deepEqual(readFileSync(join(directory, "conversation_summaries.db")), before, "discovery leaves the index unchanged");
+    writeFileSync(join(directory, "conversation_summaries.db"), "corrupt index");
+    assert.deepEqual(await scanSavedSessions(roots), { sessions: [], unreadable: ["antigravity"] });
+    assert.deepEqual(await scanSavedSessions([{ harnessId: "antigravity", directory: join(agyDir, "missing") }]), { sessions: [], unreadable: [] });
+    passed += 1;
+    console.log("ok: Antigravity SQLite history filters projects and children, decodes file URIs, resumes by ID and tolerates unavailable indexes");
+} finally { rmSync(agyDir, { recursive: true, force: true }); }
 
 // Headless activation test.
 //
@@ -817,7 +871,7 @@ try {
     } finally {
         vscodeStub.window.showQuickPick = originalQuickPick;
     }
-    assert.equal(sessionRoots().some((root) => root.harnessId === "antigravity"), false);
+    assert.equal(sessionRoots().some((root) => root.harnessId === "antigravity"), true);
     passed += 1;
     console.log("ok: Antigravity picker, command, profile and favorites preserve custom path and arguments");
 
@@ -887,7 +941,7 @@ try {
     // in their recorded project instead of revealing an unrelated agent tab.
     const savedView = vscodeStub.__calls.views.find((view) => view.id === "multiHarness.savedSessions");
     const savedRoot = join(activationDir, "saved-conversations");
-    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent"]) {
+    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity"]) {
         vscodeStub.__fixture.multiHarness[id] ??= {};
         vscodeStub.__fixture.multiHarness[id].sessionDirectory = join(savedRoot, id);
     }
@@ -985,6 +1039,23 @@ try {
     await selectSessionAgent.handler("antigravity");
     assert.deepEqual(await savedView.provider.getChildren(), [], "Antigravity never displays another agent's saved history");
     const englishStrings = JSON.parse(readFileSync(join(projectRoot, "package.nls.json"), "utf8"));
+    assert.equal(savedView.message, undefined);
+    const agyStore = vscodeStub.__fixture.multiHarness.antigravity.sessionDirectory;
+    const agyHistory = antigravityFixture(agyStore, projectDirectory);
+    agyHistory.add("recorded-agy");
+    agyHistory.db.close();
+    refreshSaved.handler();
+    const agySaved = (await savedView.provider.getChildren())[0];
+    assert.equal(agySaved.id, "recorded-agy");
+    assert.equal(savedView.provider.getTreeItem(agySaved).contextValue, "savedSessionReadOnly");
+    const beforeAgyResume = vscodeStub.__calls.created.length;
+    await resume.handler({ harnessId: "antigravity", id: "recorded-agy" });
+    assert.equal(vscodeStub.__calls.created.length, beforeAgyResume + 1);
+    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--conversation", "recorded-agy", ...agyArgs]);
+    assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
+    rmSync(agyStore, { recursive: true, force: true });
+    refreshSaved.handler();
+    await selectSessionAgent.handler("aider");
     assert.equal(savedView.message, englishStrings["sessionScope.unsupported"]);
     await selectSessionAgent.handler("primeAgent");
     assert.equal((await savedView.provider.getChildren()).length, 1);
@@ -1083,7 +1154,7 @@ try {
     await selectSessionAgent.handler("antigravity");
     await receiveCardMessage({ action: "ready" });
     assert.equal(cardMessages.at(-1).scope.agentId, "antigravity");
-    assert.equal(cardMessages.at(-1).scope.message, JSON.parse(readFileSync(join(projectRoot, "package.nls.json"), "utf8"))["sessionScope.unsupported"]);
+    assert.equal(cardMessages.at(-1).scope.message, undefined);
     assert.deepEqual(cardMessages.at(-1).saved, [], "Antigravity cannot display another agent's saved history");
     await addFavorite.handler(antigravity);
     await receiveCardMessage({ action: "ready" });

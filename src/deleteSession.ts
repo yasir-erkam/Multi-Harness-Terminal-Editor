@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
-import { type SavedSession, type SessionRoot } from "./savedSessions";
+import { supportsSessionDeletion, type SavedSession, type SessionRoot } from "./savedSessions";
 
 export class SessionDeletionError extends Error {
     constructor(readonly reason: "invalidFile" | "outsideStore" | "sharedFile" | "changedFile", message: string) {
@@ -12,6 +12,9 @@ export class SessionDeletionError extends Error {
 
 /** Validate the live file, never a path supplied by a view or webview. */
 export async function validateSessionDeletion(session: SavedSession, roots: readonly SessionRoot[]): Promise<void> {
+    if (!supportsSessionDeletion(session.harnessId)) {
+        throw new SessionDeletionError("invalidFile", "SQLite session deletion is not supported.");
+    }
     const stat = await fs.lstat(session.file);
     if (!stat.isFile() || stat.isSymbolicLink() || !session.file.endsWith(".jsonl")) {
         throw new SessionDeletionError("invalidFile", "The session record is not a regular JSONL file.");

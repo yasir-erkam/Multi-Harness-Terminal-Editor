@@ -144,5 +144,6 @@
   "showAntigravityIcon.description": "Show an Antigravity CLI button in the editor title bar.",
   "antigravity.executablePath.description": "Path or command name used to launch Antigravity CLI. Defaults to 'agy', resolved from standard install directories or PATH.",
   "antigravity.arguments.description": "Additional arguments passed to Antigravity CLI on launch.",
-  "terminal.profile.antigravity.title": "Open Antigravity CLI terminal"
+  "terminal.profile.antigravity.title": "Open Antigravity CLI terminal",
+  "antigravity.sessionDirectory.description": "Absolute Antigravity CLI data directory containing conversation_summaries.db and conversations/. Leave empty to use ~/.gemini/antigravity-cli."
 }

@@ -63,6 +63,7 @@ export function registerCardsView(
                 project: basename(session.cwd),
                 cwd: session.cwd,
                 modified: session.modified,
+                deletable: session.harnessId !== "antigravity",
             })),
             savedUnreadable: saved.unreadable.length > 0,
             savedSelection: savedSessions.getSelection(),

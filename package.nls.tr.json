@@ -144,5 +144,6 @@
   "showAntigravityIcon.description": "Editör başlık çubuğunda Antigravity CLI düğmesini göster.",
   "antigravity.executablePath.description": "Antigravity CLI’ı başlatmak için kullanılan yol veya komut adı. Varsayılan 'agy' komutu standart kurulum dizinlerinde veya PATH üzerinde aranır.",
   "antigravity.arguments.description": "Antigravity CLI’a başlatma sırasında eklenen argümanlar.",
-  "terminal.profile.antigravity.title": "Antigravity CLI terminali aç"
+  "terminal.profile.antigravity.title": "Antigravity CLI terminali aç",
+  "antigravity.sessionDirectory.description": "conversation_summaries.db ve conversations/ içeren mutlak Antigravity CLI veri dizini. ~/.gemini/antigravity-cli kullanmak için boş bırakın."
 }

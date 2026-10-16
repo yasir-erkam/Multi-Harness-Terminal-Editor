@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import { HARNESSES, iconFile } from "./harnesses";
 import { openAgentTerminal } from "./launch";
 import { extensionStrings } from "./localization";
-import { resumeArguments, scanSavedSessions, sessionRoots, type SavedSession, type SessionScan } from "./savedSessions";
+import { supportsSessionDeletion, resumeArguments, scanSavedSessions, sessionRoots, type SavedSession, type SessionScan } from "./savedSessions";
 import { type AgentStatus } from "./status";
 import { type SessionContext, type SessionScope } from "./sessionContext";
 import { SessionDeletionError, validateSessionDeletion } from "./deleteSession";
@@ -15,7 +15,7 @@ export interface SavedSessions {
     getSessions(): Promise<SessionScan>;
     getScope(): SessionScope;
     getMessage(): string | undefined;
-    getSelection(): { mode: boolean; busy: boolean; keys: string[] };
+    getSelection(): { mode: boolean; busy: boolean; supported: boolean; keys: string[] };
 }
 
 interface ScanNotice { readonly notice: true; }
@@ -106,7 +106,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         notifySelection();
     }
     async function deleteSessions(request?: { harnessId?: string; id?: string }): Promise<void> {
-        if (deleting) return;
+        if (deleting || !supportsSessionDeletion(selection.getScope().agent?.id ?? "")) return;
         deleting = true;
         notifySelection();
         const originalScope = scopeKey();
@@ -199,7 +199,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             const date = new Date(session.modified).toLocaleDateString(vscode.env?.language ?? "en");
             return {
                 id: `${session.harnessId}:${session.id}`,
-                contextValue: "savedSession",
+                contextValue: supportsSessionDeletion(session.harnessId) ? "savedSession" : "savedSessionReadOnly",
                 checkboxState: nativeCheckboxes && selectionMode ? (selected.has(sessionKey(session)) ? 1 : 0) : undefined,
                 label: session.title,
                 description: `${harness.displayName} · ${path.basename(session.cwd)} · ${date}`,
@@ -251,6 +251,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         view.description = [scope.agent?.displayName, scope.cwd ? path.basename(scope.cwd) : undefined].filter(Boolean).join(" · ");
         view.message = getMessage();
         if (selectionMode) view.message = `${strings["savedSessions.selectedCount"].replace("{count}", String(selected.size))}${deleting ? ` · ${strings["savedSessions.deleting"]}` : ""}`;
+        setContext("multiHarness.sessionDeletionSupported", supportsSessionDeletion(scope.agent?.id ?? ""));
         setContext("multiHarness.sessionSelectionMode", selectionMode);
         setContext("multiHarness.hasSelectedSessions", selected.size > 0);
         setContext("multiHarness.deletingSessions", deleting);
@@ -263,7 +264,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         selection.onDidChange(refresh),
         vscode.commands.registerCommand("multiHarness.refreshSessions", refresh),
         vscode.commands.registerCommand("multiHarness.toggleSessionSelectionMode", () => {
-            if (deleting) return;
+            if (deleting || !supportsSessionDeletion(selection.getScope().agent?.id ?? "")) return;
             selectionMode = !selectionMode;
             selected.clear();
             notifySelection();
@@ -318,5 +319,5 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         })
     );
     return { onDidChange: changes.event, getSessions, getScope: selection.getScope, getMessage,
-        getSelection: () => ({ mode: selectionMode, busy: deleting, keys: [...selected] }) };
+        getSelection: () => ({ mode: selectionMode, busy: deleting, supported: supportsSessionDeletion(selection.getScope().agent?.id ?? ""), keys: [...selected] }) };
 }

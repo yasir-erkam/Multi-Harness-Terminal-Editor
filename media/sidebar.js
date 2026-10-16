@@ -96,7 +96,7 @@ function renderSaved() {
     const selection = state.savedSelection || { mode: false, busy: false, keys: [] };
     const selected = new Set(selection.keys);
     selectionButton.textContent = t(selection.mode ? "savedSessions.cancelSelection" : "savedSessions.select");
-    selectionButton.disabled = selection.busy;
+    selectionButton.disabled = selection.busy || selection.supported === false;
     selectionButton.setAttribute("aria-pressed", String(selection.mode));
     selectionTools.replaceChildren();
     if (selection.mode) {
@@ -144,6 +144,7 @@ function renderSaved() {
         trash.append(mark);
         remove.append(trash);
         remove.disabled = selection.busy;
+        remove.hidden = session.deletable === false;
         container.append(row, remove);
         saved.body.append(container);
     }

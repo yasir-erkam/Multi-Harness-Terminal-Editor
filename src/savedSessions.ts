@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface SavedSession {
     readonly harnessId: string;
@@ -40,7 +41,12 @@ async function canonicalDirectory(directory: string): Promise<string> {
 const WINDOW_BYTES = 256 * 1024;
 const MAX_CANDIDATES = 1000;
 
-/** Native JSONL stores only; unsupported agents are deliberately not inferred. */
+/** SQLite histories require provider-specific deletion beyond the JSONL trash workflow. */
+export function supportsSessionDeletion(harnessId: string): boolean {
+    return harnessId !== "antigravity";
+}
+
+/** Native session stores only; unsupported agents are deliberately not inferred. */
 export function sessionRoots(home = os.homedir(), env: NodeJS.ProcessEnv = process.env): SessionRoot[] {
     const expand = (value: string): string => value.replace(/^~(?=$|[/\\])/, home);
     const base = (key: string, fallback: string): string => expand(env[key] || path.join(home, fallback));
@@ -50,7 +56,112 @@ export function sessionRoots(home = os.homedir(), env: NodeJS.ProcessEnv = proce
         { harnessId: "pi", directory: env.PI_CODING_AGENT_SESSION_DIR ? expand(env.PI_CODING_AGENT_SESSION_DIR) : path.join(base("PI_CODING_AGENT_DIR", ".pi/agent"), "sessions") },
         { harnessId: "ohMyPi", directory: path.join(base("PI_CONFIG_DIR", ".omp"), "agent", "sessions") },
         { harnessId: "primeAgent", directory: env.PRIME_AGENT_SESSION_DIR ? expand(env.PRIME_AGENT_SESSION_DIR) : path.join(base("PRIME_AGENT_CODING_AGENT_DIR", ".prime/agent"), "sessions") },
+        { harnessId: "antigravity", directory: path.join(home, ".gemini", "antigravity-cli") },
     ];
+}
+
+/** Antigravity timestamps look like `2026-10-16 16:50:09.831811299+00:00`. */
+function parseTimestamp(value: unknown): number {
+    if (typeof value !== "string") {
+        return 0;
+    }
+    const iso = value.trim().replace(" ", "T").replace(/(\.\d{3})\d+/, "$1");
+    const parsed = Date.parse(iso);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function workspacePaths(value: unknown): string[] {
+    let uris: unknown;
+    try {
+        uris = typeof value === "string" ? JSON.parse(value) : undefined;
+    } catch {
+        return [];
+    }
+    if (!Array.isArray(uris)) {
+        return [];
+    }
+    const result: string[] = [];
+    for (const uri of uris) {
+        if (typeof uri !== "string" || !uri.startsWith("file:")) {
+            continue;
+        }
+        try {
+            const directory = fileURLToPath(uri);
+            if (path.isAbsolute(directory) && !directory.includes("\0")) {
+                result.push(directory);
+            }
+        } catch {
+            // Non-local workspace URIs cannot be resumed from this host.
+        }
+    }
+    return result;
+}
+
+/**
+ * Antigravity CLI indexes top-level conversations in `conversation_summaries.db`
+ * and keeps each trajectory in `conversations/<id>.db`. The index is opened
+ * read-only; subagent and empty conversations are skipped like `/resume` does.
+ */
+async function scanAntigravity(root: SessionRoot, matches: (directory: string) => Promise<boolean>, signal?: AbortSignal): Promise<SavedSession[]> {
+    const index = path.join(root.directory, "conversation_summaries.db");
+    try {
+        if (!(await fs.stat(index)).isFile()) {
+            return [];
+        }
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ENOTDIR") {
+            return [];
+        }
+        throw error;
+    }
+    // Loaded lazily: older extension hosts without node:sqlite only lose this store.
+    const { DatabaseSync } = await import("node:sqlite");
+    const db = new DatabaseSync(index, { readOnly: true });
+    let rows: Record<string, unknown>[];
+    try {
+        rows = db.prepare(
+            "SELECT conversation_id, title, preview, last_modified_time, workspace_uris FROM conversation_summaries "
+            + "WHERE parent_conversation_id = '' AND nesting_depth = 0 AND step_count > 0 "
+            + "ORDER BY last_modified_time DESC LIMIT 5000"
+        ).all() as Record<string, unknown>[];
+    } finally {
+        db.close();
+    }
+    const sessions: SavedSession[] = [];
+    for (const row of rows) {
+        if (signal?.aborted) {
+            return [];
+        }
+        const id = row.conversation_id;
+        if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(id)) {
+            continue;
+        }
+        let cwd: string | undefined;
+        for (const directory of workspacePaths(row.workspace_uris)) {
+            if (await matches(directory)) {
+                cwd = directory;
+                break;
+            }
+        }
+        if (!cwd) {
+            continue;
+        }
+        const file = path.join(root.directory, "conversations", `${id}.db`);
+        let modified = parseTimestamp(row.last_modified_time);
+        try {
+            const stat = await fs.stat(file);
+            if (!stat.isFile()) {
+                continue;
+            }
+            modified ||= stat.mtimeMs;
+        } catch {
+            // The index can outlive a deleted trajectory; it cannot be resumed.
+            continue;
+        }
+        sessions.push({ harnessId: root.harnessId, id, cwd, file, modified, title: clean(row.title) || clean(row.preview) || id });
+    }
+    return sessions;
 }
 
 function records(text: string): Record<string, any>[] {
@@ -151,6 +262,16 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
     }
     const scopePath = filter ? await canonicalDirectory(filter.cwd) : undefined;
     const canonicalPaths = new Map<string, string>();
+    async function matches(directory: string): Promise<boolean> {
+        if (scopePath === undefined) return true;
+        let canonical = canonicalPaths.get(directory);
+        if (!canonical) {
+            canonical = await canonicalDirectory(directory);
+            canonicalPaths.set(directory, canonical);
+        }
+        return canonical === scopePath;
+    }
+    const indexedSessions: SavedSession[] = [];
     const unreadable = new Set<string>();
     const candidates: { root: SessionRoot; file: string; modified: number; size: number }[] = [];
     let visited = 0;
@@ -190,10 +311,18 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
             }
         }
     }
-    await Promise.all(roots.map((root) => {
+    await Promise.all(roots.map(async (root) => {
         if (!path.isAbsolute(root.directory)) {
             unreadable.add(root.harnessId);
             return Promise.resolve();
+        }
+        if (root.harnessId === "antigravity") {
+            try {
+                indexedSessions.push(...await scanAntigravity(root, matches, options.signal));
+            } catch {
+                unreadable.add(root.harnessId);
+            }
+            return;
         }
         return walk(root, root.directory, 0);
     }));
@@ -215,27 +344,20 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
         }
     }
     candidates.sort((a, b) => b.modified - a.modified);
-    const sessions: SavedSession[] = [];
+    const sessions: SavedSession[] = [...indexedSessions];
     const seen = new Set<string>();
     for (const candidate of filter ? candidates : candidates.slice(0, MAX_CANDIDATES)) {
         if (options.signal?.aborted) {
             return empty;
         }
-        if (sessions.length >= limit) {
+        if (sessions.length - indexedSessions.length >= limit) {
             break;
         }
         try {
             const session = parseSession(candidate.root.harnessId, candidate.file, candidate.modified,
                 await readWindows(candidate.file, candidate.size));
-            if (session && scopePath !== undefined) {
-                let sessionPath = canonicalPaths.get(session.cwd);
-                if (!sessionPath) {
-                    sessionPath = await canonicalDirectory(session.cwd);
-                    canonicalPaths.set(session.cwd, sessionPath);
-                }
-                if (sessionPath !== scopePath) {
-                    continue;
-                }
+            if (session && !await matches(session.cwd)) {
+                continue;
             }
             if (session && !seen.has(`${session.harnessId}:${session.id}`)) {
                 seen.add(`${session.harnessId}:${session.id}`);
@@ -248,11 +370,14 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
             }
         }
     }
-    return { sessions, unreadable: [...unreadable] };
+    if (options.signal?.aborted) return empty;
+    sessions.sort((a, b) => b.modified - a.modified);
+    return { sessions: sessions.slice(0, limit), unreadable: [...unreadable] };
 }
 
 export function resumeArguments(session: SavedSession): string[] {
     switch (session.harnessId) {
+        case "antigravity": return ["--conversation", session.id];
         case "codex": return ["resume", session.id];
         case "claudeCode": return ["--resume", session.id];
         case "pi": return ["--session", session.file];

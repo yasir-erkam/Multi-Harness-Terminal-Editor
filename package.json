@@ -2,7 +2,7 @@
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI) in native editor-area terminal tabs.",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -480,7 +480,7 @@
         },
         {
           "command": "multiHarness.toggleSessionSelectionMode",
-          "when": "view == multiHarness.savedSessions && !multiHarness.sessionSelectionMode",
+          "when": "view == multiHarness.savedSessions && !multiHarness.sessionSelectionMode && multiHarness.sessionDeletionSupported",
           "group": "navigation@2"
         },
         {
@@ -938,6 +938,12 @@
           },
           "description": "%antigravity.arguments.description%",
           "scope": "resource"
+        },
+        "multiHarness.antigravity.sessionDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%antigravity.sessionDirectory.description%",
+          "scope": "machine-overridable"
         }
       }
     },
