@@ -304,7 +304,8 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                 return;
             }
             await openAgentTerminal(context, harness, status, {
-                terminalName: `${harness.displayName} — ${session.id}`,
+                sessionId: session.id,
+                terminalName: `${harness.displayName} — ${session.title}`,
                 cwd: session.cwd,
                 args: resumeArguments(session),
             });

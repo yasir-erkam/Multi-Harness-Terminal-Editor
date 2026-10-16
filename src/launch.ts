@@ -22,10 +22,14 @@ export interface AgentLaunch {
 }
 
 export interface ResumeLaunch {
+    readonly sessionId?: string;
     readonly terminalName: string;
     readonly cwd: string;
     readonly args: readonly string[];
 }
+
+// Titles can be shared or renamed; only the saved identity determines reuse.
+const resumedSessions = new WeakMap<vscode.Terminal, string>();
 
 /**
  * Shared resolution for a harness launch: settings (path + arguments + launch
@@ -127,7 +131,8 @@ async function openShellMode(
     harness: Harness,
     launch: AgentLaunch,
     executable: string,
-    status: AgentStatus | undefined
+    status: AgentStatus | undefined,
+    sessionKey?: string
 ): Promise<void> {
     // No shellPath override: the user's default profile is the shell that runs
     // the agent, which is what makes shell integration reporting possible.
@@ -138,6 +143,9 @@ async function openShellMode(
         isTransient: true,
         iconPath: launch.iconPath,
     });
+    if (sessionKey) {
+        resumedSessions.set(terminal, sessionKey);
+    }
     status?.track(terminal, harness);
     await showEditorTerminal(terminal);
 
@@ -175,7 +183,10 @@ async function launchAgentTerminal(
     status?: AgentStatus,
     resume?: ResumeLaunch
 ): Promise<void> {
-    const existing = vscode.window.terminals.find((terminal) => terminal.name === (resume?.terminalName ?? harness.displayName));
+    const sessionKey = resume?.sessionId ? JSON.stringify([harness.id, resume.sessionId]) : undefined;
+    const existing = vscode.window.terminals.find((terminal) => sessionKey
+        ? resumedSessions.get(terminal) === sessionKey
+        : terminal.name === (resume?.terminalName ?? harness.displayName));
     if (existing) {
         await showEditorTerminal(existing);
         return;
@@ -195,7 +206,7 @@ async function launchAgentTerminal(
     // Shell mode needs the 1.93 shell-integration API; without it, falling back
     // to a direct-mode terminal keeps the CLI usable on older VS Code.
     if (launch.launchMode === "shell" && hasShellIntegrationApi()) {
-        await openShellMode(harness, launch, executable, status);
+        await openShellMode(harness, launch, executable, status, sessionKey);
         return;
     }
 
@@ -208,5 +219,8 @@ async function launchAgentTerminal(
         isTransient: true,
         iconPath: launch.iconPath,
     });
+    if (sessionKey) {
+        resumedSessions.set(terminal, sessionKey);
+    }
     await showEditorTerminal(terminal);
 }

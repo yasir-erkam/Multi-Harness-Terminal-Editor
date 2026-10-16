@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3
+
+- Show saved conversation titles in resumed terminal tabs instead of session IDs, while reusing terminals by saved identity so duplicate titles stay separate.
+
 ## 0.8.2
 
 - Close individual Open Terminals directly from list and card layouts, with English and Turkish labels. Closing a terminal stops its running process and keeps saved conversation files.
