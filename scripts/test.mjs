@@ -104,6 +104,22 @@ test("Antigravity CLI resolves its Windows installer directory without PATH", (d
     }), override);
 });
 
+test("Antigravity agy resolves from ~/.local/bin with an empty PATH", (dir) => {
+    const bin = join(dir, ".local", "bin");
+    mkdirSync(bin, { recursive: true });
+    const executable = join(bin, "agy");
+    writeFileSync(executable, "#!/bin/sh\n");
+    chmodSync(executable, 0o755);
+    const originalPath = process.env.PATH;
+    try {
+        process.env.PATH = "";
+        assert.equal(resolveExecutable("agy", { platform: "linux", user: { home: dir } }), executable);
+    } finally {
+        if (originalPath === undefined) delete process.env.PATH;
+        else process.env.PATH = originalPath;
+    }
+});
+
 test("win32 extension-less command resolves .cmd/.exe suffixes", (dir) => {
     // Deliberately NOT executable and NOT present under the plain name: only
     // the win32 F_OK + suffix walk can find these, the posix X_OK walk cannot.
@@ -760,6 +776,48 @@ try {
     passed += 1;
     console.log("ok: Antigravity CLI command, profile and favorites use the configured executable and arguments");
 
+    assert.equal(antigravity.displayName, "Antigravity CLI");
+    assert.equal(antigravity.defaultExecutable, "agy");
+    assert.equal(antigravity.commandId, "multiHarness.openAntigravity");
+    const agyCli = join(activationDir, "custom agy");
+    writeFileSync(agyCli, "#!/bin/sh\n");
+    chmodSync(agyCli, 0o755);
+    const agyArgs = ["--model", "model with spaces", "literal;$value"];
+    vscodeStub.__fixture.multiHarness.antigravity = { executablePath: agyCli, arguments: agyArgs };
+    await vscodeStub.__calls.commands.find((command) => command.id === antigravity.commandId).handler();
+    const agyTerminal = vscodeStub.__calls.created.at(-1).options;
+    assert.equal(agyTerminal.name, "Antigravity CLI");
+    assert.equal(agyTerminal.shellPath, agyCli);
+    assert.deepEqual(agyTerminal.shellArgs, agyArgs);
+    const agyProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.antigravity");
+    const agyProfileOptions = agyProfile.provider.provideTerminalProfile({}).options;
+    assert.equal(agyProfileOptions.shellPath, agyCli);
+    assert.deepEqual(agyProfileOptions.shellArgs, agyArgs);
+    assert.deepEqual(agyProfileOptions.iconPath, agyTerminal.iconPath);
+    vscodeStub.__fixture.multiHarness.antigravity.executablePath = join(activationDir, "missing-agy");
+    assert.equal(agyProfile.provider.provideTerminalProfile({}), undefined);
+    vscodeStub.__fixture.multiHarness.antigravity.executablePath = agyCli;
+    await addFavorite.handler(antigravity);
+    assert.equal(agentsView.provider.getTreeItem(antigravity).contextValue, "favoriteAgent");
+    assert.ok(globalState.get("favoriteAgents").includes("antigravity"));
+    await removeFavorite.handler(antigravity);
+    const originalQuickPick = vscodeStub.window.showQuickPick;
+    try {
+        vscodeStub.window.showQuickPick = async (items) => {
+            const item = items.find((candidate) => candidate.harness?.id === "antigravity");
+            assert.equal(item.label, "Antigravity CLI");
+            return item;
+        };
+        vscodeStub.__calls.executed.length = 0;
+        await vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.openAgentPicker").handler();
+        assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openAntigravity"]);
+    } finally {
+        vscodeStub.window.showQuickPick = originalQuickPick;
+    }
+    assert.equal(sessionRoots().some((root) => root.harnessId === "antigravity"), false);
+    passed += 1;
+    console.log("ok: Antigravity picker, command, profile and favorites preserve custom path and arguments");
+
     const sessionsView = vscodeStub.__calls.views.find((view) => view.id === "multiHarness.sessions");
     assert.deepEqual(sessionsView.provider.getChildren(), []);
     let sessionRefreshes = 0;
@@ -888,6 +946,10 @@ try {
     assert.equal((await savedView.provider.getChildren()).length, 1);
     await selectSessionAgent.handler("codex");
     assert.deepEqual(await savedView.provider.getChildren(), [], "selecting another agent excludes the previous agent's sessions");
+    await selectSessionAgent.handler("antigravity");
+    assert.deepEqual(await savedView.provider.getChildren(), [], "Antigravity never displays another agent's saved history");
+    const englishStrings = JSON.parse(readFileSync(join(projectRoot, "package.nls.json"), "utf8"));
+    assert.equal(savedView.message, englishStrings["sessionScope.unsupported"]);
     await selectSessionAgent.handler("primeAgent");
     assert.equal((await savedView.provider.getChildren()).length, 1);
     assert.ok(savedView.description.includes("Prime Agent"));
@@ -986,6 +1048,13 @@ try {
     assert.equal(cardMessages.at(-1).scope.agentId, "antigravity");
     assert.equal(cardMessages.at(-1).scope.message, JSON.parse(readFileSync(join(projectRoot, "package.nls.json"), "utf8"))["sessionScope.unsupported"]);
     assert.deepEqual(cardMessages.at(-1).saved, [], "Antigravity cannot display another agent's saved history");
+    await addFavorite.handler(antigravity);
+    await receiveCardMessage({ action: "ready" });
+    assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "antigravity").favorite, true);
+    await removeFavorite.handler(antigravity);
+    vscodeStub.__calls.executed.length = 0;
+    await receiveCardMessage({ action: "open", id: "antigravity" });
+    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openAntigravity"]);
     await selectSessionAgent.handler("codex");
     await receiveCardMessage({ action: "ready" });
     assert.deepEqual(cardMessages.at(-1).saved, [], "card sessions follow the selected agent filter");
