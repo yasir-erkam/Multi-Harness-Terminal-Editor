@@ -78,6 +78,32 @@ test("Prime Agent resolves from its default local-bin install directory without 
     assert.equal(resolveExecutable("prime-agent", { platform: "linux", user: { home: dir } }), executable);
 });
 
+test("Antigravity CLI resolves from its Linux/macOS local-bin install without PATH", (dir) => {
+    const bin = join(dir, ".local", "bin");
+    mkdirSync(bin, { recursive: true });
+    const executable = join(bin, "agy");
+    writeFileSync(executable, "#!/bin/sh\n");
+    chmodSync(executable, 0o755);
+    for (const platform of ["linux", "darwin"]) {
+        assert.equal(resolveExecutable("agy", { platform, user: { home: dir } }), executable);
+    }
+});
+
+test("Antigravity CLI resolves its Windows installer directory without PATH", (dir) => {
+    const bin = join(dir, "AppData", "Local", "agy", "bin");
+    mkdirSync(bin, { recursive: true });
+    const executable = join(bin, "agy.exe");
+    writeFileSync(executable, "binary");
+    assert.equal(resolveWindowsWithoutPath("agy", {
+        user: { home: dir, localAppData: join(dir, "AppData", "Local") },
+    }), executable);
+    const override = join(dir, "custom-agy.exe");
+    writeFileSync(override, "binary");
+    assert.equal(resolveWindowsExecutable(override, {
+        user: { home: dir, localAppData: join(dir, "AppData", "Local") },
+    }), override);
+});
+
 test("win32 extension-less command resolves .cmd/.exe suffixes", (dir) => {
     // Deliberately NOT executable and NOT present under the plain name: only
     // the win32 F_OK + suffix walk can find these, the posix X_OK walk cannot.
@@ -713,6 +739,27 @@ try {
     passed += 1;
     console.log("ok: Prime Agent command, profile and favorites use the configured executable and arguments");
 
+    const antigravity = agents.find((agent) => agent.id === "antigravity");
+    assert.equal(antigravity.defaultExecutable, "agy");
+    assert.equal(antigravity.commandId, "multiHarness.openAntigravity");
+    vscodeStub.__fixture.multiHarness.antigravity = { executablePath: fakeCli, arguments: ["--model", "test-model"] };
+    await vscodeStub.__calls.commands.find((command) => command.id === antigravity.commandId).handler();
+    const antigravityTerminal = vscodeStub.__calls.created.at(-1).options;
+    assert.equal(antigravityTerminal.name, "Antigravity CLI");
+    assert.equal(antigravityTerminal.shellPath, fakeCli);
+    assert.deepEqual(antigravityTerminal.shellArgs, ["--model", "test-model"]);
+    const antigravityProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.antigravity");
+    const antigravityOptions = antigravityProfile.provider.provideTerminalProfile({}).options;
+    assert.equal(antigravityOptions.name, "Antigravity CLI");
+    assert.equal(antigravityOptions.shellPath, fakeCli);
+    assert.deepEqual(antigravityOptions.shellArgs, ["--model", "test-model"]);
+    await addFavorite.handler(antigravity);
+    assert.equal(agentsView.provider.getTreeItem(antigravity).contextValue, "favoriteAgent");
+    await removeFavorite.handler(antigravity);
+    assert.equal(agentsView.provider.getTreeItem(antigravity).contextValue, "agent");
+    passed += 1;
+    console.log("ok: Antigravity CLI command, profile and favorites use the configured executable and arguments");
+
     const sessionsView = vscodeStub.__calls.views.find((view) => view.id === "multiHarness.sessions");
     assert.deepEqual(sessionsView.provider.getChildren(), []);
     let sessionRefreshes = 0;
@@ -925,6 +972,7 @@ try {
     assert.ok(cardsWebview.html.includes("script-src 'nonce-"));
     await receiveCardMessage({ action: "ready" });
     assert.equal(cardMessages.at(-1).agents.length, agents.length);
+    assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "antigravity").name, "Antigravity CLI");
     assert.equal(cardMessages.at(-1).agents[0].id, "codex");
     assert.equal(cardMessages.at(-1).agents[0].favorite, true);
     assert.equal(cardMessages.at(-1).sessions.length, 0);
@@ -933,6 +981,11 @@ try {
     assert.equal(cardMessages.at(-1).scope.agentId, "primeAgent");
     assert.equal(cardMessages.at(-1).scope.project, "recorded-project");
     assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "primeAgent").selected, true);
+    await selectSessionAgent.handler("antigravity");
+    await receiveCardMessage({ action: "ready" });
+    assert.equal(cardMessages.at(-1).scope.agentId, "antigravity");
+    assert.equal(cardMessages.at(-1).scope.message, JSON.parse(readFileSync(join(projectRoot, "package.nls.json"), "utf8"))["sessionScope.unsupported"]);
+    assert.deepEqual(cardMessages.at(-1).saved, [], "Antigravity cannot display another agent's saved history");
     await selectSessionAgent.handler("codex");
     await receiveCardMessage({ action: "ready" });
     assert.deepEqual(cardMessages.at(-1).saved, [], "card sessions follow the selected agent filter");
@@ -1272,6 +1325,14 @@ try {
         Promise.resolve({ label: "Oh My Pi", harness: { commandId: "multiHarness.openOhMyPi" } });
     await picker.handler();
     assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openOhMyPi"], "picker dispatches the harness commandId");
+    vscodeStub.__calls.executed.length = 0;
+    vscodeStub.window.showQuickPick = (items) => {
+        const item = items.find((entry) => entry.harness.id === "antigravity");
+        assert.equal(item.label, "Antigravity CLI");
+        return Promise.resolve(item);
+    };
+    await picker.handler();
+    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openAntigravity"]);
     passed += 1;
     console.log("ok: agent picker dispatches the harness commandId");
 

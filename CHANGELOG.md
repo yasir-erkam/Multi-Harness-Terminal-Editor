@@ -2,6 +2,7 @@
 
 ## 0.7.0
 
+- Added Antigravity CLI (`agy`) to the agent launcher, picker, favorites, editor buttons and terminal profiles, with configurable paths and arguments, themed official icons and Windows install-directory discovery.
 - Delete individual saved conversations from Sessions using the trash button or native context menu. Select multiple conversations with checkboxes and delete them together in native and card layouts; card Select All respects search results.
 - Keep selections across refreshes and title changes, share them between layouts, and clear them when the agent or project changes. Open terminals keep running.
 - Confirm before moving conversation files to Trash / Recycle Bin, and require separate explicit approval for permanent deletion if Trash fails. Keep unsuccessful deletions selected and report errors. Revalidate file identity and store boundaries before deleting, refusing files shared by different conversations.

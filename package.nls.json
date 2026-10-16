@@ -138,5 +138,10 @@
   "savedSessions.invalidFile": "The session record is not a regular JSONL file.",
   "savedSessions.outsideStore": "The session record is outside its configured store.",
   "savedSessions.sharedFile": "The file contains another conversation; it cannot be deleted safely.",
-  "savedSessions.changedFile": "The session record changed; refresh the session list."
+  "savedSessions.changedFile": "The session record changed; refresh the session list.",
+  "command.openAntigravity.title": "Open Antigravity CLI",
+  "showAntigravityIcon.description": "Show an Antigravity CLI button in the editor title bar.",
+  "antigravity.executablePath.description": "Path or command name used to launch Antigravity CLI. Defaults to 'agy', resolved from standard install directories or PATH.",
+  "antigravity.arguments.description": "Additional arguments passed to Antigravity CLI on launch.",
+  "terminal.profile.antigravity.title": "Open Antigravity CLI terminal"
 }

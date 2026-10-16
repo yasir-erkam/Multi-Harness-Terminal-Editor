@@ -23,6 +23,7 @@ export const HARNESSES: readonly Harness[] = [
     { id: "qwen", displayName: "Qwen Code", defaultExecutable: "qwen", commandId: "multiHarness.openQwen" },
     { id: "goose", displayName: "Goose", defaultExecutable: "goose", commandId: "multiHarness.openGoose" },
     { id: "primeAgent", displayName: "Prime Agent", defaultExecutable: "prime-agent", commandId: "multiHarness.openPrimeAgent" },
+    { id: "antigravity", displayName: "Antigravity CLI", defaultExecutable: "agy", commandId: "multiHarness.openAntigravity" },
 ];
 
 export function harnessForTerminalName(name: string): Harness | undefined {

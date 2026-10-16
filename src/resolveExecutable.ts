@@ -66,6 +66,7 @@ function userDirectories(options: LookupOptions, platform: NodeJS.Platform): str
         }
         if (localAppData) {
             dirs.push(path.join(localAppData, "pnpm"));
+            dirs.push(path.join(localAppData, "agy", "bin"));
         }
     } else {
         dirs.push(path.join(home, ".bun", "bin"));

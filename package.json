@@ -1,7 +1,7 @@
 {
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
-  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent) in native editor-area terminal tabs.",
+  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI) in native editor-area terminal tabs.",
   "version": "0.7.0",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
@@ -33,7 +33,9 @@
     "oh my pi",
     "pi agent",
     "prime agent",
-    "prime-agent"
+    "prime-agent",
+    "antigravity",
+    "agy"
   ],
   "extensionKind": [
     "workspace"
@@ -92,7 +94,9 @@
     "onCommand:multiHarness.toggleSessionSelection",
     "onCommand:multiHarness.selectAllSessions",
     "onCommand:multiHarness.deleteSession",
-    "onCommand:multiHarness.deleteSelectedSessions"
+    "onCommand:multiHarness.deleteSelectedSessions",
+    "onCommand:multiHarness.openAntigravity",
+    "onTerminalProfile:multiHarness.antigravity"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -356,6 +360,15 @@
         "category": "%category%",
         "icon": "$(trash)",
         "enablement": "multiHarness.hasSelectedSessions && !multiHarness.deletingSessions"
+      },
+      {
+        "command": "multiHarness.openAntigravity",
+        "title": "%command.openAntigravity.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/antigravity-light.svg",
+          "dark": "media/antigravity-dark.svg"
+        }
       }
     ],
     "menus": {
@@ -530,6 +543,11 @@
           "command": "multiHarness.openPrimeAgent",
           "group": "navigation@113",
           "when": "config.multiHarness.showPrimeAgentIcon"
+        },
+        {
+          "command": "multiHarness.openAntigravity",
+          "group": "navigation@114",
+          "when": "config.multiHarness.showAntigravityIcon"
         }
       ]
     },
@@ -878,6 +896,27 @@
           ],
           "description": "%sidebarLayout.description%",
           "scope": "window"
+        },
+        "multiHarness.showAntigravityIcon": {
+          "type": "boolean",
+          "default": false,
+          "description": "%showAntigravityIcon.description%",
+          "scope": "window"
+        },
+        "multiHarness.antigravity.executablePath": {
+          "type": "string",
+          "default": "agy",
+          "description": "%antigravity.executablePath.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.antigravity.arguments": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "%antigravity.arguments.description%",
+          "scope": "resource"
         }
       }
     },
@@ -933,6 +972,10 @@
       {
         "id": "multiHarness.primeAgent",
         "title": "%terminal.profile.primeAgent.title%"
+      },
+      {
+        "id": "multiHarness.antigravity",
+        "title": "%terminal.profile.antigravity.title%"
       }
     ]
   },

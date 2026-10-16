@@ -138,5 +138,10 @@
   "savedSessions.invalidFile": "Oturum kaydı normal bir JSONL dosyası değil.",
   "savedSessions.outsideStore": "Oturum kaydı yapılandırılmış kayıt dizininin dışında.",
   "savedSessions.sharedFile": "Dosya başka bir konuşma da içeriyor; güvenli şekilde silinemiyor.",
-  "savedSessions.changedFile": "Oturum kaydı değişmiş; oturum listesini yenileyin."
+  "savedSessions.changedFile": "Oturum kaydı değişmiş; oturum listesini yenileyin.",
+  "command.openAntigravity.title": "Antigravity CLI’ı Aç",
+  "showAntigravityIcon.description": "Editör başlık çubuğunda Antigravity CLI düğmesini göster.",
+  "antigravity.executablePath.description": "Antigravity CLI’ı başlatmak için kullanılan yol veya komut adı. Varsayılan 'agy' komutu standart kurulum dizinlerinde veya PATH üzerinde aranır.",
+  "antigravity.arguments.description": "Antigravity CLI’a başlatma sırasında eklenen argümanlar.",
+  "terminal.profile.antigravity.title": "Antigravity CLI terminali aç"
 }

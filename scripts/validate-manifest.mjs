@@ -21,6 +21,7 @@ const harnessIds = [
     "qwen",
     "goose",
     "primeAgent",
+    "antigravity",
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);

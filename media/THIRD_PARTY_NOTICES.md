@@ -36,6 +36,7 @@ Exact source URLs are in [sources/icons.json](sources/icons.json).
 | Qwen Code | Repository IDE sidebar icon | Qwen Code contributors; Apache-2.0, `qwen-LICENSE.txt` |
 | Goose | Repository desktop application icon | Block, Inc. / Goose contributors; Apache-2.0, `goose-LICENSE.txt` |
 | Prime Agent | [Prime Intellect website logo](https://www.primeintellect.ai/icons/primeintellect-logo.svg) | Prime Intellect; official website brand asset retrieved on 2026-10-14. The symbol is cropped from the wordmark via viewBox and its foreground adapts to the editor theme. |
+| Antigravity CLI | [Google Antigravity press assets](https://antigravity.google/press) | Google; official one-color SVG retrieved on 2026-10-16. The foreground adapts to the editor theme. |
 
 License filenames above are relative to `media/sources/`. Vendor names and marks
 identify the corresponding tools; this extension is not endorsed by the vendors.

@@ -76,5 +76,12 @@
     "themeColors": [
       "white"
     ]
+  },
+  "antigravity": {
+    "file": "antigravity.svg",
+    "url": "https://antigravity.google/assets/image/brand/antigravity-icon__one-color.svg",
+    "themeColors": [
+      "#202124"
+    ]
   }
 }
