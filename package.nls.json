@@ -131,7 +131,7 @@
   "savedSessions.selectedCount": "{count} sessions selected",
   "savedSessions.deleting": "Deleting sessions…",
   "savedSessions.deleteConfirm": "Delete {count} saved conversation(s)?",
-  "savedSessions.deleteHelp": "The conversation files will be moved to the Recycle Bin / Trash. Open terminals will continue running and may write new history.",
+  "savedSessions.deleteHelp": "The conversation files will be moved to the Recycle Bin / Trash. Terminals linked to successfully deleted conversations will also close.",
   "savedSessions.moveToTrash": "Move to Trash",
   "savedSessions.deletePermanently": "Delete Permanently",
   "savedSessions.trashUnavailable": "Could not move {count} conversation(s) to Trash. Delete them permanently? This cannot be undone.",

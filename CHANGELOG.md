@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.6
+
+- Close terminals linked to successfully deleted saved conversations in both native and card layouts, including renamed and reconnected terminals. Match agent and saved conversation identity so unrelated terminals stay open.
+- Keep linked terminals open when deletion is canceled or fails, including declined permanent deletion after Trash is unavailable.
+
 ## 0.8.5
 
 - Allow agent terminals to persist across window reloads and browser reconnections when terminal persistence is enabled, including direct launches, shell launches, saved conversations and terminal profiles.

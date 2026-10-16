@@ -131,7 +131,7 @@
   "savedSessions.selectedCount": "{count} oturum seçili",
   "savedSessions.deleting": "Oturumlar siliniyor…",
   "savedSessions.deleteConfirm": "{count} kayıtlı konuşma silinsin mi?",
-  "savedSessions.deleteHelp": "Konuşma dosyaları Geri Dönüşüm Kutusu’na taşınacak. Açık terminaller çalışmaya devam eder ve yeni geçmiş kayıtları yazabilir.",
+  "savedSessions.deleteHelp": "Konuşma dosyaları Geri Dönüşüm Kutusu’na taşınacak. Başarıyla silinen konuşmalara bağlı terminaller de kapanacak.",
   "savedSessions.moveToTrash": "Geri Dönüşüm Kutusu’na Taşı",
   "savedSessions.deletePermanently": "Kalıcı Olarak Sil",
   "savedSessions.trashUnavailable": "{count} konuşma Geri Dönüşüm Kutusu’na taşınamadı. Kalıcı olarak silinsin mi? Bu işlem geri alınamaz.",

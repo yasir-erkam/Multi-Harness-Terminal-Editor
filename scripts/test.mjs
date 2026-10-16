@@ -1223,9 +1223,18 @@ try {
     writeSession(extraFiles[1], "third", "Third conversation");
     refreshSaved.handler();
     const getRow = async (id) => (await savedView.provider.getChildren()).find((row) => row.id === id);
+    const deletionTerminal = (id, harnessId = "primeAgent", launchMode = "direct") => ({
+        name: "same editable title",
+        creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId, launchMode, sessionId: id }) } },
+        disposed: 0,
+        dispose() { this.disposed += 1; },
+    });
+    const secondTerminal = deletionTerminal("second");
+    vscodeStub.window.terminals = [secondTerminal];
     const deletesBeforeCancel = vscodeStub.__calls.fsDeletes.length;
     await deleteOne({ harnessId: "primeAgent", id: "second" });
     assert.equal(vscodeStub.__calls.fsDeletes.length, deletesBeforeCancel, "canceling the first modal never touches disk");
+    assert.equal(secondTerminal.disposed, 0, "canceling deletion preserves the linked terminal");
     assert.equal(vscodeStub.__calls.warnings.at(-1).options.modal, true);
     assert.ok(vscodeStub.__calls.warnings.at(-1).options.detail.includes("Second conversation"));
     const warningsBeforeStaleDelete = vscodeStub.__calls.warnings.length;
@@ -1259,7 +1268,10 @@ try {
     await selectAll();
     const originalDelete = vscodeStub.workspace.fs.delete;
     const liveTerminal = firstPrime;
-    vscodeStub.window.terminals = [liveTerminal];
+    const linkedTerminals = [deletionTerminal("recorded-prime"), deletionTerminal("recorded-prime", "primeAgent", "shell"), deletionTerminal("third")];
+    linkedTerminals[0].name = "renamed conversation";
+    const unrelatedTerminals = [liveTerminal, deletionTerminal("different-prime"), deletionTerminal("recorded-prime", "codex")];
+    vscodeStub.window.terminals = [...linkedTerminals, secondTerminal, ...unrelatedTerminals];
     vscodeStub.workspace.fs.delete = async (uri, options) => {
         if (uri.fsPath === extraFiles[0] && options.useTrash) throw new Error("trash unavailable");
         return originalDelete(uri, options);
@@ -1270,20 +1282,27 @@ try {
     assert.ok(existsSync(extraFiles[0]), "declining permanent deletion preserves the failed record");
     assert.equal((await savedView.provider.getChildren()).length, 1);
     assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, 1, "unsuccessful records remain selected");
-    assert.deepEqual(vscodeStub.window.terminals, [liveTerminal], "session deletion never closes an open terminal");
+    assert.ok(linkedTerminals.every((terminal) => terminal.disposed === 1), "bulk trash deletion closes every matching terminal, including renamed and shell terminals");
+    assert.ok(unrelatedTerminals.every((terminal) => !terminal.disposed), "other conversations, agents and unlinked terminals stay open");
+    assert.equal(secondTerminal.disposed, 0, "declining permanent deletion preserves the linked terminal");
+    vscodeStub.window.terminals = [secondTerminal, ...unrelatedTerminals];
     assert.ok(vscodeStub.__calls.fsDeletes.slice(deletesBeforeCancel).every((entry) => entry.options.useTrash && !entry.options.recursive));
     vscodeStub.__calls.warningResults.push("Move to Trash", "Delete Permanently");
     await deleteSelected();
     assert.ok(!existsSync(extraFiles[0]));
+    assert.equal(secondTerminal.disposed, 1, "successful permanent deletion closes the linked terminal");
     assert.equal(vscodeStub.__calls.fsDeletes.at(-1).options.useTrash, false, "permanent deletion requires the separate explicit approval");
     writeSession(extraFiles[0], "second");
     refreshSaved.handler();
     await selectAll();
+    const failedTerminal = deletionTerminal("second");
+    vscodeStub.window.terminals = [failedTerminal];
     vscodeStub.workspace.fs.delete = async () => { throw new Error("permission denied"); };
     vscodeStub.__calls.warningResults.push("Move to Trash", "Delete Permanently");
     const deletionErrorsBeforeFailure = vscodeStub.__calls.errors.length;
     await deleteSelected();
     assert.equal(vscodeStub.__calls.errors.length, deletionErrorsBeforeFailure + 1);
+    assert.equal(failedTerminal.disposed, 0, "failed deletion preserves the linked terminal");
     assert.ok(existsSync(extraFiles[0]));
     assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, 1);
     vscodeStub.workspace.fs.delete = originalDelete;
@@ -1298,7 +1317,9 @@ try {
     refreshSaved.handler();
     const warningsBeforeConcurrent = vscodeStub.__calls.warnings.length;
     vscodeStub.__calls.warningResults.push("Move to Trash");
-    await Promise.all([deleteSelected(), deleteSelected()]);
+    await cancelSelection();
+    await Promise.all([deleteOne({ harnessId: "primeAgent", id: "second" }), deleteOne({ harnessId: "primeAgent", id: "second" })]);
+    assert.equal(failedTerminal.disposed, 1, "single-session deletion closes its linked terminal once");
     assert.equal(vscodeStub.__calls.warnings.length, warningsBeforeConcurrent + 1, "concurrent deletion commands produce one confirmation and operation");
     assert.ok(!existsSync(extraFiles[0]));
     writeSession(savedFile, "recorded-prime");
