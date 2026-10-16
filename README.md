@@ -4,6 +4,8 @@ Run fourteen AI coding-agent CLIs in native editor-area terminals. Select an age
 
 [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=yasir-erkam-ozdemir.multi-harness-terminal-editor) · [Install from Open VSX](https://open-vsx.org/extension/yasir-erkam-ozdemir/multi-harness-terminal-editor) · [Download a VSIX](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor/releases/latest)
 
+![Workflow overview: select an agent, open a new terminal or resume a supported saved session, and switch between editor-area terminal tabs.](media/readme-overview.png)
+
 ## Quick start
 
 1. Install the extension and the agent CLI you want to use. If the CLI is not on `PATH`, set `multiHarness.<id>.executablePath` to its absolute path.
