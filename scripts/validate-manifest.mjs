@@ -9,19 +9,19 @@ const nls = JSON.parse(readFileSync(join(root, "package.nls.json"), "utf8"));
 
 const harnessIds = [
     "claudeCode",
+    "copilot",
     "codex",
+    "cursorAgent",
+    "antigravity",
     "openCode",
     "pi",
-    "ohMyPi",
-    "gemini",
-    "copilot",
-    "cursorAgent",
     "aider",
-    "crush",
+    "gemini",
     "qwen",
+    "crush",
     "goose",
+    "ohMyPi",
     "primeAgent",
-    "antigravity",
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
@@ -268,7 +268,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.8.0", "manifest version matches the 0.8.0 development version");
+check(manifest.version === "0.8.1", "manifest version matches the 0.8.1 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

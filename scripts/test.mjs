@@ -657,6 +657,8 @@ try {
     assert.equal(agentsView.id, manifest.contributes.views.multiHarness[0].id);
     const agents = agentsView.provider.getChildren();
     assert.equal(agents.length, contributedProfiles.length);
+    assert.deepEqual(agents.map((agent) => `multiHarness.${agent.id}`), manifest.contributes.terminal.map((profile) => profile.id), "a fresh installation shares the default agent and contributed profile order");
+    assert.deepEqual(vscodeStub.__calls.profiles.map((profile) => profile.id), manifest.contributes.terminal.map((profile) => profile.id), "profile providers register in the default agent order");
     assert.ok(agents.every((agent) => agentsView.provider.getTreeItem(agent).command.command === "multiHarness.selectSessionAgent"));
     for (const agent of agents) {
         const item = agentsView.provider.getTreeItem(agent);
@@ -804,6 +806,7 @@ try {
     const originalQuickPick = vscodeStub.window.showQuickPick;
     try {
         vscodeStub.window.showQuickPick = async (items) => {
+            assert.deepEqual(items.map((item) => item.harness.id), agents.map((agent) => agent.id), "the agent picker follows the default order");
             const item = items.find((candidate) => candidate.harness?.id === "antigravity");
             assert.equal(item.label, "Antigravity CLI");
             return item;
@@ -1034,6 +1037,7 @@ try {
     assert.ok(cardsWebview.html.includes("script-src 'nonce-"));
     await receiveCardMessage({ action: "ready" });
     assert.equal(cardMessages.at(-1).agents.length, agents.length);
+    assert.deepEqual(cardMessages.at(-1).agents.map((agent) => agent.id), agentsView.provider.getChildren().map((agent) => agent.id), "cards and native views share the default order with favorites first");
     assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "antigravity").name, "Antigravity CLI");
     assert.equal(cardMessages.at(-1).agents[0].id, "codex");
     assert.equal(cardMessages.at(-1).agents[0].favorite, true);

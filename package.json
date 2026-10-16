@@ -2,7 +2,7 @@
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI) in native editor-area terminal tabs.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -184,12 +184,39 @@
         }
       },
       {
+        "command": "multiHarness.openCopilot",
+        "title": "%command.openCopilot.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/copilot-light.svg",
+          "dark": "media/copilot-dark.svg"
+        }
+      },
+      {
         "command": "multiHarness.openCodex",
         "title": "%command.openCodex.title%",
         "category": "%category%",
         "icon": {
           "light": "media/codex-light.svg",
           "dark": "media/codex-dark.svg"
+        }
+      },
+      {
+        "command": "multiHarness.openCursorAgent",
+        "title": "%command.openCursorAgent.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/cursorAgent-light.svg",
+          "dark": "media/cursorAgent-dark.svg"
+        }
+      },
+      {
+        "command": "multiHarness.openAntigravity",
+        "title": "%command.openAntigravity.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/antigravity-light.svg",
+          "dark": "media/antigravity-dark.svg"
         }
       },
       {
@@ -211,12 +238,12 @@
         }
       },
       {
-        "command": "multiHarness.openOhMyPi",
-        "title": "%command.openOhMyPi.title%",
+        "command": "multiHarness.openAider",
+        "title": "%command.openAider.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/ohMyPi-light.svg",
-          "dark": "media/ohMyPi-dark.svg"
+          "light": "media/aider-light.svg",
+          "dark": "media/aider-dark.svg"
         }
       },
       {
@@ -229,30 +256,12 @@
         }
       },
       {
-        "command": "multiHarness.openCopilot",
-        "title": "%command.openCopilot.title%",
+        "command": "multiHarness.openQwen",
+        "title": "%command.openQwen.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/copilot-light.svg",
-          "dark": "media/copilot-dark.svg"
-        }
-      },
-      {
-        "command": "multiHarness.openCursorAgent",
-        "title": "%command.openCursorAgent.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/cursorAgent-light.svg",
-          "dark": "media/cursorAgent-dark.svg"
-        }
-      },
-      {
-        "command": "multiHarness.openAider",
-        "title": "%command.openAider.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/aider-light.svg",
-          "dark": "media/aider-dark.svg"
+          "light": "media/qwen-light.svg",
+          "dark": "media/qwen-dark.svg"
         }
       },
       {
@@ -262,15 +271,6 @@
         "icon": {
           "light": "media/crush-light.svg",
           "dark": "media/crush-dark.svg"
-        }
-      },
-      {
-        "command": "multiHarness.openQwen",
-        "title": "%command.openQwen.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/qwen-light.svg",
-          "dark": "media/qwen-dark.svg"
         }
       },
       {
@@ -288,12 +288,12 @@
         "category": "%category%"
       },
       {
-        "command": "multiHarness.openPrimeAgent",
-        "title": "%command.openPrimeAgent.title%",
+        "command": "multiHarness.openOhMyPi",
+        "title": "%command.openOhMyPi.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/primeAgent-light.svg",
-          "dark": "media/primeAgent-dark.svg"
+          "light": "media/ohMyPi-light.svg",
+          "dark": "media/ohMyPi-dark.svg"
         }
       },
       {
@@ -362,12 +362,12 @@
         "enablement": "multiHarness.hasSelectedSessions && !multiHarness.deletingSessions"
       },
       {
-        "command": "multiHarness.openAntigravity",
-        "title": "%command.openAntigravity.title%",
+        "command": "multiHarness.openPrimeAgent",
+        "title": "%command.openPrimeAgent.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/antigravity-light.svg",
-          "dark": "media/antigravity-dark.svg"
+          "light": "media/primeAgent-light.svg",
+          "dark": "media/primeAgent-dark.svg"
         }
       }
     ],
@@ -485,54 +485,54 @@
           "when": "config.multiHarness.showClaudeCodeIcon"
         },
         {
-          "command": "multiHarness.openCodex",
+          "command": "multiHarness.openCopilot",
           "group": "navigation@102",
+          "when": "config.multiHarness.showCopilotIcon"
+        },
+        {
+          "command": "multiHarness.openCodex",
+          "group": "navigation@103",
           "when": "config.multiHarness.showCodexIcon"
         },
         {
+          "command": "multiHarness.openCursorAgent",
+          "group": "navigation@104",
+          "when": "config.multiHarness.showCursorAgentIcon"
+        },
+        {
+          "command": "multiHarness.openAntigravity",
+          "group": "navigation@105",
+          "when": "config.multiHarness.showAntigravityIcon"
+        },
+        {
           "command": "multiHarness.openOpenCode",
-          "group": "navigation@103",
+          "group": "navigation@106",
           "when": "config.multiHarness.showOpenCodeIcon"
         },
         {
           "command": "multiHarness.openPi",
-          "group": "navigation@104",
+          "group": "navigation@107",
           "when": "config.multiHarness.showPiIcon"
         },
         {
-          "command": "multiHarness.openOhMyPi",
-          "group": "navigation@105",
-          "when": "config.multiHarness.showOhMyPiIcon"
-        },
-        {
-          "command": "multiHarness.openGemini",
-          "group": "navigation@106",
-          "when": "config.multiHarness.showGeminiIcon"
-        },
-        {
-          "command": "multiHarness.openCopilot",
-          "group": "navigation@107",
-          "when": "config.multiHarness.showCopilotIcon"
-        },
-        {
-          "command": "multiHarness.openCursorAgent",
-          "group": "navigation@108",
-          "when": "config.multiHarness.showCursorAgentIcon"
-        },
-        {
           "command": "multiHarness.openAider",
-          "group": "navigation@109",
+          "group": "navigation@108",
           "when": "config.multiHarness.showAiderIcon"
         },
         {
-          "command": "multiHarness.openCrush",
-          "group": "navigation@110",
-          "when": "config.multiHarness.showCrushIcon"
+          "command": "multiHarness.openGemini",
+          "group": "navigation@109",
+          "when": "config.multiHarness.showGeminiIcon"
         },
         {
           "command": "multiHarness.openQwen",
-          "group": "navigation@111",
+          "group": "navigation@110",
           "when": "config.multiHarness.showQwenIcon"
+        },
+        {
+          "command": "multiHarness.openCrush",
+          "group": "navigation@111",
+          "when": "config.multiHarness.showCrushIcon"
         },
         {
           "command": "multiHarness.openGoose",
@@ -540,14 +540,14 @@
           "when": "config.multiHarness.showGooseIcon"
         },
         {
-          "command": "multiHarness.openPrimeAgent",
+          "command": "multiHarness.openOhMyPi",
           "group": "navigation@113",
-          "when": "config.multiHarness.showPrimeAgentIcon"
+          "when": "config.multiHarness.showOhMyPiIcon"
         },
         {
-          "command": "multiHarness.openAntigravity",
+          "command": "multiHarness.openPrimeAgent",
           "group": "navigation@114",
-          "when": "config.multiHarness.showAntigravityIcon"
+          "when": "config.multiHarness.showPrimeAgentIcon"
         }
       ]
     },
@@ -926,8 +926,20 @@
         "title": "%terminal.profile.claudeCode.title%"
       },
       {
+        "id": "multiHarness.copilot",
+        "title": "%terminal.profile.copilot.title%"
+      },
+      {
         "id": "multiHarness.codex",
         "title": "%terminal.profile.codex.title%"
+      },
+      {
+        "id": "multiHarness.cursorAgent",
+        "title": "%terminal.profile.cursorAgent.title%"
+      },
+      {
+        "id": "multiHarness.antigravity",
+        "title": "%terminal.profile.antigravity.title%"
       },
       {
         "id": "multiHarness.openCode",
@@ -938,44 +950,32 @@
         "title": "%terminal.profile.pi.title%"
       },
       {
-        "id": "multiHarness.ohMyPi",
-        "title": "%terminal.profile.ohMyPi.title%"
+        "id": "multiHarness.aider",
+        "title": "%terminal.profile.aider.title%"
       },
       {
         "id": "multiHarness.gemini",
         "title": "%terminal.profile.gemini.title%"
       },
       {
-        "id": "multiHarness.copilot",
-        "title": "%terminal.profile.copilot.title%"
-      },
-      {
-        "id": "multiHarness.cursorAgent",
-        "title": "%terminal.profile.cursorAgent.title%"
-      },
-      {
-        "id": "multiHarness.aider",
-        "title": "%terminal.profile.aider.title%"
+        "id": "multiHarness.qwen",
+        "title": "%terminal.profile.qwen.title%"
       },
       {
         "id": "multiHarness.crush",
         "title": "%terminal.profile.crush.title%"
       },
       {
-        "id": "multiHarness.qwen",
-        "title": "%terminal.profile.qwen.title%"
-      },
-      {
         "id": "multiHarness.goose",
         "title": "%terminal.profile.goose.title%"
       },
       {
-        "id": "multiHarness.primeAgent",
-        "title": "%terminal.profile.primeAgent.title%"
+        "id": "multiHarness.ohMyPi",
+        "title": "%terminal.profile.ohMyPi.title%"
       },
       {
-        "id": "multiHarness.antigravity",
-        "title": "%terminal.profile.antigravity.title%"
+        "id": "multiHarness.primeAgent",
+        "title": "%terminal.profile.primeAgent.title%"
       }
     ]
   },

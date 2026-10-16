@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+- Order agents by a documented adoption snapshot across the native list, cards, pickers, terminal profile contributions and optional editor buttons. Keep favorites first and place agents without comparable usage data last alphabetically.
+
 ## 0.8.0
 
 - Added Antigravity CLI (`agy`) to the agent list, cards, picker, favorites, terminal profiles and optional editor buttons, with English/Turkish settings and themed icons.

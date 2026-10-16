@@ -57,22 +57,24 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 
 ## Supported agents
 
+The default order approximates adoption using the 2026 Stack Overflow Developer Survey, with a smaller CLI survey as a fallback. Favorites stay first; both favorite and other agents follow the default order. Agents without comparable data appear last alphabetically. This is a fixed snapshot, not a live or definitive global CLI usage ranking. See [ordering sources and limitations](docs/agent-order.md).
+
 | Harness id | Display name | Open command | Default executable |
 | --- | --- | --- | --- |
 | `claudeCode` | Claude Code | `multiHarness.openClaudeCode` | `claude` |
+| `copilot` | Copilot CLI | `multiHarness.openCopilot` | `copilot` |
 | `codex` | Codex | `multiHarness.openCodex` | `codex` |
+| `cursorAgent` | Cursor Agent | `multiHarness.openCursorAgent` | `cursor-agent` |
+| `antigravity` | Antigravity CLI | `multiHarness.openAntigravity` | `agy` |
 | `openCode` | OpenCode | `multiHarness.openOpenCode` | `opencode` |
 | `pi` | Pi Agent | `multiHarness.openPi` | `pi` |
-| `ohMyPi` | Oh My Pi | `multiHarness.openOhMyPi` | `omp` |
-| `gemini` | Gemini CLI | `multiHarness.openGemini` | `gemini` |
-| `copilot` | Copilot CLI | `multiHarness.openCopilot` | `copilot` |
-| `cursorAgent` | Cursor Agent | `multiHarness.openCursorAgent` | `cursor-agent` |
 | `aider` | Aider | `multiHarness.openAider` | `aider` |
-| `crush` | Crush | `multiHarness.openCrush` | `crush` |
+| `gemini` | Gemini CLI | `multiHarness.openGemini` | `gemini` |
 | `qwen` | Qwen Code | `multiHarness.openQwen` | `qwen` |
+| `crush` | Crush | `multiHarness.openCrush` | `crush` |
 | `goose` | Goose | `multiHarness.openGoose` | `goose` |
+| `ohMyPi` | Oh My Pi | `multiHarness.openOhMyPi` | `omp` |
 | `primeAgent` | Prime Agent | `multiHarness.openPrimeAgent` | `prime-agent` |
-| `antigravity` | Antigravity CLI | `multiHarness.openAntigravity` | `agy` |
 
 Install [Antigravity CLI](https://antigravity.google/download#antigravity-cli) in the environment where the extension runs (the code-server container for remote development). Its command is `agy`; default locations are `~/.local/bin/agy` on Linux/macOS and `%LOCALAPPDATA%\agy\bin` on Windows. Both are discovered automatically. Antigravity saved-session browsing is not supported yet.
 
@@ -85,19 +87,19 @@ All commands appear in the Command Palette under the `Multi-Harness` category. T
 | `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all fourteen harnesses. |
 | `multiHarness.openSettings` | Open Settings | Open settings filtered to this extension. |
 | `multiHarness.openClaudeCode` | Open Claude Code | Open a Claude Code terminal. |
+| `multiHarness.openCopilot` | Open Copilot CLI | Open a Copilot CLI terminal. |
 | `multiHarness.openCodex` | Open Codex | Open a Codex terminal. |
+| `multiHarness.openCursorAgent` | Open Cursor Agent | Open a Cursor Agent terminal. |
+| `multiHarness.openAntigravity` | Open Antigravity CLI | Open an Antigravity CLI terminal. |
 | `multiHarness.openOpenCode` | Open OpenCode | Open an OpenCode terminal. |
 | `multiHarness.openPi` | Open Pi Agent | Open a Pi Agent terminal. |
-| `multiHarness.openOhMyPi` | Open Oh My Pi | Open an Oh My Pi terminal. |
-| `multiHarness.openGemini` | Open Gemini CLI | Open a Gemini CLI terminal. |
-| `multiHarness.openCopilot` | Open Copilot CLI | Open a Copilot CLI terminal. |
-| `multiHarness.openCursorAgent` | Open Cursor Agent | Open a Cursor Agent terminal. |
 | `multiHarness.openAider` | Open Aider | Open an Aider terminal. |
-| `multiHarness.openCrush` | Open Crush | Open a Crush terminal. |
+| `multiHarness.openGemini` | Open Gemini CLI | Open a Gemini CLI terminal. |
 | `multiHarness.openQwen` | Open Qwen Code | Open a Qwen Code terminal. |
+| `multiHarness.openCrush` | Open Crush | Open a Crush terminal. |
 | `multiHarness.openGoose` | Open Goose | Open a Goose terminal. |
+| `multiHarness.openOhMyPi` | Open Oh My Pi | Open an Oh My Pi terminal. |
 | `multiHarness.openPrimeAgent` | Open Prime Agent | Open a Prime Agent terminal. |
-| `multiHarness.openAntigravity` | Open Antigravity CLI | Open an Antigravity CLI terminal. |
 
 ## Settings
 
@@ -140,57 +142,57 @@ groups. Terminal profile launches always use the active group.
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
 | `multiHarness.showClaudeCodeIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showCopilotIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showCodexIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showCursorAgentIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showAntigravityIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showOpenCodeIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showPiIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showOhMyPiIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showGeminiIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showCopilotIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showCursorAgentIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showAiderIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showCrushIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showGeminiIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showQwenIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showCrushIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showGooseIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showOhMyPiIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showPrimeAgentIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showAntigravityIcon` | `boolean` | `false` | `window` |
 
 **Executable overrides — `multiHarness.<id>.executablePath`** (machine-overridable; reset the setting to use the default executable)
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
 | `multiHarness.claudeCode.executablePath` | `string` | `"claude"` | machine-overridable |
+| `multiHarness.copilot.executablePath` | `string` | `"copilot"` | machine-overridable |
 | `multiHarness.codex.executablePath` | `string` | `"codex"` | machine-overridable |
+| `multiHarness.cursorAgent.executablePath` | `string` | `"cursor-agent"` | machine-overridable |
+| `multiHarness.antigravity.executablePath` | `string` | `"agy"` | machine-overridable |
 | `multiHarness.openCode.executablePath` | `string` | `"opencode"` | machine-overridable |
 | `multiHarness.pi.executablePath` | `string` | `"pi"` | machine-overridable |
-| `multiHarness.ohMyPi.executablePath` | `string` | `"omp"` | machine-overridable |
-| `multiHarness.gemini.executablePath` | `string` | `"gemini"` | machine-overridable |
-| `multiHarness.copilot.executablePath` | `string` | `"copilot"` | machine-overridable |
-| `multiHarness.cursorAgent.executablePath` | `string` | `"cursor-agent"` | machine-overridable |
 | `multiHarness.aider.executablePath` | `string` | `"aider"` | machine-overridable |
-| `multiHarness.crush.executablePath` | `string` | `"crush"` | machine-overridable |
+| `multiHarness.gemini.executablePath` | `string` | `"gemini"` | machine-overridable |
 | `multiHarness.qwen.executablePath` | `string` | `"qwen"` | machine-overridable |
+| `multiHarness.crush.executablePath` | `string` | `"crush"` | machine-overridable |
 | `multiHarness.goose.executablePath` | `string` | `"goose"` | machine-overridable |
+| `multiHarness.ohMyPi.executablePath` | `string` | `"omp"` | machine-overridable |
 | `multiHarness.primeAgent.executablePath` | `string` | `"prime-agent"` | machine-overridable |
-| `multiHarness.antigravity.executablePath` | `string` | `"agy"` | machine-overridable |
 
 **Extra arguments — `multiHarness.<id>.arguments`**
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
 | `multiHarness.claudeCode.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.copilot.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.codex.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.cursorAgent.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.antigravity.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.openCode.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.pi.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.ohMyPi.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.gemini.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.copilot.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.cursorAgent.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.aider.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.crush.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.gemini.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.qwen.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.crush.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.goose.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.ohMyPi.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.primeAgent.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.antigravity.arguments` | `array` of `string` | `[]` | `resource` |
 
 **Notifications**
 
