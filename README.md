@@ -1,6 +1,6 @@
 # Multi-Harness Terminal Editor
 
-Run fourteen AI coding-agent CLIs in native editor-area terminals. Select an agent to browse its saved conversations for your project, resume a session, and keep your favorite agents within reach.
+Run fifteen AI coding-agent CLIs in native editor-area terminals. Select an agent to browse its saved conversations for your project, resume a session, and keep your favorite agents within reach.
 
 [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=yasir-erkam-ozdemir.multi-harness-terminal-editor) · [Install from Open VSX](https://open-vsx.org/extension/yasir-erkam-ozdemir/multi-harness-terminal-editor) · [Download a VSIX](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor/releases/latest)
 
@@ -20,28 +20,28 @@ Run fourteen AI coding-agent CLIs in native editor-area terminals. Select an age
 4. **Double-click the agent** to open its editor-area terminal, or select a saved conversation to resume it.
 5. Use the star to favorite an agent and the gear to open extension settings.
 
-Saved conversations are supported for **Codex, Claude Code, Pi, Oh My Pi, Prime Agent and Antigravity CLI**. All fourteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
+Saved conversations are supported for **Codex, Claude Code, Pi, Oh My Pi, Prime Agent and Antigravity CLI**. All fifteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
 
 The native list is the default. Switch to cards from the view header for search and larger icons. Favorites and the selected agent are shared between layouts; the selected agent is remembered per workspace.
 
 ## What it is
 
-Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as **native VS Code terminals in the editor area**. Open any of the fourteen supported agents from the Activity Bar launcher, an optional editor title-bar button, or the agent picker. Editor title-bar buttons ship **off by default** and are toggled on per agent. The terminals are ordinary editor-area terminals: they can be split, moved, reordered and closed like any other tab.
+Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as **native VS Code terminals in the editor area**. Open any of the fifteen supported agents from the Activity Bar launcher, an optional editor title-bar button, or the agent picker. Editor title-bar buttons ship **off by default** and are toggled on per agent. The terminals are ordinary editor-area terminals: they can be split, moved, reordered and closed like any other tab.
 
 ## Features
 
 - **Two sidebar layouts.** The sidebar defaults to the native VS Code list. Use the Switch Sidebar Layout button in the view header, or set `multiHarness.sidebarLayout` to `native` or `cards`. Cards add search, larger agent icons and integrated session lists. Both layouts share favorites, the selected agent and project filter, settings and launch commands. Your layout choice is saved in VS Code settings.
 
-- **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all fourteen agents and includes a gear button for extension settings. Click an agent once to select it and show its saved sessions for the current project; double-click to open its terminal. Both sidebar layouts use this behavior.
+- **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all fifteen agents and includes a gear button for extension settings. Click an agent once to select it and show its saved sessions for the current project; double-click to open its terminal. Both sidebar layouts use this behavior.
 - **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
 - **Saved sessions.** The Sessions view lists up to 100 recent conversations for the selected agent whose recorded working directory matches the current project folder. Launch an agent, focus its terminal, or use Select Session Agent in the Sessions header to change the agent filter. In multi-root workspaces the folder follows the active editor and stays selected while focus moves to the sidebar or terminal. Symlink aliases match the same directory. This preview supports Codex, Claude Code, Pi, Oh My Pi, Prime Agent and Antigravity CLI. Click a conversation to resume its exact record; closed tabs do not remove saved history. Use Refresh Sessions for new records and title changes. Unsupported agents show an explanation instead of another agent's history.
 - **Open terminals.** The Open Terminals view lists open agent terminal tabs, including resumed sessions. Resumed tabs show the agent and conversation title; conversations with the same title remain separate by their saved identity. Click a row to focus that exact terminal, or its close (×) button to close it and stop its running process. Both list and card layouts support closing individual terminals. A dot marks the active terminal. Saved conversation files are kept; this view is separate from saved history and does not claim to track agent process state.
 - **Delete saved conversations.** Available for Codex, Claude Code, Pi, Oh My Pi and Prime Agent; Antigravity history is read-only. Use a session's trash button (or the native list's right-click menu) for one conversation. Choose Select in Sessions to enter selection mode, mark conversations with checkboxes, then Delete Selected. Select All selects the currently listed agent/project results (up to 100); in cards it also respects the search field. Selections survive refreshes and title changes, are shared between layouts, and clear when you change agents or projects. The confirmation lists the selected titles. The extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. Unsuccessful deletions remain selected. Only the selected conversation's JSONL file is removed; auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed and reconnected terminals. Canceled or failed deletions keep their terminals open. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks; cards always show checkboxes.
-- **Fourteen agents.** Each agent has an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, settings and icon.
+- **Fifteen agents.** Each agent has an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, settings and icon.
 - **Reusable terminals.** Opening an agent again reveals its existing default terminal. Resumed conversations have separate terminals, reused by saved conversation identity, so multiple conversations for the same agent can stay open. Terminal profile launches can create additional terminals.
 - **Sessions use the full editor area by default.** Opening or focusing an agent terminal joins split editor groups into a single group, preserving all open tabs. Set `multiHarness.useFullEditorArea` to `false` to keep your split layout. Terminal profiles open in the active editor group without adding a split.
 - **Terminal persistence.** Agent terminals allow VS Code/code-server to reconnect after a window reload or reopening the browser tab in the same workspace when `terminal.integrated.enablePersistentSessions` is enabled. This applies to direct launches, shell launches, resumed conversations and terminal profiles. Conversation identity survives reloads even when terminal titles change (Linux/code-server also recovers identity from the running process if restored launch options are unavailable), and restored shell terminals regain status tracking without rerunning the agent command. Commands started before the reload show an unknown duration if their start event was missed. Existing terminals created by older extension versions must be reopened once to use persistence and identity tracking. After a server/container restart, restoring a terminal may start a new process; it does not guarantee that an agent conversation resumes. Shell mode may restore only the shell after a process restart; use Saved Sessions to resume a recorded conversation.
-- **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all fourteen harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
+- **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all fifteen harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
 - **Optional shell launch mode with live status.** `multiHarness.launchMode: "shell"` runs agents through your shell so a status-bar item can report running/finished state, duration and exit code; the default `direct` mode is unchanged. See [Launch modes](#launch-modes).
 - **Terminal profile dropdown.** Every agent is also contributed as a VS Code terminal profile (`multiHarness.<id>`), so you can start one from the terminal panel's `+` dropdown; a profile cannot launch if its executable cannot be resolved.
 - **Per-agent editor title-bar icons.** Every agent has its own toggle, `multiHarness.show<Id>Icon` (boolean, default `false`). Enable only the agents you want in the editor title bar.
@@ -73,6 +73,7 @@ The default order approximates adoption using the 2026 Stack Overflow Developer 
 | `gemini` | Gemini CLI | `multiHarness.openGemini` | `gemini` |
 | `qwen` | Qwen Code | `multiHarness.openQwen` | `qwen` |
 | `crush` | Crush | `multiHarness.openCrush` | `crush` |
+| `deepseek` | DeepSeek Harness | `multiHarness.openDeepseek` | `dsh` |
 | `goose` | Goose | `multiHarness.openGoose` | `goose` |
 | `ohMyPi` | Oh My Pi | `multiHarness.openOhMyPi` | `omp` |
 | `primeAgent` | Prime Agent | `multiHarness.openPrimeAgent` | `prime-agent` |
@@ -85,7 +86,7 @@ The following commands appear in the Command Palette under the `Multi-Harness` c
 
 | Command ID | Palette label | Description |
 | --- | --- | --- |
-| `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all fourteen harnesses. |
+| `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all fifteen harnesses. |
 | `multiHarness.openSettings` | Open Settings | Open settings filtered to this extension. |
 | `multiHarness.toggleSidebarLayout` | Switch Sidebar Layout | Switch between native lists and cards. |
 | `multiHarness.refreshSessions` | Refresh Sessions | Reload saved conversations for the selected agent and project. |
@@ -101,6 +102,7 @@ The following commands appear in the Command Palette under the `Multi-Harness` c
 | `multiHarness.openGemini` | Open Gemini CLI | Open a Gemini CLI terminal. |
 | `multiHarness.openQwen` | Open Qwen Code | Open a Qwen Code terminal. |
 | `multiHarness.openCrush` | Open Crush | Open a Crush terminal. |
+| `multiHarness.openDeepseek` | Open DeepSeek Harness | Open a DeepSeek Harness terminal. |
 | `multiHarness.openGoose` | Open Goose | Open a Goose terminal. |
 | `multiHarness.openOhMyPi` | Open Oh My Pi | Open an Oh My Pi terminal. |
 | `multiHarness.openPrimeAgent` | Open Prime Agent | Open a Prime Agent terminal. |
@@ -190,6 +192,7 @@ groups. Terminal profile launches always use the active group.
 | `multiHarness.showGeminiIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showQwenIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showCrushIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showDeepseekIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showGooseIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showOhMyPiIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showPrimeAgentIcon` | `boolean` | `false` | `window` |
@@ -209,6 +212,7 @@ groups. Terminal profile launches always use the active group.
 | `multiHarness.gemini.executablePath` | `string` | `"gemini"` | machine-overridable |
 | `multiHarness.qwen.executablePath` | `string` | `"qwen"` | machine-overridable |
 | `multiHarness.crush.executablePath` | `string` | `"crush"` | machine-overridable |
+| `multiHarness.deepseek.executablePath` | `string` | `"dsh"` | machine-overridable |
 | `multiHarness.goose.executablePath` | `string` | `"goose"` | machine-overridable |
 | `multiHarness.ohMyPi.executablePath` | `string` | `"omp"` | machine-overridable |
 | `multiHarness.primeAgent.executablePath` | `string` | `"prime-agent"` | machine-overridable |
@@ -228,6 +232,7 @@ groups. Terminal profile launches always use the active group.
 | `multiHarness.gemini.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.qwen.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.crush.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.deepseek.arguments` | `array` of `string` | `["--profile", "tui"]` | `resource` |
 | `multiHarness.goose.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.ohMyPi.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.primeAgent.arguments` | `array` of `string` | `[]` | `resource` |
@@ -412,8 +417,8 @@ MIT. See [LICENSE](LICENSE).
 Editor title-bar and terminal icons use the harnesses' application marks,
 including Claude Code's mascot, GitHub Copilot's robot, Gemini CLI's terminal
 mark, and Crush's pixel heart. Eleven use upstream website or application assets;
-Claude Code, Codex and GitHub Copilot use the corresponding LobeHub brand marks.
+Claude Code, Codex, GitHub Copilot and DeepSeek Harness use the corresponding LobeHub brand marks.
 Brand colors are preserved; monochrome foregrounds adapt to light/dark themes.
 Sources and licenses are recorded in
 [media/THIRD_PARTY_NOTICES.md](media/THIRD_PARTY_NOTICES.md).
-Regenerate all 28 themed harness icons offline with `node scripts/gen-icons.mjs`.
+Regenerate all 30 themed harness icons offline with `node scripts/gen-icons.mjs`.

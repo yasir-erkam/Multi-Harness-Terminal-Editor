@@ -145,5 +145,10 @@
   "antigravity.executablePath.description": "Antigravity CLI’ı başlatmak için kullanılan yol veya komut adı. Varsayılan 'agy' komutu standart kurulum dizinlerinde veya PATH üzerinde aranır.",
   "antigravity.arguments.description": "Antigravity CLI’a başlatma sırasında eklenen argümanlar.",
   "terminal.profile.antigravity.title": "Antigravity CLI terminali aç",
-  "antigravity.sessionDirectory.description": "conversation_summaries.db ve conversations/ içeren mutlak Antigravity CLI veri dizini. ~/.gemini/antigravity-cli kullanmak için boş bırakın."
+  "antigravity.sessionDirectory.description": "conversation_summaries.db ve conversations/ içeren mutlak Antigravity CLI veri dizini. ~/.gemini/antigravity-cli kullanmak için boş bırakın.",
+  "command.openDeepseek.title": "DeepSeek Harness'ı Aç",
+  "showDeepseekIcon.description": "Editör başlık çubuğunda DeepSeek Harness düğmesini göster.",
+  "deepseek.executablePath.description": "DeepSeek Harness CLI'ını başlatmak için kullanılan yol veya komut adı. Varsayılan olarak PATH üzerinde 'dsh' aranır.",
+  "deepseek.arguments.description": "DeepSeek Harness CLI'ına başlatma sırasında eklenen argümanlar. Varsayılan olarak ['--profile', 'tui'] kullanılır.",
+  "terminal.profile.deepseek.title": "DeepSeek Harness terminali aç"
 }

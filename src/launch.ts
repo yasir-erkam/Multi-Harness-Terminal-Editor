@@ -39,7 +39,7 @@ export function resolveAgentLaunch(context: vscode.ExtensionContext, harness: Ha
     const cwd = resource?.fsPath ?? os.homedir();
     const config = vscode.workspace.getConfiguration("multiHarness", resource);
     const configuredPath = config.get<string>(settingKey(harness, "executablePath"), harness.defaultExecutable);
-    const args: readonly string[] = config.get<string[]>(settingKey(harness, "arguments"), []);
+    const args: readonly string[] = config.get<string[]>(settingKey(harness, "arguments"), harness.defaultArgs ? [...harness.defaultArgs] : []);
     const configuredMode = config.get<string>("launchMode", "direct");
 
     return {

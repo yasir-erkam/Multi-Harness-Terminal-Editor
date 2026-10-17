@@ -1,8 +1,8 @@
 {
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
-  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI) in native editor-area terminal tabs.",
-  "version": "0.8.6",
+  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI, DeepSeek Harness) in native editor-area terminal tabs.",
+  "version": "0.8.7",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -35,7 +35,10 @@
     "prime agent",
     "prime-agent",
     "antigravity",
-    "agy"
+    "agy",
+    "deepseek harness",
+    "deepseek",
+    "dsh"
   ],
   "extensionKind": [
     "workspace"
@@ -98,7 +101,9 @@
     "onCommand:multiHarness.deleteSession",
     "onCommand:multiHarness.deleteSelectedSessions",
     "onCommand:multiHarness.openAntigravity",
-    "onTerminalProfile:multiHarness.antigravity"
+    "onTerminalProfile:multiHarness.antigravity",
+    "onCommand:multiHarness.openDeepseek",
+    "onTerminalProfile:multiHarness.deepseek"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -377,6 +382,15 @@
           "light": "media/primeAgent-light.svg",
           "dark": "media/primeAgent-dark.svg"
         }
+      },
+      {
+        "command": "multiHarness.openDeepseek",
+        "title": "%command.openDeepseek.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/deepseek-light.svg",
+          "dark": "media/deepseek-dark.svg"
+        }
       }
     ],
     "menus": {
@@ -557,18 +571,23 @@
           "when": "config.multiHarness.showCrushIcon"
         },
         {
-          "command": "multiHarness.openGoose",
+          "command": "multiHarness.openDeepseek",
           "group": "navigation@112",
+          "when": "config.multiHarness.showDeepseekIcon"
+        },
+        {
+          "command": "multiHarness.openGoose",
+          "group": "navigation@113",
           "when": "config.multiHarness.showGooseIcon"
         },
         {
           "command": "multiHarness.openOhMyPi",
-          "group": "navigation@113",
+          "group": "navigation@114",
           "when": "config.multiHarness.showOhMyPiIcon"
         },
         {
           "command": "multiHarness.openPrimeAgent",
-          "group": "navigation@114",
+          "group": "navigation@115",
           "when": "config.multiHarness.showPrimeAgentIcon"
         }
       ]
@@ -945,6 +964,30 @@
           "default": "",
           "description": "%antigravity.sessionDirectory.description%",
           "scope": "machine-overridable"
+        },
+        "multiHarness.showDeepseekIcon": {
+          "type": "boolean",
+          "default": false,
+          "description": "%showDeepseekIcon.description%",
+          "scope": "window"
+        },
+        "multiHarness.deepseek.executablePath": {
+          "type": "string",
+          "default": "dsh",
+          "description": "%deepseek.executablePath.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.deepseek.arguments": {
+          "type": "array",
+          "default": [
+            "--profile",
+            "tui"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "%deepseek.arguments.description%",
+          "scope": "resource"
         }
       }
     },
@@ -992,6 +1035,10 @@
       {
         "id": "multiHarness.crush",
         "title": "%terminal.profile.crush.title%"
+      },
+      {
+        "id": "multiHarness.deepseek",
+        "title": "%terminal.profile.deepseek.title%"
       },
       {
         "id": "multiHarness.goose",

@@ -30,10 +30,11 @@ sample; its counts are not compared with the larger survey. These two agents
 follow the primary-source group. Gemini Code Assist in the primary source is
 not treated as Gemini CLI.
 
-Crush, Goose, Oh My Pi and Prime Agent follow alphabetically because neither
-source supplies comparable entries for them. Missing data does not imply zero
-users or lower actual usage. In particular, the boundaries between these groups
-are a presentation fallback, not a measured usage comparison.
+Crush, DeepSeek Harness, Goose, Oh My Pi and Prime Agent follow alphabetically
+because neither source supplies comparable entries for them. Missing data does
+not imply zero users or lower actual usage. In particular, the boundaries
+between these groups are a presentation fallback, not a measured usage
+comparison.
 
 ## Applying and maintaining the order
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.7
+
+- Add DeepSeek Harness (`dsh`) to the agent list, cards, picker, favorites, terminal profiles and optional editor title-bar buttons, with English and Turkish settings and themed icons.
+- Default `multiHarness.deepseek.arguments` to `["--profile", "tui"]` while preserving custom executable paths and argument overrides in launch commands and terminal profiles.
+
 ## 0.8.6
 
 - Close terminals linked to successfully deleted saved conversations in both native and card layouts, including renamed and reconnected terminals. Match agent and saved conversation identity so unrelated terminals stay open.

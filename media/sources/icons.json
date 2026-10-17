@@ -65,6 +65,13 @@
     "file": "crush.png",
     "url": "https://github.com/charmbracelet/crush/blob/d6edc3222231a0177b88d073733413578c9a1e01/internal/ui/notification/crush-icon-solo.png"
   },
+  "deepseek": {
+    "file": "deepseek.svg",
+    "url": "https://unpkg.com/@lobehub/icons-static-svg@1.95.1/icons/deepseek.svg",
+    "themeColors": [
+      "currentColor"
+    ]
+  },
   "goose": {
     "file": "goose.svg",
     "url": "https://github.com/block/goose/blob/4811ae25f736fdf0ede847449c060e96645426b5/ui/desktop/src/images/icon.svg"

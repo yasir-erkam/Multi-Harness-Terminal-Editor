@@ -5,6 +5,8 @@ export interface Harness {
     readonly displayName: string;
     /** Default command name if no explicit path is configured. */
     readonly defaultExecutable: string;
+    /** Default CLI arguments if no explicit arguments setting is configured. */
+    readonly defaultArgs?: readonly string[];
     /** Contributed command id, spelled out so the bundle stays greppable. */
     readonly commandId: string;
 }
@@ -22,6 +24,7 @@ export const HARNESSES: readonly Harness[] = [
     { id: "gemini", displayName: "Gemini CLI", defaultExecutable: "gemini", commandId: "multiHarness.openGemini" },
     { id: "qwen", displayName: "Qwen Code", defaultExecutable: "qwen", commandId: "multiHarness.openQwen" },
     { id: "crush", displayName: "Crush", defaultExecutable: "crush", commandId: "multiHarness.openCrush" },
+    { id: "deepseek", displayName: "DeepSeek Harness", defaultExecutable: "dsh", defaultArgs: ["--profile", "tui"], commandId: "multiHarness.openDeepseek" },
     { id: "goose", displayName: "Goose", defaultExecutable: "goose", commandId: "multiHarness.openGoose" },
     { id: "ohMyPi", displayName: "Oh My Pi", defaultExecutable: "omp", commandId: "multiHarness.openOhMyPi" },
     { id: "primeAgent", displayName: "Prime Agent", defaultExecutable: "prime-agent", commandId: "multiHarness.openPrimeAgent" },

@@ -833,6 +833,34 @@ try {
     passed += 1;
     console.log("ok: Antigravity CLI command, profile and favorites use the configured executable and arguments");
 
+    const deepseek = agents.find((agent) => agent.id === "deepseek");
+    assert.equal(deepseek.displayName, "DeepSeek Harness");
+    assert.equal(deepseek.defaultExecutable, "dsh");
+    assert.deepEqual(deepseek.defaultArgs, ["--profile", "tui"]);
+    assert.equal(deepseek.commandId, "multiHarness.openDeepseek");
+    vscodeStub.__fixture.multiHarness.deepseek = { executablePath: fakeCli };
+    await vscodeStub.__calls.commands.find((command) => command.id === deepseek.commandId).handler();
+    const deepseekDefaultTerminal = vscodeStub.__calls.created.at(-1).options;
+    assert.equal(deepseekDefaultTerminal.name, "DeepSeek Harness");
+    assert.equal(deepseekDefaultTerminal.shellPath, fakeCli);
+    assert.deepEqual(deepseekDefaultTerminal.shellArgs, ["--profile", "tui"]);
+    const deepseekProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.deepseek");
+    const deepseekProfileOptions = deepseekProfile.provider.provideTerminalProfile({}).options;
+    assert.equal(deepseekProfileOptions.name, "DeepSeek Harness");
+    assert.equal(deepseekProfileOptions.shellPath, fakeCli);
+    assert.deepEqual(deepseekProfileOptions.shellArgs, ["--profile", "tui"]);
+    vscodeStub.window.terminals = [];
+    vscodeStub.__fixture.multiHarness.deepseek = { executablePath: fakeCli, arguments: ["web", "--port", "8080"] };
+    await vscodeStub.__calls.commands.find((command) => command.id === deepseek.commandId).handler();
+    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["web", "--port", "8080"]);
+    vscodeStub.window.terminals = [];
+    await addFavorite.handler(deepseek);
+    assert.equal(agentsView.provider.getTreeItem(deepseek).contextValue, "favoriteAgent");
+    await removeFavorite.handler(deepseek);
+    assert.equal(agentsView.provider.getTreeItem(deepseek).contextValue, "agent");
+    passed += 1;
+    console.log("ok: DeepSeek Harness command, profile and favorites use default tui profile args and custom overrides");
+
     assert.equal(antigravity.displayName, "Antigravity CLI");
     assert.equal(antigravity.defaultExecutable, "agy");
     assert.equal(antigravity.commandId, "multiHarness.openAntigravity");
