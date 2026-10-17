@@ -1,9 +1,14 @@
 # Changelog
 
+## 0.8.8
+
+- Support DeepSeek Harness saved sessions (`~/.dsh/sessions`, `DSH_HOME`, and `multiHarness.deepseek.sessionDirectory`), including Zstandard-compressed (`session.v<N>.jsonl.zstd`) and plain JSONL records, `session/title` and user prompt titles, subagent filtering, safe deletion, and resumption with `dsh --profile tui --resume <id>`.
+
 ## 0.8.7
 
 - Add DeepSeek Harness (`dsh`) to the agent list, cards, picker, favorites, terminal profiles and optional editor title-bar buttons, with English and Turkish settings and themed icons.
 - Default `multiHarness.deepseek.arguments` to `["--profile", "tui"]` while preserving custom executable paths and argument overrides in launch commands and terminal profiles.
+- Keep DeepSeek Harness saved-session history isolated from other agents, and add regression checks for executable discovery, default and overridden arguments, picker actions, and profile contributions.
 
 ## 0.8.6
 

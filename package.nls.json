@@ -150,5 +150,6 @@
   "showDeepseekIcon.description": "Show a DeepSeek Harness button in the editor title bar.",
   "deepseek.executablePath.description": "Path or command name used to launch the DeepSeek Harness CLI. Defaults to looking up 'dsh' on PATH.",
   "deepseek.arguments.description": "Additional arguments passed to the DeepSeek Harness CLI on launch. Defaults to ['--profile', 'tui'].",
-  "terminal.profile.deepseek.title": "Open DeepSeek Harness terminal"
+  "terminal.profile.deepseek.title": "Open DeepSeek Harness terminal",
+  "deepseek.sessionDirectory.description": "Absolute directory containing DeepSeek Harness session records. Leave empty to use the default storage location."
 }

@@ -150,5 +150,6 @@
   "showDeepseekIcon.description": "Editör başlık çubuğunda DeepSeek Harness düğmesini göster.",
   "deepseek.executablePath.description": "DeepSeek Harness CLI'ını başlatmak için kullanılan yol veya komut adı. Varsayılan olarak PATH üzerinde 'dsh' aranır.",
   "deepseek.arguments.description": "DeepSeek Harness CLI'ına başlatma sırasında eklenen argümanlar. Varsayılan olarak ['--profile', 'tui'] kullanılır.",
-  "terminal.profile.deepseek.title": "DeepSeek Harness terminali aç"
+  "terminal.profile.deepseek.title": "DeepSeek Harness terminali aç",
+  "deepseek.sessionDirectory.description": "DeepSeek Harness oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın."
 }

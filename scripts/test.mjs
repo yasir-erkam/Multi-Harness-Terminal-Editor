@@ -9,6 +9,7 @@ import { build } from "esbuild";
 import process from "node:process";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync, spawn } from "node:child_process";
+import { zstdCompressSync } from "node:zlib";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(here);
@@ -307,8 +308,26 @@ try {
         symlinkSync(outside, file);
         await assert.rejects(validateSessionDeletion(session, roots), /regular JSONL/);
     }
+    const dshRoot = roots.find((root) => root.harnessId === "deepseek");
+    const zstdFile = join(dshRoot.directory, "session.v4.jsonl.zstd");
+    const zstdHeader = Buffer.concat([
+        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session", version: 4, id: "delete-zstd", cwd: deletionDir }) + "\n")),
+        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session/title", seq: 0, data: { title: "Zstd session" } }) + "\n")),
+    ]);
+    writeFileSync(zstdFile, zstdHeader);
+    const [zstdSession] = (await scanSavedSessions([dshRoot])).sessions;
+    assert.equal(zstdSession.id, "delete-zstd");
+    await validateSessionDeletion(zstdSession, roots);
+    await assert.rejects(validateSessionDeletion({ ...zstdSession, harnessId: "pi" }, roots), /regular JSONL/);
+    writeFileSync(zstdFile, Buffer.concat([
+        zstdHeader,
+        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session", id: "other", cwd: deletionDir }) + "\n")),
+    ]));
+    await assert.rejects(validateSessionDeletion(zstdSession, roots), /another conversation/);
+    writeFileSync(zstdFile, Buffer.concat([zstdHeader, Buffer.from([0x28, 0xb5, 0x2f, 0xfd, 0x00])]));
+    await assert.rejects(validateSessionDeletion(zstdSession, roots), /record changed/);
     passed += 1;
-    console.log("ok: all five session stores validate identity, reject shared/replaced files and prevent deletion outside their roots");
+    console.log("ok: all six session stores validate identity (including multi-frame .jsonl.zstd), reject shared/replaced files and prevent deletion outside their roots");
 } finally {
     rmSync(deletionDir, { recursive: true, force: true });
 }
@@ -337,7 +356,7 @@ try {
     writeFileSync(join(codexRoot.directory, "invalid.jsonl"), "not JSON\n");
     symlinkSync(join(codexRoot.directory, "saved-codex.jsonl"), join(codexRoot.directory, "linked.jsonl"));
     const scan = await scanSavedSessions(roots);
-    assert.equal(scan.sessions.length, 5);
+    assert.equal(scan.sessions.length, 6);
     assert.deepEqual(scan.unreadable, []);
     assert.deepEqual(scan.sessions.map((session) => session.harnessId), roots.map((root) => root.harnessId));
     assert.equal(scan.sessions[0].title, "Renamed Codex conversation");
@@ -346,19 +365,20 @@ try {
     for (const session of scan.sessions) {
         const args = resumeArguments(session);
         assert.equal(args[0], session.harnessId === "codex" ? "resume" : session.harnessId === "pi" ? "--session" : "--resume");
-        assert.equal(args[1], ["codex", "claudeCode"].includes(session.harnessId) ? session.id : session.file);
+        assert.equal(args[1], ["codex", "claudeCode", "deepseek"].includes(session.harnessId) ? session.id : session.file);
     }
     const prime = scan.sessions.find((session) => session.harnessId === "primeAgent");
     writeFileSync(prime.file, JSON.stringify({ type: "session", id: prime.id, cwd: savedDir }) + "\n" + " ".repeat(600000) + '\n{"type":"session_info","name":"Renamed large session"}\n');
     assert.equal((await scanSavedSessions(roots)).sessions.find((session) => session.id === prime.id).title, "Renamed large session");
     writeFileSync(join(codexRoot.directory, "subagent.jsonl"), JSON.stringify({ type: "session_meta", payload: {id: "child", cwd: savedDir, source: {subagent: {}}} }) + "\n");
-    assert.equal((await scanSavedSessions(roots)).sessions.length, 5);
+    assert.equal((await scanSavedSessions(roots)).sessions.length, 6);
     assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: join(savedDir, "missing") }])).sessions, []);
     assert.deepEqual(await scanSavedSessions([{ harnessId: "codex", directory: prime.file }]), { sessions: [], unreadable: [] }, "a session directory replaced by a file behaves like a missing store");
     assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: "relative-root" }])).unreadable, ["codex"]);
-    const overrides = sessionRoots(savedDir, { CODEX_HOME: "~/custom-codex", PRIME_AGENT_SESSION_DIR: "~/prime-sessions" });
+    const overrides = sessionRoots(savedDir, { CODEX_HOME: "~/custom-codex", PRIME_AGENT_SESSION_DIR: "~/prime-sessions", DSH_HOME: "~/custom-dsh" });
     assert.equal(overrides[0].directory, join(savedDir, "custom-codex", "sessions"));
     assert.equal(overrides[4].directory, join(savedDir, "prime-sessions"));
+    assert.equal(overrides[6].directory, join(savedDir, "custom-dsh", "sessions"));
     const workspace = join(savedDir, "project");
     const sibling = join(savedDir, "project-other");
     mkdirSync(workspace);
@@ -472,6 +492,53 @@ try {
     passed += 1;
     console.log("ok: Antigravity SQLite history filters projects and children, decodes file URIs, resumes by ID and tolerates unavailable indexes");
 } finally { rmSync(agyDir, { recursive: true, force: true }); }
+
+const dshDir = mkdtempSync(join(tmpdir(), "mhte-dsh-"));
+try {
+    const cwd = join(dshDir, "workspace");
+    mkdirSync(cwd);
+    const store = join(dshDir, "sessions");
+    const writeZstdFrames = (file, frameRows) => {
+        mkdirSync(dirname(file), { recursive: true });
+        const buffers = frameRows.map((rows) => zstdCompressSync(Buffer.from(rows.map((row) => JSON.stringify(row)).join("\n") + "\n")));
+        writeFileSync(file, Buffer.concat(buffers));
+    };
+    const mainDir = join(store, "--workspace--", "dsh-main");
+    writeZstdFrames(join(mainDir, "session.v3.jsonl.zstd"), [
+        [{ type: "session", version: 3, id: "dsh-main", cwd }],
+        [{ type: "session/title", seq: 0, data: { title: "Stale v3 title" } }],
+    ]);
+    writeZstdFrames(join(mainDir, "session.v4.jsonl.zstd"), [
+        [{ type: "session", version: 4, id: "dsh-main", cwd }],
+        [{ type: "user/message", seq: 0, data: { content: [{ type: "text", text: "Initial user prompt" }], source: { kind: "user" } } }],
+        [{ type: "session/title", seq: 1, data: { title: "Updated v4 title" } }],
+    ]);
+    // Even if an older generation file has a newer mtime, the highest generation wins in the same session directory.
+    const now = Date.now();
+    utimesSync(join(mainDir, "session.v3.jsonl.zstd"), (now + 5000) / 1000, (now + 5000) / 1000);
+    utimesSync(join(mainDir, "session.v4.jsonl.zstd"), now / 1000, now / 1000);
+    writeZstdFrames(join(store, "--workspace--", "dsh-fallback", "session.v4.jsonl.zstd"), [
+        [{ type: "session", version: 4, id: "dsh-fallback", cwd }],
+        [{ type: "user/message", seq: 0, data: { content: [{ type: "text", text: "Synthetic notification" }], source: { kind: "subagent_notification" } } }],
+        [{ type: "user/message", seq: 1, data: { content: [{ type: "text", text: "Human prompt fallback" }], source: { kind: "user" } } }],
+    ]);
+    writeZstdFrames(join(store, "--workspace--", "dsh-subagent", "session.v4.jsonl.zstd"), [
+        [{ type: "session", version: 4, id: "dsh-subagent", cwd, origin: "subagent", delegationDepth: 1 }],
+        [{ type: "session/title", seq: 0, data: { title: "Subagent session" } }],
+    ]);
+    mkdirSync(join(store, "--workspace--", "dsh-corrupt"), { recursive: true });
+    writeFileSync(join(store, "--workspace--", "dsh-corrupt", "session.v4.jsonl.zstd"), Buffer.from("not-valid-zstd"));
+    const roots = [{ harnessId: "deepseek", directory: store }];
+    const scan = await scanSavedSessions(roots, 100, { harnessId: "deepseek", cwd });
+    assert.deepEqual(scan.unreadable, []);
+    assert.deepEqual(scan.sessions.map((session) => session.id).sort(), ["dsh-fallback", "dsh-main"]);
+    assert.equal(scan.sessions.find((session) => session.id === "dsh-main").title, "Updated v4 title");
+    assert.equal(scan.sessions.find((session) => session.id === "dsh-main").file, join(mainDir, "session.v4.jsonl.zstd"));
+    assert.equal(scan.sessions.find((session) => session.id === "dsh-fallback").title, "Human prompt fallback");
+    assert.deepEqual(resumeArguments(scan.sessions[0]), ["--resume", scan.sessions[0].id]);
+    passed += 1;
+    console.log("ok: DeepSeek Harness multi-frame .jsonl.zstd sessions decode titles, pick highest generation, skip subagents and tolerate corrupt files");
+} finally { rmSync(dshDir, { recursive: true, force: true }); }
 
 // Headless activation test.
 //
@@ -970,7 +1037,7 @@ try {
     // in their recorded project instead of revealing an unrelated agent tab.
     const savedView = vscodeStub.__calls.views.find((view) => view.id === "multiHarness.savedSessions");
     const savedRoot = join(activationDir, "saved-conversations");
-    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity"]) {
+    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity", "deepseek"]) {
         vscodeStub.__fixture.multiHarness[id] ??= {};
         vscodeStub.__fixture.multiHarness[id].sessionDirectory = join(savedRoot, id);
     }
@@ -1083,6 +1150,29 @@ try {
     assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--conversation", "recorded-agy", ...agyArgs]);
     assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
     rmSync(agyStore, { recursive: true, force: true });
+    refreshSaved.handler();
+    delete vscodeStub.__fixture.multiHarness.deepseek.arguments;
+    await selectSessionAgent.handler("deepseek");
+    assert.equal(savedView.message, undefined, "DeepSeek Harness is a supported saved-session provider");
+    const dshStore = vscodeStub.__fixture.multiHarness.deepseek.sessionDirectory;
+    const dshSessionDir = join(dshStore, "--recorded-project--", "recorded-deepseek");
+    mkdirSync(dshSessionDir, { recursive: true });
+    writeFileSync(join(dshSessionDir, "session.v4.jsonl.zstd"), Buffer.concat([
+        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session", version: 4, id: "recorded-deepseek", cwd: projectDirectory }) + "\n")),
+        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session/title", seq: 0, data: { title: "DeepSeek saved session" } }) + "\n")),
+    ]));
+    refreshSaved.handler();
+    const dshSaved = (await savedView.provider.getChildren())[0];
+    assert.equal(dshSaved.id, "recorded-deepseek");
+    assert.equal(dshSaved.title, "DeepSeek saved session");
+    assert.equal(savedView.provider.getTreeItem(dshSaved).contextValue, "savedSession");
+    const beforeDshResume = vscodeStub.__calls.created.length;
+    await resume.handler({ harnessId: "deepseek", id: "recorded-deepseek" });
+    assert.equal(vscodeStub.__calls.created.length, beforeDshResume + 1);
+    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--profile", "tui", "--resume", "recorded-deepseek"], "dsh launcher flags precede --resume");
+    assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
+    vscodeStub.window.terminals = [];
+    rmSync(dshStore, { recursive: true, force: true });
     refreshSaved.handler();
     await selectSessionAgent.handler("aider");
     assert.equal(savedView.message, englishStrings["sessionScope.unsupported"]);

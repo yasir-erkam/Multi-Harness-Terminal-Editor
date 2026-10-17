@@ -184,6 +184,8 @@ for (const id of harnessIds) {
 check(properties["multiHarness.notifyOnExit"]?.type === "boolean" && properties["multiHarness.notifyOnExit"]?.scope === "window", "setting multiHarness.notifyOnExit is boolean/window");
 const agySessions = properties["multiHarness.antigravity.sessionDirectory"];
 check(agySessions?.type === "string" && agySessions.default === "" && agySessions.scope === "machine-overridable", "Antigravity session directory override is declared");
+const dshSessions = properties["multiHarness.deepseek.sessionDirectory"];
+check(dshSessions?.type === "string" && dshSessions.default === "" && dshSessions.scope === "machine-overridable", "DeepSeek Harness session directory override is declared");
 const fullEditorArea = properties["multiHarness.useFullEditorArea"];
 check(fullEditorArea?.type === "boolean" && fullEditorArea.default === true && fullEditorArea.scope === "window", "full editor area defaults to enabled with window scope");
 const launchMode = properties["multiHarness.launchMode"];
@@ -277,7 +279,7 @@ check(
 // Manifest-contract basics
 check(manifest.name === "multi-harness-terminal-editor", "extension name matches the contract");
 check(manifest.engines?.vscode === "^1.67.0", "engines.vscode is ^1.67.0");
-check(manifest.version === "0.8.7", "manifest version matches the 0.8.7 development version");
+check(manifest.version === "0.8.8", "manifest version matches the 0.8.8 development version");
 check(manifest.extensionKind?.length === 1 && manifest.extensionKind[0] === "workspace", "extensionKind is workspace");
 check(manifest.capabilities?.virtualWorkspaces?.supported === false, "virtual workspaces are rejected");
 check(manifest.capabilities?.untrustedWorkspaces?.supported === false, "untrusted workspaces are rejected");

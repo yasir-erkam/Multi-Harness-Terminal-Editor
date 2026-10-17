@@ -20,7 +20,7 @@ Run fifteen AI coding-agent CLIs in native editor-area terminals. Select an agen
 4. **Double-click the agent** to open its editor-area terminal, or select a saved conversation to resume it.
 5. Use the star to favorite an agent and the gear to open extension settings.
 
-Saved conversations are supported for **Codex, Claude Code, Pi, Oh My Pi, Prime Agent and Antigravity CLI**. All fifteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
+Saved conversations are supported for **Codex, Claude Code, Pi, Oh My Pi, Prime Agent, Antigravity CLI and DeepSeek Harness**. All fifteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
 
 The native list is the default. Switch to cards from the view header for search and larger icons. Favorites and the selected agent are shared between layouts; the selected agent is remembered per workspace.
 
@@ -34,9 +34,9 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 
 - **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all fifteen agents and includes a gear button for extension settings. Click an agent once to select it and show its saved sessions for the current project; double-click to open its terminal. Both sidebar layouts use this behavior.
 - **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
-- **Saved sessions.** The Sessions view lists up to 100 recent conversations for the selected agent whose recorded working directory matches the current project folder. Launch an agent, focus its terminal, or use Select Session Agent in the Sessions header to change the agent filter. In multi-root workspaces the folder follows the active editor and stays selected while focus moves to the sidebar or terminal. Symlink aliases match the same directory. This preview supports Codex, Claude Code, Pi, Oh My Pi, Prime Agent and Antigravity CLI. Click a conversation to resume its exact record; closed tabs do not remove saved history. Use Refresh Sessions for new records and title changes. Unsupported agents show an explanation instead of another agent's history.
+- **Saved sessions.** The Sessions view lists up to 100 recent conversations for the selected agent whose recorded working directory matches the current project folder. Launch an agent, focus its terminal, or use Select Session Agent in the Sessions header to change the agent filter. In multi-root workspaces the folder follows the active editor and stays selected while focus moves to the sidebar or terminal. Symlink aliases match the same directory. This preview supports Codex, Claude Code, Pi, Oh My Pi, Prime Agent, Antigravity CLI and DeepSeek Harness. Click a conversation to resume its exact record; closed tabs do not remove saved history. Use Refresh Sessions for new records and title changes. Unsupported agents show an explanation instead of another agent's history.
 - **Open terminals.** The Open Terminals view lists open agent terminal tabs, including resumed sessions. Resumed tabs show the agent and conversation title; conversations with the same title remain separate by their saved identity. Click a row to focus that exact terminal, or its close (×) button to close it and stop its running process. Both list and card layouts support closing individual terminals. A dot marks the active terminal. Saved conversation files are kept; this view is separate from saved history and does not claim to track agent process state.
-- **Delete saved conversations.** Available for Codex, Claude Code, Pi, Oh My Pi and Prime Agent; Antigravity history is read-only. Use a session's trash button (or the native list's right-click menu) for one conversation. Choose Select in Sessions to enter selection mode, mark conversations with checkboxes, then Delete Selected. Select All selects the currently listed agent/project results (up to 100); in cards it also respects the search field. Selections survive refreshes and title changes, are shared between layouts, and clear when you change agents or projects. The confirmation lists the selected titles. The extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. Unsuccessful deletions remain selected. Only the selected conversation's JSONL file is removed; auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed and reconnected terminals. Canceled or failed deletions keep their terminals open. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks; cards always show checkboxes.
+- **Delete saved conversations.** Available for Codex, Claude Code, Pi, Oh My Pi, Prime Agent and DeepSeek Harness; Antigravity history is read-only. Use a session's trash button (or the native list's right-click menu) for one conversation. Choose Select in Sessions to enter selection mode, mark conversations with checkboxes, then Delete Selected. Select All selects the currently listed agent/project results (up to 100); in cards it also respects the search field. Selections survive refreshes and title changes, are shared between layouts, and clear when you change agents or projects. The confirmation lists the selected titles. The extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. Unsuccessful deletions remain selected. Only the selected conversation's JSONL file is removed; auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed and reconnected terminals. Canceled or failed deletions keep their terminals open. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks; cards always show checkboxes.
 - **Fifteen agents.** Each agent has an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, settings and icon.
 - **Reusable terminals.** Opening an agent again reveals its existing default terminal. Resumed conversations have separate terminals, reused by saved conversation identity, so multiple conversations for the same agent can stay open. Terminal profile launches can create additional terminals.
 - **Sessions use the full editor area by default.** Opening or focusing an agent terminal joins split editor groups into a single group, preserving all open tabs. Set `multiHarness.useFullEditorArea` to `false` to keep your split layout. Terminal profiles open in the active editor group without adding a split.
@@ -111,7 +111,7 @@ The following commands appear in the Command Palette under the `Multi-Harness` c
 
 Every setting lives under the `multiHarness` section.
 
-For the six supported session providers, `multiHarness.<id>.sessionDirectory`
+For the seven supported session providers, `multiHarness.<id>.sessionDirectory`
 can override the session storage root with an absolute path (or a path starting
 with `~/`). Leave it empty to use the agent's default store. Conversation metadata
 is read locally; JSONL reads are bounded, and missing or malformed records are
@@ -145,7 +145,7 @@ See [Launch modes](#launch-modes) for shell integration and status tracking.
 
 **Session storage overrides — `multiHarness.<id>.sessionDirectory`**
 
-All six settings are strings, default to `""` (use the default store), and have
+All seven settings are strings, default to `""` (use the default store), and have
 `machine-overridable` scope. Set the directory containing the agent’s history,
 not an individual conversation file.
 
@@ -157,13 +157,14 @@ not an individual conversation file.
 | `multiHarness.ohMyPi.sessionDirectory` | `~/.omp/agent/sessions` |
 | `multiHarness.primeAgent.sessionDirectory` | `~/.prime/agent/sessions` |
 | `multiHarness.antigravity.sessionDirectory` | `~/.gemini/antigravity-cli` |
+| `multiHarness.deepseek.sessionDirectory` | `~/.dsh/sessions` |
 
 These defaults use the extension host’s home directory. When no setting override
 is provided, discovery also honors `CODEX_HOME`, `CLAUDE_CONFIG_DIR`,
-`PI_CODING_AGENT_SESSION_DIR` / `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, and
-`PRIME_AGENT_SESSION_DIR` / `PRIME_AGENT_CODING_AGENT_DIR` for their respective
-agents. For Codex, point to the `sessions` directory; its optional title index
-is read from the parent directory.
+`PI_CODING_AGENT_SESSION_DIR` / `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`,
+`PRIME_AGENT_SESSION_DIR` / `PRIME_AGENT_CODING_AGENT_DIR`, and `DSH_HOME` for
+their respective agents. For Codex, point to the `sessions` directory; its
+optional title index is read from the parent directory.
 
 **Editor layout**
 

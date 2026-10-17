@@ -200,7 +200,10 @@ async function launchAgentTerminal(
     const launch = resolveAgentLaunch(context, harness, resume?.cwd);
     if (resume) {
         launch.name = resume.terminalName;
-        launch.args = [...resume.args, ...(launch.args ?? [])];
+        // `dsh` parses launcher flags like `--profile tui` only before inner app flags like `--resume`.
+        launch.args = harness.id === "deepseek"
+            ? [...(launch.args ?? []), ...resume.args]
+            : [...resume.args, ...(launch.args ?? [])];
     }
     const executable = resolveExecutable(launch.executable, { rootFolder: launch.cwd });
     if (!executable) {
