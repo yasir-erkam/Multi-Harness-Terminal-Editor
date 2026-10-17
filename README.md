@@ -14,7 +14,7 @@ Run fourteen AI coding-agent CLIs in native editor-area terminals. Select an age
 
 ## Quick start
 
-1. Install the extension and the agent CLI you want to use. If the CLI is not on `PATH`, set `multiHarness.<id>.executablePath` to its absolute path.
+1. Install the extension and the agent CLI you want to use in the environment where the extension runs. For code-server or a Dev Container, install the CLI inside the container; for Remote-SSH, install it on the remote host. Complete the CLI’s own authentication setup. If it cannot be found automatically, set `multiHarness.<id>.executablePath` to its absolute path.
 2. Open a trusted project folder and select **Multi-Harness YEÖ** in the Activity Bar.
 3. **Single-click an agent** to show its saved conversations for the current project.
 4. **Double-click the agent** to open its editor-area terminal, or select a saved conversation to resume it.
@@ -36,14 +36,14 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 - **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
 - **Saved sessions.** The Sessions view lists up to 100 recent conversations for the selected agent whose recorded working directory matches the current project folder. Launch an agent, focus its terminal, or use Select Session Agent in the Sessions header to change the agent filter. In multi-root workspaces the folder follows the active editor and stays selected while focus moves to the sidebar or terminal. Symlink aliases match the same directory. This preview supports Codex, Claude Code, Pi, Oh My Pi, Prime Agent and Antigravity CLI. Click a conversation to resume its exact record; closed tabs do not remove saved history. Use Refresh Sessions for new records and title changes. Unsupported agents show an explanation instead of another agent's history.
 - **Open terminals.** The Open Terminals view lists open agent terminal tabs, including resumed sessions. Resumed tabs show the agent and conversation title; conversations with the same title remain separate by their saved identity. Click a row to focus that exact terminal, or its close (×) button to close it and stop its running process. Both list and card layouts support closing individual terminals. A dot marks the active terminal. Saved conversation files are kept; this view is separate from saved history and does not claim to track agent process state.
-- **Delete saved conversations.** Use a session's trash button (or the native list's right-click menu) for one conversation. Choose Select in Sessions to enter selection mode, mark conversations with checkboxes, then Delete Selected. Select All selects the currently listed agent/project results (up to 100); in cards it also respects the search field. Selections survive refreshes and title changes, are shared between layouts, and clear when you change agents or projects. The confirmation lists the selected titles. The extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. Unsuccessful deletions remain selected. Only the selected conversation's JSONL file is removed; auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed and reconnected terminals. Canceled or failed deletions keep their terminals open. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks; cards always show checkboxes.
-- **Fourteen agents, one terminal each.** Open any supported harness in its own editor-area terminal. Each agent is keyed by an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, its settings and its icon.
-- **One terminal per agent, reused.** Running the command again reveals the agent's existing terminal instead of starting a second process; terminals are matched by the agent's display name.
+- **Delete saved conversations.** Available for Codex, Claude Code, Pi, Oh My Pi and Prime Agent; Antigravity history is read-only. Use a session's trash button (or the native list's right-click menu) for one conversation. Choose Select in Sessions to enter selection mode, mark conversations with checkboxes, then Delete Selected. Select All selects the currently listed agent/project results (up to 100); in cards it also respects the search field. Selections survive refreshes and title changes, are shared between layouts, and clear when you change agents or projects. The confirmation lists the selected titles. The extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. Unsuccessful deletions remain selected. Only the selected conversation's JSONL file is removed; auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed and reconnected terminals. Canceled or failed deletions keep their terminals open. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks; cards always show checkboxes.
+- **Fourteen agents.** Each agent has an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, settings and icon.
+- **Reusable terminals.** Opening an agent again reveals its existing default terminal. Resumed conversations have separate terminals, reused by saved conversation identity, so multiple conversations for the same agent can stay open. Terminal profile launches can create additional terminals.
 - **Sessions use the full editor area by default.** Opening or focusing an agent terminal joins split editor groups into a single group, preserving all open tabs. Set `multiHarness.useFullEditorArea` to `false` to keep your split layout. Terminal profiles open in the active editor group without adding a split.
 - **Terminal persistence.** Agent terminals allow VS Code/code-server to reconnect after a window reload or reopening the browser tab in the same workspace when `terminal.integrated.enablePersistentSessions` is enabled. This applies to direct launches, shell launches, resumed conversations and terminal profiles. Conversation identity survives reloads even when terminal titles change (Linux/code-server also recovers identity from the running process if restored launch options are unavailable), and restored shell terminals regain status tracking without rerunning the agent command. Commands started before the reload show an unknown duration if their start event was missed. Existing terminals created by older extension versions must be reopened once to use persistence and identity tracking. After a server/container restart, restoring a terminal may start a new process; it does not guarantee that an agent conversation resumes. Shell mode may restore only the shell after a process restart; use Saved Sessions to resume a recorded conversation.
 - **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all fourteen harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
 - **Optional shell launch mode with live status.** `multiHarness.launchMode: "shell"` runs agents through your shell so a status-bar item can report running/finished state, duration and exit code; the default `direct` mode is unchanged. See [Launch modes](#launch-modes).
-- **Terminal profile dropdown.** Every agent is also contributed as a VS Code terminal profile (`multiHarness.<id>`), so you can start one from the terminal panel's `+` dropdown; profiles whose executable cannot be resolved are simply omitted from the list.
+- **Terminal profile dropdown.** Every agent is also contributed as a VS Code terminal profile (`multiHarness.<id>`), so you can start one from the terminal panel's `+` dropdown; a profile cannot launch if its executable cannot be resolved.
 - **Per-agent editor title-bar icons.** Every agent has its own toggle, `multiHarness.show<Id>Icon` (boolean, default `false`). Enable only the agents you want in the editor title bar.
 - **Exit notifications.** With `multiHarness.notifyOnExit` enabled (default `false`), the extension shows a notification containing the exit code when an agent terminal closes, so a crashed or non-zero CLI does not pass unnoticed.
 - **Multi-root workspaces.** Agent terminals use a workspace folder as their working directory; the extension does not assume a single-folder workspace.
@@ -81,12 +81,15 @@ Install [Antigravity CLI](https://antigravity.google/download#antigravity-cli) i
 
 ## Commands
 
-All commands appear in the Command Palette under the `Multi-Harness` category. The fourteen `open*` commands are also individual, keybindable commands.
+The following commands appear in the Command Palette under the `Multi-Harness` category and can be assigned keyboard shortcuts. Session-row actions such as resume, close and delete are available through the sidebar and are hidden from the palette.
 
 | Command ID | Palette label | Description |
 | --- | --- | --- |
 | `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all fourteen harnesses. |
 | `multiHarness.openSettings` | Open Settings | Open settings filtered to this extension. |
+| `multiHarness.toggleSidebarLayout` | Switch Sidebar Layout | Switch between native lists and cards. |
+| `multiHarness.refreshSessions` | Refresh Sessions | Reload saved conversations for the selected agent and project. |
+| `multiHarness.selectSessionAgent` | Select Session Agent | Choose the agent whose saved conversations are shown. |
 | `multiHarness.openClaudeCode` | Open Claude Code | Open a Claude Code terminal. |
 | `multiHarness.openCopilot` | Open Copilot CLI | Open a Copilot CLI terminal. |
 | `multiHarness.openCodex` | Open Codex | Open a Codex terminal. |
@@ -108,8 +111,8 @@ Every setting lives under the `multiHarness` section.
 
 For the six supported session providers, `multiHarness.<id>.sessionDirectory`
 can override the session storage root with an absolute path (or a path starting
-with `~/`). Leave it empty to use the agent's default store. Conversation files
-are read locally, with bounded metadata reads; missing or malformed records are
+with `~/`). Leave it empty to use the agent's default store. Conversation metadata
+is read locally; JSONL reads are bounded, and missing or malformed records are
 skipped, and directory access failures appear in the session list. A saved
 session cannot resume if its file or original project directory is unavailable.
 
@@ -119,12 +122,46 @@ Sessions stays empty and the terminal launcher remains usable. Set
 then refresh Sessions. A path override supports a moved store; a changed file
 format may require an extension update.
 
-Agent or project changes cancel outdated scans. Archive traversal is limited to
-20,000 entries; a notice indicates incomplete results or access failures.
+Agent or project changes cancel outdated scans. JSONL directory traversal is
+limited to 20,000 entries and four directory levels below the storage root; a
+notice indicates the entry limit or access failures. Antigravity scans up to
+5,000 recent index entries before filtering by project. Only the latest 100
+matching conversations are displayed.
 After fixing a path or permission, use **Refresh Sessions** to try again.
 Resumed conversations use their recorded project's CLI settings and directory.
 
 ### Full settings reference
+
+**Sidebar and launch mode**
+
+| Setting | Type / values | Default | Scope |
+| --- | --- | --- | --- |
+| `multiHarness.sidebarLayout` | `"native"` or `"cards"` | `"native"` | `window` |
+| `multiHarness.launchMode` | `"direct"` or `"shell"` | `"direct"` | `window` |
+
+See [Launch modes](#launch-modes) for shell integration and status tracking.
+
+**Session storage overrides — `multiHarness.<id>.sessionDirectory`**
+
+All six settings are strings, default to `""` (use the default store), and have
+`machine-overridable` scope. Set the directory containing the agent’s history,
+not an individual conversation file.
+
+| Setting | Default storage directory |
+| --- | --- |
+| `multiHarness.codex.sessionDirectory` | `~/.codex/sessions` |
+| `multiHarness.claudeCode.sessionDirectory` | `~/.claude/projects` |
+| `multiHarness.pi.sessionDirectory` | `~/.pi/agent/sessions` |
+| `multiHarness.ohMyPi.sessionDirectory` | `~/.omp/agent/sessions` |
+| `multiHarness.primeAgent.sessionDirectory` | `~/.prime/agent/sessions` |
+| `multiHarness.antigravity.sessionDirectory` | `~/.gemini/antigravity-cli` |
+
+These defaults use the extension host’s home directory. When no setting override
+is provided, discovery also honors `CODEX_HOME`, `CLAUDE_CONFIG_DIR`,
+`PI_CODING_AGENT_SESSION_DIR` / `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, and
+`PRIME_AGENT_SESSION_DIR` / `PRIME_AGENT_CODING_AGENT_DIR` for their respective
+agents. For Codex, point to the `sessions` directory; its optional title index
+is read from the parent directory.
 
 **Editor layout**
 
@@ -216,41 +253,42 @@ groups. Terminal profile launches always use the active group.
 
 ## Keyboard shortcuts & focus
 
-**How keys reach a focused terminal.** When a terminal has focus, keystrokes are delivered to the terminal *except* for the commands listed in `terminal.integrated.commandsToSkipShell`. That list is seeded with a built-in set of VS Code commands and can be written to by the user: adding a command ID makes VS Code handle the key instead of the terminal, and prefixing an entry with `-` removes it from the list.
+The extension adds no default keyboard shortcuts. Terminal key handling follows
+VS Code settings, your keybindings and, in code-server, the browser’s shortcuts.
 
-**Ctrl+P opens Quick Open instead of reaching the agent.** `workbench.action.quickOpen` (Ctrl+P) is in that default skip list, so in an editor-area terminal Ctrl+P opens Quick Open rather than being forwarded to the CLI. To hand Ctrl+P back to the shell, add the removal entry — the example VS Code's own docs give for "Send quick open's keyboard shortcut to the shell":
+To forward Quick Open’s shortcut to the terminal, add this to `settings.json`:
 
 ```json
-"terminal.integrated.commandsToSkipShell": ["-workbench.action.quickOpen"]
+{
+  "terminal.integrated.commandsToSkipShell": ["-workbench.action.quickOpen"]
+}
 ```
 
-**Ctrl/Cmd+W closes the terminal editor tab.** In an **editor-area** terminal, `Ctrl/Cmd+W` is bound to `workbench.action.terminal.killEditor` ("Kill the Active Terminal in Editor Area") with `when: terminalFocus && terminalEditorFocus`, and `workbench.action.terminal.killEditor` is itself in the default `commandsToSkipShell` list — so VS Code consumes the chord and it does **not** reach the agent process. In a **panel** terminal the `terminalEditorFocus` guard does not match and the fallback editor-close binding is *not* in the skip list, so there the key is forwarded to the shell. On Windows the primary binding is `Ctrl+F4`, with `Ctrl+W` as the secondary. (VS Code source: `terminalActions.ts` in `src/vs/workbench/contrib/terminal/browser/`, and `DEFAULT_COMMANDS_TO_SKIP_SHELL` in `src/vs/workbench/contrib/terminal/common/terminal.ts`.)
+Commands in `terminal.integrated.commandsToSkipShell` are handled by VS Code;
+a leading `-` removes a command from that set. For broader forwarding, enable
+`terminal.integrated.sendKeybindingsToShell`; terminal Find shortcuts will then
+also be forwarded. Set `terminal.integrated.allowChords` to `false` if a chord
+prefix such as Ctrl+K needs to reach the CLI. These settings are explained in
+[VS Code’s terminal keyboard documentation](https://code.visualstudio.com/docs/terminal/advanced#_keyboard-shortcuts-and-the-shell).
 
-**Ctrl+C and copy.** On Windows, `Ctrl+C` copies only when text is selected: the `win`-only keybinding of `workbench.action.terminal.copyAndClearSelection` (also in the default skip list) is gated on the `textSelected` context key, so with nothing selected the chord reaches the agent and still interrupts a running CLI. On Linux, plain `Ctrl+C` always reaches the agent because copy is `Ctrl+Shift+C` (`workbench.action.terminal.copySelection`); on macOS, `Cmd+C` copies when a selection exists.
-
-**Sending most keys to the terminal.** Setting `terminal.integrated.sendKeybindingsToShell` to `true` dispatches most keybindings to the terminal instead of VS Code, overriding `commandsToSkipShell`. The documented cost is that terminal-local VS Code shortcuts — Ctrl+F find, for example — stop working while the terminal is focused.
-
-**Chords and mnemonics.** `terminal.integrated.allowChords` (default `true`) sends chorded keybindings to VS Code; note that when a keystroke forms a chord it bypasses `commandsToSkipShell`, and setting this to `false` is how you let e.g. `Ctrl+K` reach the shell. `terminal.integrated.allowMnemonics` (default `false`) concerns Alt+letter menu mnemonics — it controls whether those combinations open the menu bar while the terminal is focused (no effect on macOS).
+Closing a terminal editor tab stops its process. Check **Preferences: Open
+Keyboard Shortcuts** for the active close binding on your platform. For copy,
+use Ctrl+Shift+C on Linux/Windows or Cmd+C on macOS; Ctrl+C normally interrupts
+the CLI, although Windows can use it to copy selected text.
 
 ## Fonts & icons (Nerd Font, ligatures)
 
-**Font family.** `terminal.integrated.fontFamily` has no default value. When it is unset the terminal falls back to `editor.fontFamily`, and whatever value is in effect VS Code always appends `, monospace` (and on macOS also `, AppleBraille`).
+Terminal appearance is controlled by VS Code’s `terminal.integrated.*` settings.
+For missing Nerd Font symbols, install a patched font and set
+`terminal.integrated.fontFamily` to its family name. In browser-based
+code-server, the font must be available to the browser on your local machine.
 
-**Ligatures.** `terminal.integrated.fontLigatures.enabled` defaults to `false`. When you enable it you can tune the behavior with `terminal.integrated.fontLigatures.featureSettings` (the default is `"calt" on`) and `terminal.integrated.fontLigatures.fallbackLigatures`.
-
-**GPU acceleration.** `terminal.integrated.gpuAcceleration` accepts `auto` (default), `on` or `off`. `auto` selects the WebGL renderer and falls back to the DOM renderer when WebGL fails to load or its context is lost.
-
-**Nerd Font icons.** With the WebGL renderer, `terminal.integrated.customGlyphs` (default `true`) draws a specific set of ranges itself, so these glyphs render even without a patched font in the stack:
-
-- Box Drawing `U+2500`–`U+257F`
-- Block Elements `U+2580`–`U+259F`
-- Braille Patterns `U+2800`–`U+28FF`
-- Powerline `U+E0A0`–`U+E0D4`
-- Progress `U+EE00`–`U+EE0B`
-- Git Branch `U+F5D0`–`U+F60D`
-- Symbols for Legacy Computing `U+1FB00`–`U+1FBFF`
-
-All other Nerd Font private-use-area icons need a patched font in the font stack. Setting `terminal.integrated.gpuAcceleration` to `off` disables the custom-glyph path entirely, so the ranges above also require a patched font.
+Ligatures can be enabled with `terminal.integrated.fontLigatures.enabled` on
+builds that support it. The WebGL renderer draws some symbols itself when
+`terminal.integrated.customGlyphs` is enabled, but it does not replace a full
+Nerd Font. Setting `terminal.integrated.gpuAcceleration` to `off` disables that
+custom rendering. Available options vary by VS Code/code-server version; see
+[VS Code’s terminal appearance reference](https://code.visualstudio.com/docs/terminal/appearance).
 
 ## Restricted Mode
 
@@ -262,16 +300,16 @@ It also declares `virtualWorkspaces: { supported: false }`, so it remains disabl
 
 `multiHarness.launchMode` (default `direct`) picks how an agent terminal starts:
 
-- **`direct`** — the agent CLI *is* the terminal process: the extension passes its path as `shellPath`. Same behaviour as every release before 0.3.0.
+- **`direct`** — the agent CLI *is* the terminal process: the extension passes its path as `shellPath`. This is the default launch mode.
 - **`shell`** — the user's default shell profile starts instead, and the agent is run as a command inside it. That indirection is what makes command-level reporting possible, so shell mode is the only mode with the live status-bar readout: `$(sync~spin) <Agent>` while a command runs, then `$(check) <Agent> — <seconds>s (exit <code>)` (or `$(error) …`, and `exit ?` when the shell reports no code). The item hides itself ~30 s after the last command.
 
 Status tracking is best-effort by design. Within 10 s of creating the terminal the extension waits for shell integration and then runs the agent with `executeCommand(executable, args)`, letting VS Code handle quoting. If integration never activates, it falls back to a quoted command line (`sendText`) and says so once in a non-blocking message — with a POSIX single-quote rule (`'` becomes `'\''`), or double quotes with doubled `"` on Windows.
 
-Known limitations of shell mode (all shell-integration related, none specific to this extension):
+Shell mode limitations:
 
-- `cmd.exe` on Windows has no shell integration, so it always takes the degraded path.
+- `cmd.exe` on Windows has no shell integration, so it always takes the quoted-command fallback. That fallback uses platform-based quoting and may not suit every shell; on Windows, `cmd.exe` can still expand `%VAR%` inside quoted arguments.
 - A complex `PROMPT_COMMAND`, a non-standard shell prompt, or a subshell opened by your shell rc can prevent activation.
-- Plain `ssh` sessions report through the *remote* shell; without Remote-SSH the local prompt is not shell-integrated.
+- Commands inside a plain `ssh` session may not emit shell-integration events in the local terminal. Use a Remote-SSH workspace to run the extension on the remote host.
 - If shell integration injection is disabled in your VS Code settings, activation never happens.
 - Terminal profiles from the profile dropdown always use direct mode: a profile has to return a runnable terminal, and the profile API offers no hook to await shell integration.
 
@@ -282,13 +320,13 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
 - **VS Code 1.67.0 or newer** (`engines.vscode: ^1.67.0`). The extension uses `TerminalOptions.location` / `TerminalLocation` (stable since 1.64), `isTransient` (stable since 1.65) and `window.tabGroups` with `TabInputTerminal` (stable since 1.67). Shell mode additionally needs the shell-integration API from **1.93+**; on older builds it degrades to direct launching (feature-detected at runtime).
 - **A trusted, non-virtual workspace.** Because of the two capability declarations above, the extension does not activate in Restricted Mode or in virtual workspaces.
 - `extensionKind: ["workspace"]` — it runs in the workspace extension host, where the terminal API is available.
-- No runtime dependencies, and no Node.js/npm needed just to use the extension.
+- **An installed agent CLI and its own prerequisites.** The extension does not install or authenticate agents. No separate Node.js/npm installation is required by the extension itself; individual CLIs may require one. Antigravity saved history additionally requires an extension host with `node:sqlite` support (Node.js 22.13+).
 
 ## Known limitations
 
 - **Stale `PATH`.** The extension host does not source your shell rc files, so a CLI installed *after* VS Code started may not be on `PATH` in that window. That is why the extension looks for the agent executable beyond `PATH`:
   - `<workspace>/node_modules/.bin`, then
-  - on Windows `%APPDATA%\npm` and `%LOCALAPPDATA%\pnpm`, and
+  - on Windows `%APPDATA%\npm`, `%LOCALAPPDATA%\pnpm` and `%LOCALAPPDATA%\agy\bin`, and
   - on POSIX `~/.bun/bin`, `~/.local/bin` and `~/.npm-global/bin`,
   - before finally falling back to `PATH`.
 
@@ -303,7 +341,7 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
 ### From the Marketplace
 
 1. Open the Extensions view (`Ctrl+Shift+X`).
-2. Search for **Multi-Harness Terminal Editor** and check the publisher shown on the result.
+2. Search for **Multi-Harness Terminal Editor** and verify the publisher is `yasir-erkam-ozdemir`.
 3. Click **Install**, then reload the window if prompted.
 4. Open **Multi-Harness YEÖ** in the Activity Bar. Optionally enable editor title-bar buttons with the `multiHarness.show<Id>Icon` settings.
 
@@ -313,13 +351,15 @@ For code-server and other Open VSX clients, install from [Open VSX](https://open
 
 1. Open the Extensions view and open the `…` (Views and More Actions) menu.
 2. Choose **Install from VSIX…** and select the downloaded `.vsix` file.
-3. Alternatively, from a terminal: `code --install-extension artifacts/multi-harness-terminal-editor-0.6.1.vsix`.
+3. Alternatively, run `code --install-extension /path/to/downloaded.vsix`, replacing the path with the actual file. For code-server, use `code-server --install-extension /path/to/downloaded.vsix` when its CLI is on `PATH`.
 
 Get the current VSIX from [GitHub Releases](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor/releases/latest).
 
 VSIX files are produced in `artifacts/` by `npm run package` (see [PUBLISHING.md](PUBLISHING.md)).
 
 ## Development
+
+Use Node.js 22, matching CI, and install the locked development dependencies:
 
 ```bash
 npm ci          # install dev dependencies from the lockfile
@@ -359,13 +399,9 @@ package command on `v*` tags and publishes the exact versioned file from
 
 ### Source repository
 
-The extension slug `multi-harness-terminal-editor` (the marketplace name) and the GitHub repository name are different things: the repository is PascalCase at `https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor.git`, matching the `repository` field in `package.json`. To push the source there (never push from CI or automated tooling without review), assuming the `origin` remote is already configured — origin zaten ayarlı: `https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor.git`:
-
-```bash
-git push -u origin main
-```
-
-After each commit the tip moves; the local history is authoritative, and `git log --oneline | head -3` prints the current top three.
+Source, issues and contributions are hosted at
+[Multi-Harness-Terminal-Editor on GitHub](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor).
+See [PUBLISHING.md](PUBLISHING.md) for release procedures.
 
 ## License
 
@@ -375,9 +411,9 @@ MIT. See [LICENSE](LICENSE).
 
 Editor title-bar and terminal icons use the harnesses' application marks,
 including Claude Code's mascot, GitHub Copilot's robot, Gemini CLI's terminal
-mark, and Crush's pixel heart. Ten use upstream website or application assets;
+mark, and Crush's pixel heart. Eleven use upstream website or application assets;
 Claude Code, Codex and GitHub Copilot use the corresponding LobeHub brand marks.
 Brand colors are preserved; monochrome foregrounds adapt to light/dark themes.
 Sources and licenses are recorded in
 [media/THIRD_PARTY_NOTICES.md](media/THIRD_PARTY_NOTICES.md).
-Regenerate all 26 icons offline with `node scripts/gen-icons.mjs`.
+Regenerate all 28 themed harness icons offline with `node scripts/gen-icons.mjs`.
