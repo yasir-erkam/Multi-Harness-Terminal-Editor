@@ -351,6 +351,22 @@ try {
     for (const [index, root] of roots.entries()) {
         fixture(root.harnessId, `saved-${root.harnessId}`, savedDir, `${root.harnessId} conversation`, now - index * 1000);
     }
+    const ompRoot = roots.find((root) => root.harnessId === "ohMyPi");
+    const ompArtifacts = join(ompRoot.directory, "saved-ohMyPi");
+    mkdirSync(join(ompArtifacts, "Worker"), { recursive: true });
+    for (const child of ["__advisor.jsonl", "__advisor.security.jsonl", "Worker.jsonl", "Worker/Nested.jsonl"]) {
+        writeFileSync(join(ompArtifacts, child), JSON.stringify({ type: "session", id: child.replace(/[^a-zA-Z]/g, ""), cwd: savedDir }) + "\n"
+            + JSON.stringify({ type: "message", message: { role: "user", content: "commit" } }) + "\n");
+    }
+    assert.deepEqual((await scanSavedSessions([ompRoot])).sessions.map((session) => session.id), ["saved-ohMyPi"],
+        "OMP advisor and nested task transcripts must not appear as independent saved sessions");
+    const ompBucket = join(ompRoot.directory, "project-bucket");
+    mkdirSync(ompBucket);
+    const bucketSession = join(ompBucket, "bucket-session.jsonl");
+    writeFileSync(bucketSession, JSON.stringify({ type: "session", id: "bucket-session", cwd: savedDir }) + "\n");
+    assert.deepEqual(new Set((await scanSavedSessions([ompRoot])).sessions.map((session) => session.id)),
+        new Set(["saved-ohMyPi", "bucket-session"]), "OMP project buckets remain discoverable alongside custom flat session roots");
+    rmSync(ompBucket, { recursive: true });
     const codexRoot = roots.find((root) => root.harnessId === "codex");
     writeFileSync(join(codexRoot.directory, "..", "session_index.jsonl"), JSON.stringify({ id: "saved-codex", thread_name: "Renamed Codex conversation" }) + "\n");
     writeFileSync(join(codexRoot.directory, "invalid.jsonl"), "not JSON\n");

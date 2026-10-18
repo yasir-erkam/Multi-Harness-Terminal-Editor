@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.9
+
+- OMP kayıtlı konuşma taramasında ana oturuma ait yardımcı kayıt klasörlerini dışla; advisor ve iç içe alt ajan geçmişlerini bağımsız, yinelenen konuşmalar olarak gösterme. Ana konuşmalar ve yardımcı kayıt dosyaları korunur.
+
 ## 0.8.8
 
 - Support DeepSeek Harness saved sessions (`~/.dsh/sessions`, `DSH_HOME`, and `multiHarness.deepseek.sessionDirectory`), including Zstandard-compressed (`session.v<N>.jsonl.zstd`) and plain JSONL records, `session/title` and user prompt titles, subagent filtering, safe deletion, and resumption with `dsh --profile tui --resume <id>`.

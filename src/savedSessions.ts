@@ -430,6 +430,18 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
                 }
                 const file = path.join(directory, entry.name);
                 if (entry.isDirectory() && depth < 4 && !entry.name.startsWith(".") && !["subagents", "session-artifacts"].includes(entry.name)) {
+                    // OMP stores advisor/subagent transcripts beside the owning JSONL,
+                    // inside a directory with the same stem. They are not resumable peers.
+                    if (root.harnessId === "ohMyPi") {
+                        try {
+                            if ((await fs.stat(`${file}.jsonl`)).isFile()) {
+                                continue;
+                            }
+                        } catch (error) {
+                            const code = (error as NodeJS.ErrnoException).code;
+                            if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
+                        }
+                    }
                     await walk(root, file, depth + 1);
                 } else if (entry.isFile() && (entry.name.endsWith(".jsonl") || (root.harnessId === "deepseek" && entry.name.endsWith(".jsonl.zstd")))) {
                     try {
