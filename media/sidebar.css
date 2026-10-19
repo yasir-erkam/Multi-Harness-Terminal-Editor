@@ -89,6 +89,7 @@ h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 
 .selection-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
 .text-button { border: 1px solid var(--vscode-button-border, transparent); border-radius: 3px; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); padding: 4px 7px; font-size: 11px; }
 .text-button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+.text-button[aria-pressed="true"] { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-focusBorder); }
 button:disabled { opacity: .5; cursor: default; }
 .session-checkbox { flex-shrink: 0; accent-color: var(--vscode-focusBorder); }
 .saved-title { width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }

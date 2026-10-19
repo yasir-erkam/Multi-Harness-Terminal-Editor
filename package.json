@@ -2,7 +2,7 @@
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI, DeepSeek Harness) in native editor-area terminal tabs.",
-  "version": "0.8.9",
+  "version": "0.8.10",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -91,6 +91,7 @@
     "onView:multiHarness.savedSessions",
     "onCommand:multiHarness.resumeSession",
     "onCommand:multiHarness.refreshSessions",
+    "onCommand:multiHarness.toggleSessionLocationScope",
     "onCommand:multiHarness.selectSessionAgent",
     "onView:multiHarness.cards",
     "onCommand:multiHarness.toggleSidebarLayout",
@@ -321,6 +322,13 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "multiHarness.toggleSessionLocationScope",
+        "title": "%command.toggleSessionLocationScope.title%",
+        "category": "%category%",
+        "icon": "$(globe)",
+        "enablement": "!multiHarness.deletingSessions"
+      },
+      {
         "command": "multiHarness.selectSessionAgent",
         "title": "%command.selectSessionAgent.title%",
         "category": "%category%",
@@ -473,6 +481,11 @@
         }
       ],
       "view/title": [
+        {
+          "command": "multiHarness.toggleSessionLocationScope",
+          "when": "view == multiHarness.savedSessions",
+          "group": "navigation@1"
+        },
         {
           "command": "multiHarness.openSettings",
           "when": "view == multiHarness.agents || view == multiHarness.cards",

@@ -65,6 +65,16 @@ saved.node.querySelector("h2").append(button("icon-button refresh-button", "↻"
 saved.node.querySelector("h2").append(button("icon-button", "⌄", "selectAgent", undefined, t("command.selectSessionAgent.title")));
 const scopeNote = element("p", "support-note scope-note");
 saved.node.insertBefore(scopeNote, saved.body);
+const locationTools = element("div", "selection-tools");
+const locationButtons = [false, true].map((all) => {
+    const control = button("text-button", t(all ? "sessionScope.allLocations" : "sessionScope.currentLocation"));
+    control.addEventListener("click", () => {
+        if (Boolean(state.scope?.allLocations) !== all) vscode.postMessage({ action: "toggleLocationScope" });
+    });
+    locationTools.append(control);
+    return control;
+});
+saved.node.insertBefore(locationTools, saved.body);
 const selectionTools = element("div", "selection-tools");
 saved.node.insertBefore(selectionTools, saved.body);
 saved.body.className = "saved-list";
@@ -88,12 +98,16 @@ app.append(header, search, saved.node, sessions.node, agents.node);
 
 function renderSaved() {
     const scope = state.scope || {};
-    scopeNote.textContent = [scope.agentName, scope.project].filter(Boolean).join(" · ") || t("command.selectSessionAgent.title");
-    scopeNote.title = scope.cwd || "";
+    scopeNote.textContent = [scope.agentName, scope.allLocations ? t("sessionScope.allLocations") : scope.project].filter(Boolean).join(" · ") || t("command.selectSessionAgent.title");
+    scopeNote.title = scope.allLocations ? t("sessionScope.allLocations") : scope.cwd || "";
     const query = search.value.trim().toLocaleLowerCase();
     const matching = (state.saved || []).filter((session) =>
         `${session.title} ${session.harness} ${session.project}`.toLocaleLowerCase().includes(query));
     const selection = state.savedSelection || { mode: false, busy: false, keys: [] };
+    locationButtons.forEach((control, index) => {
+        control.setAttribute("aria-pressed", String(Boolean(scope.allLocations) === Boolean(index)));
+        control.disabled = selection.busy;
+    });
     const selected = new Set(selection.keys);
     selectionButton.textContent = t(selection.mode ? "savedSessions.cancelSelection" : "savedSessions.select");
     selectionButton.disabled = selection.busy || selection.supported === false;

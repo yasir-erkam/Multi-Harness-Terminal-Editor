@@ -41,6 +41,7 @@ export function registerCardsView(
                 agentName: scope.agent?.displayName,
                 cwd: scope.cwd,
                 project: scope.cwd ? basename(scope.cwd) : undefined,
+                allLocations: savedSessions.getAllLocations(),
                 message: savedSessions.getMessage(),
             },
             agents: [...HARNESSES].sort((a, b) => Number(favorites.isFavorite(b)) - Number(favorites.isFavorite(a))).map((harness) => ({
@@ -99,6 +100,8 @@ export function registerCardsView(
                         await vscode.commands.executeCommand("multiHarness.selectSessionAgent", id);
                     } else if (action === "refresh") {
                         await vscode.commands.executeCommand("multiHarness.refreshSessions");
+                    } else if (action === "toggleLocationScope") {
+                        await vscode.commands.executeCommand("multiHarness.toggleSessionLocationScope");
                     } else if (action === "selectionMode") {
                         await vscode.commands.executeCommand("multiHarness.toggleSessionSelectionMode");
                     } else if (action === "selectAll" && Array.isArray(keys)) {

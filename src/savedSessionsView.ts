@@ -16,6 +16,7 @@ export interface SavedSessions {
     getSessions(): Promise<SessionScan>;
     getScope(): SessionScope;
     getMessage(): string | undefined;
+    getAllLocations(): boolean;
     getSelection(): { mode: boolean; busy: boolean; supported: boolean; keys: string[] };
 }
 
@@ -28,6 +29,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     let pendingKey: string | undefined;
     let scanController: AbortController | undefined;
     let selectionMode = false;
+    let allLocations = context.workspaceState.get<boolean>("allSessionLocations", false);
     let deleting = false;
     let selectionScope = "";
     let nativeCheckboxes = false;
@@ -40,7 +42,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         }
     }
     const sessionKey = (session: SavedSession): string => `${session.harnessId}:${session.id}`;
-    const scopeKey = (): string => JSON.stringify([selection.getScope().agent?.id, selection.getScope().cwd]);
+    const scopeKey = (): string => JSON.stringify([selection.getScope().agent?.id, allLocations ? undefined : selection.getScope().cwd, allLocations]);
     function getRoots() {
         const config = vscode.workspace.getConfiguration("multiHarness");
         return sessionRoots().map((root) => {
@@ -54,7 +56,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         if (!scope.agent) {
             return strings["sessionScope.noAgent"];
         }
-        if (!scope.cwd) {
+        if (!allLocations && !scope.cwd) {
             return strings["sessionScope.noFolder"];
         }
         if (!sessionRoots().some((root) => root.harnessId === scope.agent!.id)) {
@@ -64,26 +66,27 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     }
     async function getSessions(): Promise<SessionScan> {
         const scope = selection.getScope();
-        const key = JSON.stringify([scope.agent?.id, scope.cwd]);
+        const key = scopeKey();
         if (key !== pendingKey) {
             scanController?.abort();
             pending = undefined;
             pendingKey = key;
         }
         if (!pending) {
-            if (!scope.agent || !scope.cwd) {
+            if (!scope.agent || (!allLocations && !scope.cwd)) {
                 return { sessions: [], unreadable: [] };
             }
             scanController = new AbortController();
             const signal = scanController.signal;
             pending = Promise.resolve().then(() => {
-                return scanSavedSessions(getRoots(), 100, { harnessId: scope.agent!.id, cwd: scope.cwd! }, { signal });
+                const roots = getRoots().filter((root) => root.harnessId === scope.agent!.id);
+                return scanSavedSessions(roots, 100, allLocations ? undefined : { harnessId: scope.agent!.id, cwd: scope.cwd! }, { signal });
             }).catch(() => ({ sessions: [], unreadable: [scope.agent!.id] }));
         }
         const request = pending;
         const result = await request;
         // A refresh or project change must not restore an obsolete scan.
-        if (request !== pending || key !== JSON.stringify([selection.getScope().agent?.id, selection.getScope().cwd])) {
+        if (request !== pending || key !== scopeKey()) {
             return getSessions();
         }
         if (!result.unreadable.length && !deleting) {
@@ -262,7 +265,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             previousAgentPresence = hasAgent;
             void vscode.commands.executeCommand("setContext", "multiHarness.hasSelectedSessionAgent", hasAgent);
         }
-        view.description = [scope.agent?.displayName, scope.cwd ? path.basename(scope.cwd) : undefined].filter(Boolean).join(" · ");
+        view.description = [scope.agent?.displayName, allLocations ? strings["sessionScope.allLocations"] : scope.cwd ? path.basename(scope.cwd) : undefined].filter(Boolean).join(" · ");
         view.message = getMessage();
         if (selectionMode) view.message = `${strings["savedSessions.selectedCount"].replace("{count}", String(selected.size))}${deleting ? ` · ${strings["savedSessions.deleting"]}` : ""}`;
         setContext("multiHarness.sessionDeletionSupported", supportsSessionDeletion(scope.agent?.id ?? ""));
@@ -277,6 +280,12 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         view,
         selection.onDidChange(refresh),
         vscode.commands.registerCommand("multiHarness.refreshSessions", refresh),
+        vscode.commands.registerCommand("multiHarness.toggleSessionLocationScope", async () => {
+            if (deleting) return;
+            allLocations = !allLocations;
+            refresh();
+            await context.workspaceState.update("allSessionLocations", allLocations);
+        }),
         vscode.commands.registerCommand("multiHarness.toggleSessionSelectionMode", () => {
             if (deleting || !supportsSessionDeletion(selection.getScope().agent?.id ?? "")) return;
             selectionMode = !selectionMode;
@@ -332,6 +341,6 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             }
         })
     );
-    return { onDidChange: changes.event, getSessions, getScope: selection.getScope, getMessage,
+    return { onDidChange: changes.event, getSessions, getScope: selection.getScope, getMessage, getAllLocations: () => allLocations,
         getSelection: () => ({ mode: selectionMode, busy: deleting, supported: supportsSessionDeletion(selection.getScope().agent?.id ?? ""), keys: [...selected] }) };
 }

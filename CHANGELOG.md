@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.10
+
+- Sessions altında mevcut konum ve tüm konumlar arasında geçiş ekle. Seçili ajan korunur; kapsam çalışma alanı başına hatırlanır ve kart/liste görünümleri arasında paylaşılır. Tüm konumlar açık klasör olmadan da çalışır.
+
 ## 0.8.9
 
 - OMP kayıtlı konuşma taramasında ana oturuma ait yardımcı kayıt klasörlerini dışla; advisor ve iç içe alt ajan geçmişlerini bağımsız, yinelenen konuşmalar olarak gösterme. Ana konuşmalar ve yardımcı kayıt dosyaları korunur.
