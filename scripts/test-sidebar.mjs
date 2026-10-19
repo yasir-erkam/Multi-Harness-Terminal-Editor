@@ -115,9 +115,42 @@ assert.equal(messages[0].id, "terminal-1");
 console.log("ok: each card terminal closes by identity with an accessible button separate from focus");
 
 const savedRows = [
-    { key: "codex:first", title: "First conversation", harness: "Codex", project: "example", cwd: "/example", modified: Date.now() },
-    { key: "codex:second", title: "Second conversation", harness: "Codex", project: "example", cwd: "/example", modified: Date.now() },
+    { key: "codex:first", title: "First conversation", harness: "Codex", project: "example", cwd: "/example", modified: new Date(2026, 9, 19, 15).getTime() },
+    { key: "codex:second", title: "Second conversation", harness: "Codex", project: "example", cwd: "/example", modified: new Date(2026, 9, 19, 9).getTime() },
 ];
+const olderRow = { ...savedRows[0], key: "codex:older", title: "Older conversation", modified: new Date(2026, 9, 18, 23, 59).getTime() };
+const midnightRow = { ...savedRows[0], key: "codex:midnight", title: "Midnight conversation", modified: new Date(2026, 9, 19, 0, 1).getTime() };
+const groupedRows = [olderRow, savedRows[1], midnightRow, savedRows[0]];
+document.documentElement.lang = "de";
+receive({ data: { ...state, saved: groupedRows, savedUnreadable: true } });
+const dayGroups = app.querySelectorAll(".saved-day");
+assert.equal(dayGroups.length, 2, "history groups by local calendar date, including either side of midnight");
+assert.deepEqual(app.querySelectorAll(".saved-session").map((row) => row.dataset.id),
+    ["codex:first", "codex:second", "codex:midnight", "codex:older"], "days and sessions are newest first regardless of input order");
+const dayHeading = dayGroups[0].querySelector("h3");
+assert.equal(dayHeading.textContent, new Date(savedRows[0].modified).toLocaleDateString("de", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+}), "day headings use the webview language and include the year");
+assert.equal(dayGroups[0].attributes["aria-labelledby"], dayHeading.id, "each day region is named by its heading");
+assert.equal(dayGroups[0].querySelectorAll(".saved-session").length, 3);
+assert.equal(dayGroups[1].querySelectorAll(".saved-session").length, 1);
+const savedList = app.querySelector(".saved-list");
+assert.equal(savedList.parent.querySelector(".count").textContent, "4", "the count includes sessions, not headings or notices");
+assert.ok(savedList.querySelector(".empty"), "an unreadable notice remains visible alongside grouped sessions");
+const groupedSearch = app.querySelector(".search");
+groupedSearch.value = "older";
+groupedSearch.dispatch("input");
+assert.equal(app.querySelectorAll(".saved-day").length, 1, "filtering removes empty day groups");
+assert.equal(app.querySelector(".saved-session").dataset.id, "codex:older");
+assert.equal(savedList.parent.querySelector(".count").textContent, "1");
+groupedSearch.value = "no matching conversation";
+groupedSearch.dispatch("input");
+assert.equal(app.querySelectorAll(".saved-day").length, 0, "no-results renders without orphan day headings");
+assert.equal(savedList.parent.querySelector(".count").textContent, "0");
+assert.equal(savedList.querySelectorAll(".empty").length, 2, "no-results and unreadable notices both remain visible");
+groupedSearch.value = "";
+document.documentElement.lang = "en";
+console.log("ok: localized accessible local-day history groups preserve ordering, filtering, counts and unreadable notices");
 receive({ data: { ...state, saved: savedRows, savedSelection: { mode: false, busy: false, keys: [] } } });
 messages.length = 0;
 app.querySelector(".saved-session").dispatch("click");
@@ -156,3 +189,19 @@ assert.equal(app.querySelector(".delete-selected").disabled, true);
 assert.equal(app.querySelector(".session-checkbox").disabled, true);
 assert.equal(app.querySelector(".delete-session").disabled, true);
 console.log("ok: card selection, filtered Select All, trash actions, selected count and busy controls preserve normal resume behavior");
+
+search.value = "";
+receive({ data: { ...state, saved: groupedRows, savedSelection: { mode: true, busy: false, keys: ["codex:first", "codex:older"] } } });
+assert.equal(app.querySelectorAll(".session-checkbox").length, 4, "only sessions receive checkboxes, never day headings");
+assert.equal(app.querySelectorAll(".session-checkbox").filter((node) => node.checked).length, 2, "selection spans day groups");
+messages.length = 0;
+app.querySelector(".select-all").dispatch("click");
+assert.deepEqual(Array.from(messages[0].keys), ["codex:first", "codex:second", "codex:midnight", "codex:older"], "Select All crosses day groups without including headings");
+search.value = "older";
+search.dispatch("input");
+assert.equal(app.querySelector(".delete-selected").textContent, "Delete Selected (2)", "search does not discard selected sessions in hidden day groups");
+messages.length = 0;
+app.querySelector(".saved-session").dispatch("click");
+assert.equal(messages[0].action, "toggleSelection");
+assert.equal(messages[0].id, "codex:older", "grouped selection still targets the session identity");
+console.log("ok: selection spans day groups while headings stay outside checkbox and Select All actions");

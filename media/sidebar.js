@@ -102,7 +102,8 @@ function renderSaved() {
     scopeNote.title = scope.allLocations ? t("sessionScope.allLocations") : scope.cwd || "";
     const query = search.value.trim().toLocaleLowerCase();
     const matching = (state.saved || []).filter((session) =>
-        `${session.title} ${session.harness} ${session.project}`.toLocaleLowerCase().includes(query));
+        `${session.title} ${session.harness} ${session.project}`.toLocaleLowerCase().includes(query))
+        .sort((left, right) => right.modified - left.modified);
     const selection = state.savedSelection || { mode: false, busy: false, keys: [] };
     locationButtons.forEach((control, index) => {
         control.setAttribute("aria-pressed", String(Boolean(scope.allLocations) === Boolean(index)));
@@ -130,7 +131,22 @@ function renderSaved() {
     if (matching.length === 0) {
         saved.body.append(element("p", "empty", scope.message || t(query ? "sidebar.noResults" : "sidebar.noSavedSessions")));
     }
+    let dayKey;
+    let dayGroup;
     for (const session of matching) {
+        const modified = new Date(session.modified);
+        const key = `${modified.getFullYear()}-${modified.getMonth()}-${modified.getDate()}`;
+        if (key !== dayKey) {
+            dayKey = key;
+            dayGroup = element("section", "saved-day");
+            const heading = element("h3", "saved-day-heading", modified.toLocaleDateString(document.documentElement.lang, {
+                weekday: "long", year: "numeric", month: "long", day: "numeric",
+            }));
+            heading.id = `saved-day-${key}`;
+            dayGroup.setAttribute("aria-labelledby", heading.id);
+            dayGroup.append(heading);
+            saved.body.append(dayGroup);
+        }
         const container = element("div", "saved-row");
         if (selection.mode) {
             const checkbox = element("input", "session-checkbox");
@@ -160,7 +176,7 @@ function renderSaved() {
         remove.disabled = selection.busy;
         remove.hidden = session.deletable === false;
         container.append(row, remove);
-        saved.body.append(container);
+        dayGroup.append(container);
     }
 }
 

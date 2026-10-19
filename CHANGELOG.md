@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.15
+
+- Group saved sessions by the local calendar day of their last user or assistant message, newest days and conversations first, in both card and list views. Creation and title-update timestamps do not move conversations between days. Stores without readable message timestamps retain their file/index modification-time fallback.
+- Make Windows regression fixtures use native path separators, junctions and executable suffixes; report file-symlink scenarios as skipped only when Windows denies symlink creation. Compare generated SVGs independently of checkout line endings.
+- Hide OMP helper-agent conversations by their first user message's agent attribution, including copied task transcripts whose parent path is stale. Preserve real user conversations and forks.
+
 ## 0.8.14
 
 - Require successful validation and an existing VSIX output before any gallery publish or GitHub release. Both galleries receive the same validated package.

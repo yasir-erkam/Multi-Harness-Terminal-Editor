@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, utimesSync, symlinkSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, sep, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import process from "node:process";
@@ -42,6 +42,17 @@ function test(name, fn) {
         console.log(`ok: ${name}`);
     } finally {
         rmSync(rootDir, { recursive: true, force: true });
+    }
+}
+
+function fileSymlink(target, link) {
+    try {
+        symlinkSync(target, link, "file");
+        return true;
+    } catch (error) {
+        if (process.platform !== "win32" || error.code !== "EPERM") throw error;
+        console.log("skip: file-symlink scenario requires Windows Developer Mode or elevation");
+        return false;
     }
 }
 
@@ -306,8 +317,9 @@ try {
         writeFileSync(outside, JSON.stringify(header) + "\n");
         await assert.rejects(validateSessionDeletion({ ...session, file: outside }, roots), /outside/);
         rmSync(file);
-        symlinkSync(outside, file);
-        await assert.rejects(validateSessionDeletion(session, roots), /regular JSONL/);
+        if (fileSymlink(outside, file)) {
+            await assert.rejects(validateSessionDeletion(session, roots), /regular JSONL/);
+        }
     }
     const dshRoot = roots.find((root) => root.harnessId === "deepseek");
     const zstdFile = join(dshRoot.directory, "session.v4.jsonl.zstd");
@@ -331,6 +343,27 @@ try {
     console.log("ok: all six session stores validate identity (including multi-frame .jsonl.zstd), reject shared/replaced files and prevent deletion outside their roots");
 } finally {
     rmSync(deletionDir, { recursive: true, force: true });
+}
+const datedDir = mkdtempSync(join(tmpdir(), "mhte-dated-"));
+try {
+    const writeDated = (id, timestamp, mtime) => {
+        const file = join(datedDir, `${id}.jsonl`);
+        writeFileSync(file, [
+            { type: "session", id, cwd: datedDir, timestamp: "2026-01-01T00:00:00Z" },
+            { type: "message", timestamp, message: { role: "assistant", content: "Answer" } },
+            { type: "session_info", name: id, timestamp: "2026-10-19T23:00:00Z" },
+        ].map(JSON.stringify).join("\n"));
+        utimesSync(file, mtime / 1000, mtime / 1000);
+    };
+    writeDated("renamed-old", "2026-10-17T20:00:00Z", Date.parse("2026-10-19T00:00:00Z"));
+    writeDated("latest-message", "2026-10-18T20:00:00Z", Date.parse("2026-10-18T21:00:00Z"));
+    const result = await scanSavedSessions([{ harnessId: "pi", directory: datedDir }], 1);
+    assert.deepEqual(result.sessions.map((session) => session.id), ["latest-message"], "last message sorting must happen before the result limit, regardless of rename mtime");
+    assert.equal(result.sessions[0].modified, Date.parse("2026-10-18T20:00:00Z"), "header and title timestamps must not replace the last message timestamp");
+    passed += 1;
+    console.log("ok: history uses last message timestamps rather than creation, title changes or file modification order");
+} finally {
+    rmSync(datedDir, { recursive: true, force: true });
 }
 const savedDir = mkdtempSync(join(tmpdir(), "mhte-saved-"));
 try {
@@ -400,7 +433,7 @@ try {
     const codexRoot = roots.find((root) => root.harnessId === "codex");
     writeFileSync(join(codexRoot.directory, "..", "session_index.jsonl"), JSON.stringify({ id: "saved-codex", thread_name: "Renamed Codex conversation" }) + "\n");
     writeFileSync(join(codexRoot.directory, "invalid.jsonl"), "not JSON\n");
-    symlinkSync(join(codexRoot.directory, "saved-codex.jsonl"), join(codexRoot.directory, "linked.jsonl"));
+    fileSymlink(join(codexRoot.directory, "saved-codex.jsonl"), join(codexRoot.directory, "linked.jsonl"));
     const scan = await scanSavedSessions(roots);
     assert.equal(scan.sessions.length, 6);
     assert.deepEqual(scan.unreadable, []);
@@ -423,7 +456,7 @@ try {
     assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: "relative-root" }])).unreadable, ["codex"]);
     const overrides = sessionRoots(savedDir, { CODEX_HOME: "~/custom-codex", PRIME_AGENT_SESSION_DIR: "~/prime-sessions", DSH_HOME: "~/custom-dsh" });
     assert.equal(overrides[0].directory, join(savedDir, "custom-codex", "sessions"));
-    assert.equal(overrides[4].directory, join(savedDir, "prime-sessions"));
+    assert.equal(normalize(overrides[4].directory), join(savedDir, "prime-sessions"));
     assert.equal(overrides[6].directory, join(savedDir, "custom-dsh", "sessions"));
     const workspace = join(savedDir, "project");
     const sibling = join(savedDir, "project-other");
@@ -437,7 +470,7 @@ try {
     const scoped = await scanSavedSessions(roots, 1, { harnessId: "codex", cwd: workspace });
     assert.deepEqual(scoped.sessions.map((session) => session.id), ["matching-project"], "scope filtering happens before the result limit");
     const alias = join(savedDir, "project-alias");
-    symlinkSync(workspace, alias);
+    symlinkSync(workspace, alias, process.platform === "win32" ? "junction" : "dir");
     assert.equal((await scanSavedSessions(roots, 100, { harnessId: "codex", cwd: alias })).sessions[0].id, "matching-project", "symlink aliases resolve to the same project");
     passed += 1;
     console.log("ok: saved sessions read real metadata independently of terminals, tolerate partial files and use provider resume arguments");
@@ -459,6 +492,26 @@ try {
     }
     passed += 1;
     console.log("ok: malformed content blocks preserve valid saved sessions and readable titles");
+
+    const taskStore = join(savedDir, "copied-omp");
+    const copiedArtifacts = join(taskStore, "copied-parent");
+    mkdirSync(copiedArtifacts, { recursive: true });
+    const originalParent = join(savedDir, "original-parent.jsonl");
+    const writeOmp = (file, id, attribution, parentSession) => writeFileSync(file, [
+        { type: "session", id, cwd: workspace, parentSession },
+        { type: "message", message: { role: "user", attribution, content: "Complete assignment thoroughly: group sessions" } },
+        { type: "message", message: { role: "user", attribution: "user", content: "Continue" } },
+    ].map((row) => JSON.stringify(row)).join("\n"));
+    writeOmp(join(copiedArtifacts, "Task.jsonl"), "copied-task", "agent", originalParent);
+    writeOmp(join(taskStore, "detached-task.jsonl"), "detached-task", "agent", undefined);
+    writeOmp(join(taskStore, "fork.jsonl"), "user-fork", "user", originalParent);
+    writeOmp(join(taskStore, "ordinary.jsonl"), "ordinary", undefined, undefined);
+    const taskScan = await scanSavedSessions([{ harnessId: "ohMyPi", directory: taskStore }]);
+    assert.deepEqual(taskScan.unreadable, []);
+    assert.deepEqual(taskScan.sessions.map((session) => session.id).sort(), ["ordinary", "user-fork"],
+        "copied and detached agent tasks stay hidden while real forks and untagged conversations remain visible");
+    passed += 1;
+    console.log("ok: OMP agent-attributed task sessions stay hidden after copying without hiding user conversations");
 
     const changedStore = join(savedDir, "renamed-store");
     const movedStore = join(savedDir, "new-store");
@@ -526,7 +579,7 @@ try {
     assert.deepEqual(resumeArguments(scan.sessions[0]), ["--conversation", scan.sessions[0].id]);
     assert.equal((await scanSavedSessions(roots, 1, { harnessId: "antigravity", cwd })).sessions.length, 1);
     const alias = join(agyDir, "alias");
-    symlinkSync(cwd, alias);
+    symlinkSync(cwd, alias, process.platform === "win32" ? "junction" : "dir");
     assert.equal((await scanSavedSessions(roots, 100, { harnessId: "antigravity", cwd: alias })).sessions.length, 3);
     assert.equal(sessionRoots(agyDir, {}).find((root) => root.harnessId === "antigravity").directory, join(agyDir, ".gemini", "antigravity-cli"));
     const before = readFileSync(join(directory, "conversation_summaries.db"));
@@ -658,6 +711,7 @@ module.exports = {
     __scopedFixtures: scopedFixtures,
     StatusBarAlignment: { Left: 1, Right: 2 },
     ConfigurationTarget: { Global: 1 },
+    TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
     env: { language: "en" },
     EventEmitter: class EventEmitter {
         listeners = new Set();
@@ -746,7 +800,7 @@ module.exports = {
         fs: { async delete(uri, options) { calls.fsDeletes.push({ file: uri.fsPath, options }); await require("node:fs/promises").unlink(uri.fsPath); } },
         onDidChangeWorkspaceFolders(handler) { return subscribeTerminalEvent(calls.workspaceFolderHandlers, handler); },
         onDidChangeConfiguration() { return { dispose() {} }; } },
-    Uri: { file: (fsPath) => ({ fsPath }), joinPath: (base, ...parts) => ({ fsPath: [base.fsPath, ...parts].join("/"), path: parts.join("/") }) },
+    Uri: { file: (fsPath) => ({ fsPath }), joinPath: (base, ...parts) => ({ fsPath: require("node:path").join(base.fsPath, ...parts), path: parts.join("/") }) },
     ViewColumn: { Active: -1, Beside: -2 },
     TerminalProfile: class TerminalProfile { constructor(options) { this.options = options; } },
 };
@@ -1100,6 +1154,8 @@ try {
     // Closed conversations are discoverable without any terminal tab and resume
     // in their recorded project instead of revealing an unrelated agent tab.
     const savedView = vscodeStub.__calls.views.find((view) => view.id === "multiHarness.savedSessions");
+    const savedSessionRows = async () => (await Promise.all((await savedView.provider.getChildren()).map((item) =>
+        "day" in item ? savedView.provider.getChildren(item) : []))).flat();
     const savedRoot = join(activationDir, "saved-conversations");
     for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity", "deepseek"]) {
         vscodeStub.__fixture.multiHarness[id] ??= {};
@@ -1111,28 +1167,49 @@ try {
     mkdirSync(primeSessions, { recursive: true });
     const savedFile = join(primeSessions, "recorded.jsonl");
     writeFileSync(savedFile, JSON.stringify({type: "session", id: "recorded-prime", cwd: projectDirectory}) + '\n{"type":"session_info","name":"A saved conversation"}\n');
+    const recordedTime = new Date(2026, 9, 19, 0, 1);
+    utimesSync(savedFile, recordedTime, recordedTime);
     const selectSessionAgent = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.selectSessionAgent");
     await selectSessionAgent.handler("primeAgent");
     assert.deepEqual(await savedView.provider.getChildren(), [], "no project never falls back to all session history");
     const otherFile = join(primeSessions, "other-project.jsonl");
     writeFileSync(otherFile, JSON.stringify({ type: "session", id: "other-project", cwd: activationDir }) + "\n");
+    const otherTime = new Date(2026, 9, 18, 23, 59);
+    utimesSync(otherFile, otherTime, otherTime);
+    const newerFile = join(primeSessions, "newer-conversation.jsonl");
+    writeFileSync(newerFile, JSON.stringify({ type: "session", id: "newer-conversation", cwd: activationDir }) + "\n");
+    const newerTime = new Date(2026, 9, 19, 15);
+    utimesSync(newerFile, newerTime, newerTime);
     const toggleLocationScope = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.toggleSessionLocationScope");
     await toggleLocationScope.handler();
-    assert.deepEqual(new Set((await savedView.provider.getChildren()).map((session) => session.id)), new Set(["recorded-prime", "other-project"]), "all locations works without an open folder");
+    const nativeDays = await savedView.provider.getChildren();
+    assert.equal(nativeDays.length, 2, "native history separates local dates on either side of midnight");
+    assert.deepEqual((await savedSessionRows()).map((session) => session.id), ["newer-conversation", "recorded-prime", "other-project"], "native history orders day groups and sessions within each group newest first");
+    const previousLanguage = vscodeStub.env.language;
+    vscodeStub.env.language = "de";
+    const dayItem = savedView.provider.getTreeItem(nativeDays[0]);
+    assert.equal(dayItem.label, recordedTime.toLocaleDateString("de", { weekday: "long", year: "numeric", month: "long", day: "numeric" }));
+    assert.equal(dayItem.accessibilityInformation.label, dayItem.label, "native groups have localized accessible names");
+    assert.equal(dayItem.collapsibleState, 2, "native day groups start expanded");
+    assert.equal(dayItem.command, undefined, "day groups never resume sessions");
+    assert.equal(dayItem.checkboxState, undefined, "day groups never receive selection checkboxes");
+    vscodeStub.env.language = previousLanguage;
+    assert.deepEqual(await savedView.provider.getChildren((await savedView.provider.getChildren(nativeDays[0]))[0]), [], "session rows remain leaves");
+    rmSync(newerFile);
     await toggleLocationScope.handler();
     assert.deepEqual(await savedView.provider.getChildren(), [], "returning to current location restores the folder requirement");
     vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
     vscodeStub.__calls.activeEditorHandlers.forEach((handler) => handler(undefined));
-    const savedRows = await savedView.provider.getChildren();
+    const savedRows = await savedSessionRows();
     assert.equal(savedRows.length, 1);
     assert.equal(savedRows[0].id, "recorded-prime", "current location excludes other projects");
     await toggleLocationScope.handler();
-    assert.deepEqual(new Set((await savedView.provider.getChildren()).map((session) => session.id)), new Set(["recorded-prime", "other-project"]));
+    assert.deepEqual(new Set((await savedSessionRows()).map((session) => session.id)), new Set(["recorded-prime", "other-project"]));
     await selectSessionAgent.handler("codex");
     assert.deepEqual(await savedView.provider.getChildren(), [], "all locations retains agent isolation");
     await selectSessionAgent.handler("primeAgent");
     await toggleLocationScope.handler();
-    assert.deepEqual((await savedView.provider.getChildren()).map((session) => session.id), ["recorded-prime"], "switching back discards all-location scan results");
+    assert.deepEqual((await savedSessionRows()).map((session) => session.id), ["recorded-prime"], "switching back discards all-location scan results");
     rmSync(otherFile);
     const savedItem = savedView.provider.getTreeItem(savedRows[0]);
     assert.equal(savedItem.label, "A saved conversation");
@@ -1200,7 +1277,7 @@ try {
     const refreshSaved = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.refreshSessions");
     vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: missingDirectory } }];
     refreshSaved.handler();
-    const missingProject = (await savedView.provider.getChildren())[0];
+    const missingProject = (await savedSessionRows())[0];
     await resume.handler({ harnessId: missingProject.harnessId, id: missingProject.id });
     assert.equal(vscodeStub.__calls.created.length, countAfterLayoutChecks);
     vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
@@ -1208,7 +1285,7 @@ try {
     assert.deepEqual(await savedView.provider.getChildren(), [], "changing projects refreshes and excludes records for the previous folder");
     writeFileSync(savedFile, JSON.stringify({type: "session", id: "recorded-prime", cwd: projectDirectory}) + "\n");
     refreshSaved.handler();
-    assert.equal((await savedView.provider.getChildren()).length, 1);
+    assert.equal((await savedSessionRows()).length, 1);
     await selectSessionAgent.handler("codex");
     assert.deepEqual(await savedView.provider.getChildren(), [], "selecting another agent excludes the previous agent's sessions");
     await selectSessionAgent.handler("antigravity");
@@ -1220,7 +1297,7 @@ try {
     agyHistory.add("recorded-agy");
     agyHistory.db.close();
     refreshSaved.handler();
-    const agySaved = (await savedView.provider.getChildren())[0];
+    const agySaved = (await savedSessionRows())[0];
     assert.equal(agySaved.id, "recorded-agy");
     assert.equal(savedView.provider.getTreeItem(agySaved).contextValue, "savedSessionReadOnly");
     const beforeAgyResume = vscodeStub.__calls.created.length;
@@ -1241,7 +1318,7 @@ try {
         zstdCompressSync(Buffer.from(JSON.stringify({ type: "session/title", seq: 0, data: { title: "DeepSeek saved session" } }) + "\n")),
     ]));
     refreshSaved.handler();
-    const dshSaved = (await savedView.provider.getChildren())[0];
+    const dshSaved = (await savedSessionRows())[0];
     assert.equal(dshSaved.id, "recorded-deepseek");
     assert.equal(dshSaved.title, "DeepSeek saved session");
     assert.equal(savedView.provider.getTreeItem(dshSaved).contextValue, "savedSession");
@@ -1256,7 +1333,7 @@ try {
     await selectSessionAgent.handler("aider");
     assert.equal(savedView.message, englishStrings["sessionScope.unsupported"]);
     await selectSessionAgent.handler("primeAgent");
-    assert.equal((await savedView.provider.getChildren()).length, 1);
+    assert.equal((await savedSessionRows()).length, 1);
     assert.ok(savedView.description.includes("Prime Agent"));
     assert.equal(savedState.get("workspace:selectedSessionAgent"), "primeAgent");
     vscodeStub.workspace.workspaceFolders = [];
@@ -1269,7 +1346,7 @@ try {
     await selectSessionAgent.handler("codex");
     assert.deepEqual(await staleScan, [], "in-flight scans cannot restore the previous agent's sessions");
     await selectSessionAgent.handler("primeAgent");
-    assert.equal((await savedView.provider.getChildren()).length, 1);
+    assert.equal((await savedSessionRows()).length, 1);
     const originalSessionDirectory = vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory;
     for (const invalid of [null, 42, {}, ["invalid"]]) {
         vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory = invalid;
@@ -1288,7 +1365,7 @@ try {
     vscodeStub.workspace.getConfiguration = originalGetConfiguration;
     vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory = originalSessionDirectory;
     refreshSaved.handler();
-    assert.equal((await savedView.provider.getChildren()).length, 1, "refresh recovers after a transient failure");
+    assert.equal((await savedSessionRows()).length, 1, "refresh recovers after a transient failure");
     const fsPromises = requireFrom("node:fs/promises");
     const originalOpenDirectory = fsPromises.opendir;
     try {
@@ -1305,7 +1382,7 @@ try {
         fsPromises.opendir = originalOpenDirectory;
     }
     refreshSaved.handler();
-    assert.equal((await savedView.provider.getChildren()).length, 1, "history returns after directory access is restored");
+    assert.equal((await savedSessionRows()).length, 1, "history returns after directory access is restored");
     passed += 1;
     console.log("ok: session views ignore stale scans, tolerate invalid configuration and recover after failure");
 
@@ -1420,7 +1497,7 @@ try {
     writeSession(extraFiles[0], "second", "Second conversation");
     writeSession(extraFiles[1], "third", "Third conversation");
     refreshSaved.handler();
-    const getRow = async (id) => (await savedView.provider.getChildren()).find((row) => row.id === id);
+    const getRow = async (id) => (await savedSessionRows()).find((row) => row.id === id);
     const deletionTerminal = (id, harnessId = "primeAgent", launchMode = "direct") => ({
         name: "same editable title",
         creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId, launchMode, sessionId: id }) } },
@@ -1460,6 +1537,9 @@ try {
     assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, undefined, "changing scope exits selection mode");
     await selectionMode();
     secondRow = await getRow("second");
+    const selectionDay = (await savedView.provider.getChildren())[0];
+    for (const handler of savedView.checkboxHandlers) await handler({ items: [[selectionDay, 1], [{ notice: true }, 1]] });
+    assert.equal(savedView.provider.getTreeItem(secondRow).checkboxState, 0, "native checkbox handlers ignore day groups and notices");
     for (const handler of savedView.checkboxHandlers) await handler({ items: [[secondRow, 1]] });
     assert.equal(savedView.provider.getTreeItem(secondRow).checkboxState, 1, "native checkbox events update shared state");
     for (const handler of savedView.checkboxHandlers) await handler({ items: [[secondRow, 0]] });
@@ -1478,7 +1558,7 @@ try {
     await deleteSelected();
     assert.ok(!existsSync(savedFile) && !existsSync(extraFiles[1]), "successful trash deletions disappear");
     assert.ok(existsSync(extraFiles[0]), "declining permanent deletion preserves the failed record");
-    assert.equal((await savedView.provider.getChildren()).length, 1);
+    assert.equal((await savedSessionRows()).length, 1);
     assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, 1, "unsuccessful records remain selected");
     assert.ok(linkedTerminals.every((terminal) => terminal.disposed === 1), "bulk trash deletion closes every matching terminal, including renamed and shell terminals");
     assert.ok(unrelatedTerminals.every((terminal) => !terminal.disposed), "other conversations, agents and unlinked terminals stay open");
@@ -1540,10 +1620,11 @@ try {
     // Editor focus may move to an editor-area terminal. All launch surfaces and
     // the saved-session filter must retain the last focused workspace folder.
     const folderA = { uri: { fsPath: join(activationDir, "project-a") } };
+    const workspaceCli = process.platform === "win32" ? "workspace-omp.cmd" : "workspace-omp";
     const folderB = { uri: { fsPath: join(activationDir, "project-b") } };
     for (const folder of [folderA, folderB]) {
         mkdirSync(join(folder.uri.fsPath, "node_modules", ".bin"), { recursive: true });
-        const cli = join(folder.uri.fsPath, "node_modules", ".bin", "workspace-omp");
+        const cli = join(folder.uri.fsPath, "node_modules", ".bin", workspaceCli);
         writeFileSync(cli, "#!/bin/sh\n");
         chmodSync(cli, 0o755);
         vscodeStub.__scopedFixtures.set(folder.uri.fsPath, { multiHarness: {
@@ -1552,7 +1633,7 @@ try {
     }
     const previousGetFolder = vscodeStub.workspace.getWorkspaceFolder;
     vscodeStub.workspace.getWorkspaceFolder = (uri) => vscodeStub.workspace.workspaceFolders.find((folder) =>
-        uri.fsPath === folder.uri.fsPath || uri.fsPath.startsWith(folder.uri.fsPath + "/"));
+        uri.fsPath === folder.uri.fsPath || uri.fsPath.startsWith(folder.uri.fsPath + sep));
     vscodeStub.workspace.workspaceFolders = [folderA, folderB];
     const focusEditor = (folder) => {
         vscodeStub.window.activeTextEditor = folder ? { document: { uri: { fsPath: join(folder.uri.fsPath, "file.ts") } } } : undefined;
@@ -1565,7 +1646,7 @@ try {
     await workspaceOpen.handler();
     const workspaceLaunch = vscodeStub.__calls.created.at(-1).options;
     assert.equal(workspaceLaunch.cwd, folderB.uri.fsPath);
-    assert.equal(workspaceLaunch.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", "workspace-omp"));
+    assert.equal(workspaceLaunch.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", workspaceCli));
     assert.deepEqual(workspaceLaunch.shellArgs, ["--project", folderB.uri.fsPath]);
     const ompProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.ohMyPi");
     const workspaceProfile = ompProfile.provider.provideTerminalProfile({});
@@ -1588,7 +1669,7 @@ try {
     const ompFile = join(ompSessions, "project-b-session.jsonl");
     writeFileSync(ompFile, JSON.stringify({ type: "session", id: "project-b-session", cwd: folderB.uri.fsPath }) + "\n");
     focusEditor(folderB);
-    const projectBSession = (await savedView.provider.getChildren()).find((session) => session.id === "project-b-session");
+    const projectBSession = (await savedSessionRows()).find((session) => session.id === "project-b-session");
     assert.ok(projectBSession);
     // Set the editor directly while retaining the listed session, reproducing
     // the window between a focus change and the view's next refresh.
@@ -1603,7 +1684,7 @@ try {
     const projectBResume = vscodeStub.__calls.created.at(-1).options;
     assert.equal(projectBResume.cwd, folderB.uri.fsPath);
     assert.equal(projectBResume.isTransient, false, "resumed conversation terminals allow persistence across reloads");
-    assert.equal(projectBResume.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", "workspace-omp"));
+    assert.equal(projectBResume.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", workspaceCli));
     assert.deepEqual(projectBResume.shellArgs, ["--resume", ompFile, "--project", folderB.uri.fsPath]);
     // External recorded directories use their own resource scope, not the
     // first workspace folder's settings.
@@ -1613,7 +1694,7 @@ try {
     writeFileSync(ompFile, JSON.stringify({ type: "session", id: "external-session", cwd: externalFolder }) + "\n");
     vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: externalFolder } }];
     focusEditor(undefined);
-    assert.equal((await savedView.provider.getChildren())[0].id, "external-session");
+    assert.equal((await savedSessionRows())[0].id, "external-session");
     vscodeStub.workspace.workspaceFolders = [folderA];
     await resumeLauncher.openAgentTerminal(context, agents.find((agent) => agent.id === "ohMyPi"), undefined, {
         terminalName: "Oh My Pi — external-session", cwd: externalFolder, args: ["--resume", ompFile],
@@ -1877,7 +1958,8 @@ try {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
     const sendText = vscodeStub.__calls.sendTexts.at(-1)?.text ?? "";
-    assert.equal(sendText, `'${fakeCli}' '--continue'`, `fallback quoting rule (saw ${sendText})`);
+    const expectedFallback = process.platform === "win32" ? `"${fakeCli}" "--continue"` : `'${fakeCli}' '--continue'`;
+    assert.equal(sendText, expectedFallback, `fallback quoting rule (saw ${sendText})`);
     assert.equal(vscodeStub.__calls.infos.length, 1, "exactly one information message on the degrade path");
     assert.ok(
         /status tracking is unavailable/i.test(vscodeStub.__calls.infos[0]),

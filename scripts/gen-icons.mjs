@@ -14,7 +14,7 @@ for (const [id, source] of Object.entries(sources)) {
         if (source.file.endsWith(".png")) {
             body = `<image width="16" height="16" href="data:image/png;base64,${original.toString("base64")}"/>`;
         } else {
-            const svg = original.toString("utf8");
+            const svg = original.toString("utf8").replace(/\r\n/g, "\n");
             const root = svg.match(/<svg\b([^>]*)>([\s\S]*)<\/svg>/);
             if (!root) {
                 throw new Error(`Invalid source SVG: ${source.file}`);
@@ -38,7 +38,7 @@ for (const [id, source] of Object.entries(sources)) {
         const icon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><g fill="${color}">${body}</g></svg>\n`.replace(/[ \t]+$/gm, "");
         const output = join(media, `${id}-${theme}.svg`);
         if (checkOnly) {
-            if (readFileSync(output, "utf8") !== icon) {
+            if (readFileSync(output, "utf8").replace(/\r\n/g, "\n") !== icon) {
                 throw new Error(`Stale icon: ${output}. Run node scripts/gen-icons.mjs.`);
             }
         } else {

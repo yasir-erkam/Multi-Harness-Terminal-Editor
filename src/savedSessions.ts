@@ -336,6 +336,10 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
         if (name === "__advisor.jsonl" || (name.startsWith("__advisor.") && name.endsWith(".jsonl"))) {
             return undefined;
         }
+        const firstUserMessage = rows.find((row) => row.type === "message" && row.message?.role === "user");
+        if (firstUserMessage?.message.attribution === "agent") {
+            return undefined;
+        }
     }
     let header: Record<string, any> | undefined;
     if (harnessId === "codex") {
@@ -367,7 +371,19 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
         return undefined;
     }
     let title = clean(header.title);
+    let lastMessage = 0;
     for (const row of rows) {
+        const isMessage = harnessId === "codex"
+            ? (row.type === "event_msg" && (row.payload?.type === "user_message" || row.payload?.type === "agent_message"))
+                || (row.type === "response_item" && row.payload?.type === "message" && (row.payload.role === "user" || row.payload.role === "assistant"))
+            : row.type === "user" || row.type === "assistant"
+                || (row.type === "message" && (row.message?.role === "user" || row.message?.role === "assistant"))
+                || row.type === "user/message" || row.type === "assistant/message";
+        if (isMessage && !row.isMeta && !row.isSidechain) {
+            const timestamp = row.timestamp ?? row.message?.timestamp ?? row.data?.timestamp;
+            const parsed = typeof timestamp === "number" && Number.isFinite(timestamp) ? timestamp : parseTimestamp(timestamp);
+            lastMessage = Math.max(lastMessage, parsed);
+        }
         if (row.type === "title" || row.type === "custom-title") {
             title = clean(row.title ?? row.customTitle) || title;
         } else if (row.type === "session_info" || row.type === "sessionInfo") {
@@ -401,7 +417,7 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
             }
         }
     }
-    return { harnessId, id: header.id, cwd: header.cwd, file, modified, title: title || header.id };
+    return { harnessId, id: header.id, cwd: header.cwd, file, modified: lastMessage || modified, title: title || header.id };
 }
 
 export async function scanSavedSessions(roots = sessionRoots(), limit = 100, filter?: SessionFilter, options: SessionScanOptions = {}): Promise<SessionScan> {
@@ -527,9 +543,6 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
     for (const candidate of filter ? candidates : candidates.slice(0, MAX_CANDIDATES)) {
         if (options.signal?.aborted) {
             return empty;
-        }
-        if (sessions.length - indexedSessions.length >= limit) {
-            break;
         }
         try {
             const session = parseSession(candidate.root.harnessId, candidate.file, candidate.modified,

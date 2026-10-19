@@ -21,6 +21,8 @@ export interface SavedSessions {
 }
 
 interface ScanNotice { readonly notice: true; }
+interface SessionDay { readonly day: string; readonly modified: number; readonly sessions: SavedSession[]; }
+type SavedSessionItem = SavedSession | SessionDay | ScanNotice;
 
 export function registerSavedSessionsView(context: vscode.ExtensionContext, status: AgentStatus, selection: SessionContext): SavedSessions {
     const strings = extensionStrings(context);
@@ -204,18 +206,42 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         updateHeader();
         changes.fire();
     }
-    const provider: vscode.TreeDataProvider<SavedSession | ScanNotice> = {
+    const provider: vscode.TreeDataProvider<SavedSessionItem> = {
         onDidChangeTreeData: changes.event,
         async getChildren(element) {
             if (element) {
-                return [];
+                return "day" in element ? element.sessions : [];
             }
             const result = await getSessions();
-            return result.unreadable.length ? [...result.sessions, { notice: true }] : result.sessions;
+            const groups = new Map<string, SessionDay>();
+            for (const session of [...result.sessions].sort((left, right) => right.modified - left.modified)) {
+                const date = new Date(session.modified);
+                const day = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+                let group = groups.get(day);
+                if (!group) {
+                    group = { day, modified: session.modified, sessions: [] };
+                    groups.set(day, group);
+                }
+                group.sessions.push(session);
+            }
+            const items: SavedSessionItem[] = [...groups.values()];
+            if (result.unreadable.length) items.push({ notice: true });
+            return items;
         },
         getTreeItem(session) {
             if ("notice" in session) {
                 return { label: strings["savedSessions.unreadable"], tooltip: strings["savedSessions.unreadable.help"], iconPath: new vscode.ThemeIcon("warning") };
+            }
+            if ("day" in session) {
+                const label = new Date(session.modified).toLocaleDateString(vscode.env?.language ?? "en", {
+                    weekday: "long", year: "numeric", month: "long", day: "numeric",
+                });
+                return {
+                    id: `saved-day:${session.day}`,
+                    label,
+                    accessibilityInformation: { label },
+                    collapsibleState: vscode.TreeItemCollapsibleState.Expanded,
+                };
             }
             const harness = HARNESSES.find((candidate) => candidate.id === session.harnessId)!;
             const date = new Date(session.modified).toLocaleDateString(vscode.env?.language ?? "en");
@@ -239,8 +265,8 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         },
     };
     const options = { treeDataProvider: provider, manageCheckboxStateManually: true };
-    const view = vscode.window.createTreeView("multiHarness.savedSessions", options) as vscode.TreeView<SavedSession | ScanNotice> & {
-        onDidChangeCheckboxState?: vscode.Event<{ items: readonly (readonly [SavedSession | ScanNotice, number])[] }>;
+    const view = vscode.window.createTreeView("multiHarness.savedSessions", options) as vscode.TreeView<SavedSessionItem> & {
+        onDidChangeCheckboxState?: vscode.Event<{ items: readonly (readonly [SavedSessionItem, number])[] }>;
     };
     nativeCheckboxes = typeof view.onDidChangeCheckboxState === "function";
     if (view.onDidChangeCheckboxState) {
@@ -249,7 +275,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             const available = new Set((await getSessions()).sessions.map(sessionKey));
             if (!selectionMode || deleting) return;
             for (const [session, value] of event.items) {
-                if ("notice" in session || !available.has(sessionKey(session))) continue;
+                if ("notice" in session || "day" in session || !available.has(sessionKey(session))) continue;
                 if (value === 1) selected.add(sessionKey(session));
                 else selected.delete(sessionKey(session));
             }
