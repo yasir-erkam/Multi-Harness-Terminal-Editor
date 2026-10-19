@@ -912,7 +912,6 @@ try {
     vscodeStub.__fixture.multiHarness.primeAgent = { executablePath: fakeCli, arguments: ["--resume"] };
     await vscodeStub.__calls.commands.find((command) => command.id === primeAgent.commandId).handler();
     const primeTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(primeTerminal.name, "Prime Agent");
     assert.equal(primeTerminal.shellPath, fakeCli);
     assert.deepEqual(primeTerminal.shellArgs, ["--resume"]);
     const primeProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.primeAgent");
@@ -931,12 +930,10 @@ try {
     vscodeStub.__fixture.multiHarness.antigravity = { executablePath: fakeCli, arguments: ["--model", "test-model"] };
     await vscodeStub.__calls.commands.find((command) => command.id === antigravity.commandId).handler();
     const antigravityTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(antigravityTerminal.name, "Antigravity CLI");
     assert.equal(antigravityTerminal.shellPath, fakeCli);
     assert.deepEqual(antigravityTerminal.shellArgs, ["--model", "test-model"]);
     const antigravityProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.antigravity");
     const antigravityOptions = antigravityProfile.provider.provideTerminalProfile({}).options;
-    assert.equal(antigravityOptions.name, "Antigravity CLI");
     assert.equal(antigravityOptions.shellPath, fakeCli);
     assert.deepEqual(antigravityOptions.shellArgs, ["--model", "test-model"]);
     await addFavorite.handler(antigravity);
@@ -954,12 +951,10 @@ try {
     vscodeStub.__fixture.multiHarness.deepseek = { executablePath: fakeCli };
     await vscodeStub.__calls.commands.find((command) => command.id === deepseek.commandId).handler();
     const deepseekDefaultTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(deepseekDefaultTerminal.name, "DeepSeek Harness");
     assert.equal(deepseekDefaultTerminal.shellPath, fakeCli);
     assert.deepEqual(deepseekDefaultTerminal.shellArgs, ["--profile", "tui"]);
     const deepseekProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.deepseek");
     const deepseekProfileOptions = deepseekProfile.provider.provideTerminalProfile({}).options;
-    assert.equal(deepseekProfileOptions.name, "DeepSeek Harness");
     assert.equal(deepseekProfileOptions.shellPath, fakeCli);
     assert.deepEqual(deepseekProfileOptions.shellArgs, ["--profile", "tui"]);
     vscodeStub.window.terminals = [];
@@ -984,7 +979,6 @@ try {
     vscodeStub.__fixture.multiHarness.antigravity = { executablePath: agyCli, arguments: agyArgs };
     await vscodeStub.__calls.commands.find((command) => command.id === antigravity.commandId).handler();
     const agyTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(agyTerminal.name, "Antigravity CLI");
     assert.equal(agyTerminal.shellPath, agyCli);
     assert.deepEqual(agyTerminal.shellArgs, agyArgs);
     const agyProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.antigravity");
@@ -1063,10 +1057,11 @@ try {
     const closeSession = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.closeSession");
     assert.equal(sessionItem.contextValue, "openTerminal");
     vscodeStub.window.terminals = [firstPrime, secondPrime];
+    vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(secondPrime));
     closeSession.handler(openSessions[1]);
     assert.equal(secondPrime.disposed, 1, "closing a row targets the exact terminal when names match");
     assert.equal(firstPrime.disposed, 0, "closing a row leaves the other terminal running");
-    vscodeStub.window.terminals = [firstPrime];
+    // The close notification can arrive before VS Code updates its terminal list.
     vscodeStub.__calls.terminalCloseHandlers.forEach((handler) => handler(secondPrime));
     assert.deepEqual(sessionsView.provider.getChildren(), [openSessions[0]], "close event removes the closed terminal row");
     closeSession.handler(openSessions[1]);
@@ -1087,6 +1082,17 @@ try {
     titledTerminal.name = "Validate login and logout";
     assert.equal(sessionsView.provider.getChildren()[0].id, titledSession.id, "title changes preserve terminal identity");
     assert.equal(sessionsView.provider.getTreeItem(titledSession).label, "Validate login and logout");
+    titledTerminal.exitStatus = { code: 0 };
+    assert.deepEqual(sessionsView.provider.getChildren(), [], "exited terminals are not active sessions even while their tabs linger");
+    delete titledTerminal.exitStatus;
+    const ompTerminal = {
+        name: "Session updated",
+        creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "ohMyPi", launchMode: "direct" }) } },
+    };
+    vscodeStub.window.terminals = [ompTerminal];
+    assert.equal(sessionsView.provider.getChildren()[0].harness.id, "ohMyPi");
+    vscodeStub.__calls.terminalCloseHandlers.forEach((handler) => handler(ompTerminal));
+    assert.deepEqual(sessionsView.provider.getChildren(), [], "closing an OMP tab removes its Session updated row before the terminal snapshot catches up");
     vscodeStub.window.terminals = [];
     passed += 1;
     console.log("ok: sessions track terminal lifecycle and focus exact terminals without launching duplicates");
@@ -1143,7 +1149,6 @@ try {
     assert.equal(vscodeStub.window.tabGroups.all.length, 1, "resuming a session joins existing editor splits");
     assert.deepEqual(resumed.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "saved conversations open without creating a split");
     assert.deepEqual(resumed.options.shellArgs, ["--resume", savedFile, "--model", "test-model"]);
-    assert.equal(resumed.options.name, "Prime Agent — A saved conversation");
     vscodeStub.window.terminals = [resumed.terminal];
     const countBeforeReuse = vscodeStub.__calls.created.length;
     vscodeStub.window.tabGroups.all = [{ tabs: [] }, { tabs: [] }];
@@ -1156,11 +1161,11 @@ try {
     const sameTitleFile = join(primeSessions, "same-title.jsonl");
     writeFileSync(sameTitleFile, JSON.stringify({ type: "session", id: "different-prime", cwd: projectDirectory }) + '\n{"type":"session_info","name":"A saved conversation"}\n');
     vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.refreshSessions").handler();
-    resumed.terminal.name = resumed.options.name;
+    resumed.terminal.name = "Prime Agent — A saved conversation";
     await resume.handler({ harnessId: "primeAgent", id: "different-prime" });
     const sameTitleTerminal = vscodeStub.__calls.created.at(-1);
     assert.equal(vscodeStub.__calls.created.length, countBeforeReuse + 1, "different identities sharing a title open separate terminals");
-    assert.equal(sameTitleTerminal.options.name, resumed.options.name);
+    sameTitleTerminal.terminal.name = resumed.terminal.name;
     assert.deepEqual(sameTitleTerminal.options.shellArgs, ["--resume", sameTitleFile, "--model", "test-model"]);
     vscodeStub.window.terminals = [sameTitleTerminal.terminal, resumed.terminal];
     const shownBeforeReuse = resumed.terminal.shown;

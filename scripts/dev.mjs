@@ -29,6 +29,7 @@ try {
     console.log(`Development workflow: ${action} (Node.js ${process.versions.node})`);
     node("node_modules/typescript/bin/tsc", ["-p", "tsconfig.json", "--noEmit"]);
     node("esbuild.mjs");
+    node("scripts/test-terminal-titles.mjs");
     node("scripts/test.mjs");
     node("scripts/test-workflow.mjs");
 

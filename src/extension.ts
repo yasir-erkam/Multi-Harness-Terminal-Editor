@@ -9,10 +9,12 @@ import { registerCardsView } from "./cardsView";
 import { registerSessionContext } from "./sessionContext";
 import { registerSavedSessionsView } from "./savedSessionsView";
 import { harnessForTerminal } from "./terminalIdentity";
+import { registerTerminalTitles } from "./terminalTitles";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
     const sessionContext = registerSessionContext(context);
+    registerTerminalTitles(context);
     for (const harness of HARNESSES) {
         context.subscriptions.push(
             vscode.commands.registerCommand(harness.commandId, async () => {

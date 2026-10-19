@@ -25,9 +25,11 @@ export function sessionLabel(session: AgentSession): string {
 export function registerSessionsView(context: vscode.ExtensionContext): AgentSessions {
     const changes = new vscode.EventEmitter<void>();
     const sessions = new WeakMap<vscode.Terminal, AgentSession>();
+    const closed = new WeakSet<vscode.Terminal>();
     let nextId = 0;
     let disposed = false;
     const restore = (terminal: vscode.Terminal): void => {
+        closed.delete(terminal);
         changes.fire();
         if (!terminalIdentity(terminal)) {
             void restoreTerminalIdentity(terminal).then((identity) => {
@@ -40,6 +42,9 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
     function getSessions(): AgentSession[] {
         const open: AgentSession[] = [];
         for (const terminal of vscode.window.terminals) {
+            if (closed.has(terminal) || terminal.exitStatus) {
+                continue;
+            }
             const harness = harnessForTerminal(terminal);
             if (!harness) {
                 continue;
@@ -91,7 +96,10 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
         }),
         { dispose: () => { disposed = true; } },
         vscode.window.onDidOpenTerminal(restore),
-        vscode.window.onDidCloseTerminal(() => changes.fire()),
+        vscode.window.onDidCloseTerminal((terminal) => {
+            closed.add(terminal);
+            changes.fire();
+        }),
         vscode.window.onDidChangeActiveTerminal(() => changes.fire())
     );
     vscode.window.terminals.forEach(restore);

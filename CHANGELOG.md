@@ -1,11 +1,18 @@
 # Changelog
 
+## 0.8.12
+
+- Show the saved session topic in the active terminal tab as `<agent command> - <session title>`, preserving emoji. Follow OMP terminal/session breadcrumbs and resumed conversation identities; refresh on focus and every three seconds without stealing focus.
+- Keep a regression for OMP title changes, session switches and focus changes during history reads.
+
 ## 0.8.11
 
 - Agents, agent commands and the picker now open a fresh terminal instead of revealing the agent's previous default terminal. Saved conversations still focus the terminal matching their conversation identity.
 - Let fresh terminal and profile titles follow CLI title updates instead of pinning the agent name. Keep agent selection, open-terminal lists, status and exit notifications independent of editable terminal titles.
+- Remove the fixed title from resumed terminals in both direct and shell modes so agent-assigned session names can update the tab. Conversation reuse still follows saved identity after a title change.
 - OMP oturumu başarıyla silindiğinde açık sekmesini kapatmak için güncel terminal–oturum eşlemesini kullan. Windows'ta yeni açılan OMP terminallerine benzersiz terminal kimliği ver; oturum terminal içinde değiştirildiğinde eski konuşmanın silinmesi yanlış sekmeyi kapatmasın.
 - Ana dosyası silinmiş OMP advisor ve alt-agent kayıtlarını da Sessions listesinden dışla. Gerçek dallanmış konuşmaları ve kullanıcının “session update” başlıklı oturumlarını koru.
+- Kapanma bildirimi gelen veya işlemi bitmiş terminalleri açık oturum listesinden çıkar; VS Code terminal listesini henüz güncellememiş olsa da OMP'nin “Session updated” satırı açık oturum olarak kalmasın. Kayıtlı konuşma geçmişi korunur.
 
 ## 0.8.10
 

@@ -135,8 +135,7 @@ async function openShellMode(
     // No shellPath override: the user's default profile is the shell that runs
     // the agent, which is what makes shell integration reporting possible.
     const terminal = vscode.window.createTerminal({
-        // An explicit name pins VS Code's title and suppresses CLI OSC updates.
-        name: resume?.terminalName,
+        // Leave the title unpinned so CLI OSC updates also work after resuming.
         cwd: launch.cwd,
         location: { viewColumn: vscode.ViewColumn.Active },
         isTransient: false,
@@ -221,7 +220,6 @@ async function launchAgentTerminal(
     }
 
     const terminal = vscode.window.createTerminal({
-        name: resume?.terminalName,
         shellPath: executable,
         shellArgs: launch.args,
         cwd: launch.cwd,
