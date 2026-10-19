@@ -130,16 +130,17 @@ async function openShellMode(
     launch: AgentLaunch,
     executable: string,
     status: AgentStatus | undefined,
-    sessionId?: string
+    resume?: ResumeLaunch
 ): Promise<void> {
     // No shellPath override: the user's default profile is the shell that runs
     // the agent, which is what makes shell integration reporting possible.
     const terminal = vscode.window.createTerminal({
-        name: launch.name,
+        // An explicit name pins VS Code's title and suppresses CLI OSC updates.
+        name: resume?.terminalName,
         cwd: launch.cwd,
         location: { viewColumn: vscode.ViewColumn.Active },
         isTransient: false,
-        env: terminalIdentityEnv(harness, "shell", sessionId),
+        env: terminalIdentityEnv(harness, "shell", resume?.sessionId),
         iconPath: launch.iconPath,
     });
     status?.track(terminal, harness);
@@ -158,7 +159,7 @@ async function openShellMode(
     );
 }
 
-/** Open (or reveal) the harness terminal from the command. */
+/** Start a fresh terminal, or reveal an explicitly resumed conversation. */
 export async function openAgentTerminal(
     context: vscode.ExtensionContext,
     harness: Harness,
@@ -179,22 +180,23 @@ async function launchAgentTerminal(
     status?: AgentStatus,
     resume?: ResumeLaunch
 ): Promise<void> {
-    // Restored terminals are new API objects; their launch metadata is durable.
-    const terminals = [...vscode.window.terminals];
-    const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
-    const existing = terminals.find((terminal, index) => {
-        if (terminal.exitStatus) {
-            return false;
+    if (resume) {
+        // Restored terminals are new API objects; their launch metadata is durable.
+        const terminals = [...vscode.window.terminals];
+        const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
+        const existing = terminals.find((terminal, index) => {
+            if (terminal.exitStatus) {
+                return false;
+            }
+            const identity = identities[index];
+            return resume.sessionId
+                ? identity?.harnessId === harness.id && identity.sessionId === resume.sessionId
+                : terminal.name === resume.terminalName;
+        });
+        if (existing) {
+            await showEditorTerminal(existing);
+            return;
         }
-        const identity = identities[index];
-        return resume?.sessionId
-            ? identity?.harnessId === harness.id && identity.sessionId === resume.sessionId
-            : terminal.name === (resume?.terminalName ?? harness.displayName)
-                || (!resume && identity?.harnessId === harness.id && !identity.sessionId);
-    });
-    if (existing) {
-        await showEditorTerminal(existing);
-        return;
     }
 
     const launch = resolveAgentLaunch(context, harness, resume?.cwd);
@@ -214,12 +216,12 @@ async function launchAgentTerminal(
     // Shell mode needs the 1.93 shell-integration API; without it, falling back
     // to a direct-mode terminal keeps the CLI usable on older VS Code.
     if (launch.launchMode === "shell" && hasShellIntegrationApi()) {
-        await openShellMode(harness, launch, executable, status, resume?.sessionId);
+        await openShellMode(harness, launch, executable, status, resume);
         return;
     }
 
     const terminal = vscode.window.createTerminal({
-        name: launch.name,
+        name: resume?.terminalName,
         shellPath: executable,
         shellArgs: launch.args,
         cwd: launch.cwd,

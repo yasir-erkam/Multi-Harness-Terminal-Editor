@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
-import { harnessForTerminalName, type Harness, iconFile } from "./harnesses";
+import { type Harness, iconFile } from "./harnesses";
 import { showEditorTerminal } from "./editorTerminal";
+import { harnessForTerminal, restoreTerminalIdentity, terminalIdentity } from "./terminalIdentity";
 
 export interface AgentSession {
     readonly id: string;
@@ -20,21 +21,32 @@ export function sessionLabel(session: AgentSession): string {
         : session.terminal.name;
 }
 
-/** Lists open terminals using the same harness-name matching as the launcher. */
+/** Lists open harness terminals independently of their editable titles. */
 export function registerSessionsView(context: vscode.ExtensionContext): AgentSessions {
     const changes = new vscode.EventEmitter<void>();
     const sessions = new WeakMap<vscode.Terminal, AgentSession>();
     let nextId = 0;
+    let disposed = false;
+    const restore = (terminal: vscode.Terminal): void => {
+        changes.fire();
+        if (!terminalIdentity(terminal)) {
+            void restoreTerminalIdentity(terminal).then((identity) => {
+                if (identity && !disposed && vscode.window.terminals.includes(terminal)) {
+                    changes.fire();
+                }
+            });
+        }
+    };
     function getSessions(): AgentSession[] {
         const open: AgentSession[] = [];
         for (const terminal of vscode.window.terminals) {
-            const harness = harnessForTerminalName(terminal.name);
+            const harness = harnessForTerminal(terminal);
             if (!harness) {
                 continue;
             }
             let session = sessions.get(terminal);
-            if (!session) {
-                session = { id: `session-${nextId++}`, terminal, harness };
+            if (!session || session.harness.id !== harness.id) {
+                session = { id: session?.id ?? `session-${nextId++}`, terminal, harness };
                 sessions.set(terminal, session);
             }
             open.push(session);
@@ -77,9 +89,11 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
                 session.terminal.dispose();
             }
         }),
-        vscode.window.onDidOpenTerminal(() => changes.fire()),
+        { dispose: () => { disposed = true; } },
+        vscode.window.onDidOpenTerminal(restore),
         vscode.window.onDidCloseTerminal(() => changes.fire()),
         vscode.window.onDidChangeActiveTerminal(() => changes.fire())
     );
+    vscode.window.terminals.forEach(restore);
     return { onDidChange: changes.event, getSessions };
 }

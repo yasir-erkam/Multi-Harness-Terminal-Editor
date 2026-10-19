@@ -21,7 +21,6 @@ export function registerAgentProfile(
                 return undefined;
             }
             return new vscode.TerminalProfile({
-                name: launch.name,
                 shellPath: executable,
                 shellArgs: launch.args,
                 cwd: launch.cwd,

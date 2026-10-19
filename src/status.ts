@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { HARNESSES, type Harness, harnessForTerminalName } from "./harnesses";
+import { HARNESSES, type Harness } from "./harnesses";
 import { restoreTerminalIdentity, terminalIdentity } from "./terminalIdentity";
 
 /** How long a finished status stays visible before the item hides itself. */
@@ -99,8 +99,9 @@ export class AgentStatus implements vscode.Disposable {
 
     /** Forget a terminal that closed; keeps the tracked set leak-free. */
     onTerminalClosed(terminal: vscode.Terminal): void {
+        const harness = this.tracked.get(terminal);
         this.tracked.delete(terminal);
-        if (this.current && harnessForTerminalName(terminal.name)?.id === this.current.id) {
+        if (harness && harness.id === this.current?.id) {
             this.clearHideTimer();
         }
     }

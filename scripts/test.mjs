@@ -147,6 +147,7 @@ test("win32 extension-less command resolves .cmd/.exe suffixes", (dir) => {
 
 // 5. Extension-less name without executable bit is not found on posix
 test("non-executable file is not resolved on posix; missing name yields undefined", (dir) => {
+    if (process.platform === "win32") return; // Windows does not enforce POSIX executable bits.
     writeFileSync(join(dir, "aider"), "not executable\n");
     assert.equal(resolveExecutable("aider", { nextPathDirs: [dir], user: { home: dir } }), undefined);
     assert.equal(resolveExecutable("definitely-not-installed", { nextPathDirs: [dir], user: { home: dir } }), undefined);
@@ -366,6 +367,35 @@ try {
     writeFileSync(bucketSession, JSON.stringify({ type: "session", id: "bucket-session", cwd: savedDir }) + "\n");
     assert.deepEqual(new Set((await scanSavedSessions([ompRoot])).sessions.map((session) => session.id)),
         new Set(["saved-ohMyPi", "bucket-session"]), "OMP project buckets remain discoverable alongside custom flat session roots");
+    const orphanArtifacts = join(ompBucket, "deleted-owner");
+    const orphanParent = `${orphanArtifacts}.jsonl`;
+    mkdirSync(join(orphanArtifacts, "Worker"), { recursive: true });
+    const ompCases = [
+        { file: join(orphanArtifacts, "__advisor.jsonl"), id: "orphan-advisor", internal: true },
+        { file: join(orphanArtifacts, "__advisor.security.jsonl"), id: "orphan-named-advisor", internal: true },
+        { file: join(orphanArtifacts, "Worker.jsonl"), id: "orphan-worker", parentSession: orphanParent, internal: true },
+        { file: join(orphanArtifacts, "Worker", "Nested.jsonl"), id: "orphan-nested", parentSession: orphanParent, internal: true },
+        { file: join(ompBucket, "legitimate-fork.jsonl"), id: "legitimate-fork", parentSession: orphanParent },
+        { file: join(ompBucket, "legitimate-id-fork.jsonl"), id: "legitimate-id-fork", parentSession: "deleted-owner-id" },
+        { file: join(ompBucket, "legitimate-update.jsonl"), id: "legitimate-update", title: "[session update]" },
+    ];
+    for (const entry of ompCases) {
+        writeFileSync(entry.file, [
+            { type: "title", title: entry.title || "Ordinary transcript title" },
+            { type: "session", version: 3, id: entry.id, cwd: savedDir, parentSession: entry.parentSession },
+            { type: "message", message: { role: "user", content: "[session update]" } },
+        ].map((row) => JSON.stringify(row)).join("\n") + "\n");
+        utimesSync(entry.file, (now + (entry.internal ? 20000 : 10000)) / 1000, (now + (entry.internal ? 20000 : 10000)) / 1000);
+    }
+    const legitimateOmpIds = ["saved-ohMyPi", "bucket-session", "legitimate-fork", "legitimate-id-fork", "legitimate-update"];
+    const orphanScan = await scanSavedSessions([ompRoot]);
+    assert.deepEqual(new Set(orphanScan.sessions.map((session) => session.id)), new Set(legitimateOmpIds),
+        "OMP internal classification survives missing owners without rejecting sibling forks, project buckets or session-update titles");
+    assert.deepEqual(orphanScan.unreadable, []);
+    const limitedOmpScan = await scanSavedSessions([ompRoot], 1);
+    assert.equal(limitedOmpScan.sessions.length, 1,
+        "newer internal transcripts must not consume the saved-session result limit");
+    assert.ok(legitimateOmpIds.includes(limitedOmpScan.sessions[0].id));
     rmSync(ompBucket, { recursive: true });
     const codexRoot = roots.find((root) => root.harnessId === "codex");
     writeFileSync(join(codexRoot.directory, "..", "session_index.jsonl"), JSON.stringify({ id: "saved-codex", thread_name: "Renamed Codex conversation" }) + "\n");
@@ -682,7 +712,7 @@ module.exports = {
         showInformationMessage(message) { calls.infos.push(message); return Promise.resolve(undefined); },
         createTerminal(options) {
             const terminal = {
-                name: options.name,
+                name: options.name ?? options.shellPath ?? "shell",
                 creationOptions: options,
                 shellIntegration: undefined,
                 shown: 0,
@@ -1046,6 +1076,18 @@ try {
     assert.equal(firstPrime.disposed, 0, "unrecognized close arguments cannot close terminals");
     vscodeStub.window.terminals = [];
     vscodeStub.window.activeTerminal = undefined;
+    const titledTerminal = {
+        name: "Fix login validation",
+        creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "primeAgent", launchMode: "direct" }) } },
+    };
+    vscodeStub.window.terminals = [titledTerminal];
+    const titledSession = sessionsView.provider.getChildren()[0];
+    assert.equal(titledSession.harness.id, "primeAgent", "conversation titles do not hide agent terminals");
+    assert.equal(sessionsView.provider.getTreeItem(titledSession).label, "Fix login validation");
+    titledTerminal.name = "Validate login and logout";
+    assert.equal(sessionsView.provider.getChildren()[0].id, titledSession.id, "title changes preserve terminal identity");
+    assert.equal(sessionsView.provider.getTreeItem(titledSession).label, "Validate login and logout");
+    vscodeStub.window.terminals = [];
     passed += 1;
     console.log("ok: sessions track terminal lifecycle and focus exact terminals without launching duplicates");
 
@@ -1634,14 +1676,16 @@ try {
     vscodeStub.__fixture.multiHarness.useFullEditorArea = true;
     const countBeforeLayoutToggle = vscodeStub.__calls.created.length;
     await ohMyPi.handler();
-    assert.equal(vscodeStub.window.tabGroups.all.length, 1, "enabling full area affects the next focus without a reload");
-    assert.equal(vscodeStub.__calls.created.length, countBeforeLayoutToggle, "layout changes reuse the existing terminal");
+    assert.equal(vscodeStub.window.tabGroups.all.length, 1, "enabling full area affects the next launch without a reload");
+    assert.equal(vscodeStub.__calls.created.length, countBeforeLayoutToggle + 1, "opening the same agent starts a fresh conversation");
+    assert.equal(preservedLaunch.terminal.shown, 1, "fresh launch does not reveal the previous conversation");
+    assert.notEqual(vscodeStub.__calls.created.at(-1).terminal, preservedLaunch.terminal);
     const singleGroup = vscodeStub.window.tabGroups.all;
     await ohMyPi.handler();
     assert.equal(vscodeStub.window.tabGroups.all, singleGroup, "a single group needs no additional layout command");
     delete vscodeStub.__fixture.multiHarness.useFullEditorArea;
     passed += 1;
-    console.log("ok: full editor area can be disabled and re-enabled without restarting or creating duplicate terminals");
+    console.log("ok: repeated agent launches create separate terminals and honor full editor area changes");
 
     vscodeStub.window.terminals = [];
     const originalCreateTerminal = vscodeStub.window.createTerminal;
@@ -1747,7 +1791,6 @@ try {
     assert.equal(vscodeStub.window.tabGroups.all.length, 1, "shell-mode sessions join existing editor splits");
     assert.equal(shellOptions.shellPath, undefined, "shell mode must not override shellPath");
     assert.deepEqual(shellOptions.location, { viewColumn: vscodeStub.ViewColumn.Active }, "shell launches use the active editor group");
-    assert.equal(shellOptions.name, "Oh My Pi", "shell mode keeps the terminal name");
     assert.equal(shellOptions.cwd, homedir(), "shell mode uses the same cwd resolution as direct mode (homedir without a workspace)");
     assert.equal(vscodeStub.__calls.statusItems.length, 1, "the first shell-mode terminal creates the status item lazily");
     const shellTerminal = vscodeStub.__calls.created.at(-1).terminal;
@@ -1884,8 +1927,9 @@ try {
     assert.equal(restoredConversation.shown, 1);
     assert.equal(restoredSameTitle.shown, 0, "identical titles cannot select another conversation");
     await resumeLauncher.openAgentTerminal(reloadedContext, agents.find((agent) => agent.id === "ohMyPi"));
-    assert.equal(restoredDirect.shown, 1, "renamed direct terminals retain agent identity");
+    assert.equal(restoredDirect.shown, 0, "new conversations do not reveal a restored default terminal");
     assert.equal(foreignTerminal.shown, 0);
+    assert.equal(vscodeStub.__calls.created.length, countBeforeRestore + 1);
 
     // A terminal can arrive after activation. Restoring tracking must never
     // send or execute the agent command a second time.
@@ -1895,7 +1939,7 @@ try {
     for (const handler of vscodeStub.__calls.terminalOpenHandlers) handler(restoredShell);
     assert.equal(vscodeStub.__calls.statusItems.length, statusBeforeReload + 1, "late shell restoration registers tracking once");
     assert.equal(vscodeStub.__calls.sendTexts.length, sendsBeforeRestore);
-    assert.equal(vscodeStub.__calls.created.length, countBeforeRestore);
+    assert.equal(vscodeStub.__calls.created.length, countBeforeRestore + 1);
     const restoredStatus = vscodeStub.__calls.statusItems.at(-1);
     vscodeStub.__calls.executionEndHandlers.at(-1)({ terminal: restoredShell, execution: {}, exitCode: 0 });
     assert.ok(restoredStatus.text.includes("— ?s (exit 0)"), "commands started before reload report unknown duration");
@@ -1921,6 +1965,42 @@ try {
     assert.equal(vscodeStub.__calls.statusItems.length, beforeStartupRestore + 1, "shell terminals already present at activation regain tracking");
     for (const subscription of startupContext.subscriptions) subscription.dispose();
     vscodeStub.window.terminals = [];
+
+    await build({
+        entryPoints: [join(projectRoot, "src", "extension.ts")],
+        outfile: join(activationDir, "extension.windows.cjs"), bundle: true, format: "cjs", platform: "node",
+        external: ["vscode"], define: { "process.platform": '"win32"' }, logLevel: "silent",
+    });
+    const windowsContext = { ...context, subscriptions: [] };
+    requireFrom(join(activationDir, "extension.windows.cjs")).activate(windowsContext);
+    const windowsCommand = (id) => vscodeStub.__calls.commands.filter((entry) => entry.id === `multiHarness.${id}`).at(-1).handler;
+    const ompRoot = vscodeStub.__fixture.multiHarness.ohMyPi.sessionDirectory;
+    mkdirSync(ompRoot, { recursive: true });
+    const crumbs = join(ompRoot, "..", "terminal-sessions");
+    mkdirSync(crumbs, { recursive: true });
+    const freshFile = join(ompRoot, "fresh.jsonl");
+    const switchedFile = join(ompRoot, "switched.jsonl");
+    writeSession(freshFile, "fresh-omp");
+    writeSession(switchedFile, "switched-omp");
+    const freshOmp = deletionTerminal(undefined, "ohMyPi");
+    const switchedOmp = deletionTerminal("fresh-omp", "ohMyPi", "shell");
+    freshOmp.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY = JSON.stringify({ version: 1, harnessId: "ohMyPi", launchMode: "direct", terminalSessionId: "fresh-tab" });
+    switchedOmp.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY = JSON.stringify({ version: 1, harnessId: "ohMyPi", launchMode: "shell", sessionId: "fresh-omp", terminalSessionId: "switched-tab" });
+    writeFileSync(join(crumbs, "apple-fresh-tab"), `${projectDirectory}\n${freshFile}\nfresh\n`);
+    writeFileSync(join(crumbs, "apple-switched-tab"), `${projectDirectory}\n${switchedFile}\n`);
+    vscodeStub.window.terminals = [freshOmp, switchedOmp];
+    await windowsCommand("selectSessionAgent")("ohMyPi");
+    vscodeStub.__calls.warningResults.push("Move to Trash");
+    await windowsCommand("deleteSession")({ harnessId: "ohMyPi", id: "fresh-omp" });
+    assert.equal(freshOmp.disposed, 1, "deleting a fresh OMP session closes its renamed terminal without a launch session ID");
+    assert.equal(switchedOmp.disposed, 0, "an OMP terminal switched to another session stays open despite its old launch ID");
+    vscodeStub.__calls.warningResults.push("Move to Trash");
+    await windowsCommand("deleteSession")({ harnessId: "ohMyPi", id: "switched-omp" });
+    assert.equal(switchedOmp.disposed, 1, "deletion follows the currently active OMP session after an in-process switch");
+    for (const subscription of windowsContext.subscriptions) subscription.dispose();
+    vscodeStub.window.terminals = [];
+    passed += 1;
+    console.log("ok: OMP deletion follows live terminal breadcrumbs for fresh and switched sessions");
 
     if (process.platform === "linux") {
         await build({

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { HARNESSES, harnessForTerminalName } from "./harnesses";
+import { HARNESSES } from "./harnesses";
 import { openAgentTerminal } from "./launch";
 import { registerAgentProfile } from "./profiles";
 import { registerAgentStatus } from "./status";
@@ -8,6 +8,7 @@ import { registerSessionsView } from "./sessionsView";
 import { registerCardsView } from "./cardsView";
 import { registerSessionContext } from "./sessionContext";
 import { registerSavedSessionsView } from "./savedSessionsView";
+import { harnessForTerminal } from "./terminalIdentity";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
@@ -58,7 +59,7 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!config.get<boolean>("notifyOnExit", false)) {
                 return;
             }
-            const displayName = harnessForTerminalName(terminal.name)?.displayName;
+            const displayName = harnessForTerminal(terminal)?.displayName;
             if (!displayName || !terminal.exitStatus) {
                 return;
             }

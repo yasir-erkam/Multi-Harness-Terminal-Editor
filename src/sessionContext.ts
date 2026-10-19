@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
-import { HARNESSES, harnessForTerminalName, type Harness } from "./harnesses";
+import { HARNESSES, type Harness } from "./harnesses";
 import { extensionStrings } from "./localization";
 import { registerWorkspaceContext, workspaceFolder } from "./workspaceContext";
+import { harnessForTerminal, restoreTerminalIdentity, terminalIdentity } from "./terminalIdentity";
 
 export interface SessionScope {
     readonly agent: Harness | undefined;
@@ -21,17 +22,38 @@ export function registerSessionContext(context: vscode.ExtensionContext): Sessio
     const strings = extensionStrings(context);
     let lastActivation: { id: string; time: number } | undefined;
     let selectedId = context.workspaceState.get<string>("selectedSessionAgent");
-    if (!HARNESSES.some((agent) => agent.id === selectedId)) {
-        selectedId = vscode.window.activeTerminal ? harnessForTerminalName(vscode.window.activeTerminal.name)?.id : undefined;
+    const restoreInitialSelection = !HARNESSES.some((agent) => agent.id === selectedId);
+    let selectionRevision = 0;
+    let disposed = false;
+    if (restoreInitialSelection) {
+        selectedId = vscode.window.activeTerminal ? harnessForTerminal(vscode.window.activeTerminal)?.id : undefined;
     }
     async function selectAgent(id: string): Promise<void> {
         if (selectedId === id || !HARNESSES.some((agent) => agent.id === id)) {
             return;
         }
+        selectionRevision++;
         selectedId = id;
         changes.fire();
         await context.workspaceState.update("selectedSessionAgent", id);
     }
+    const followTerminal = (terminal: vscode.Terminal | undefined): void => {
+        if (!terminal) {
+            return;
+        }
+        const agent = harnessForTerminal(terminal);
+        if (agent) {
+            void selectAgent(agent.id);
+        }
+        if (!terminalIdentity(terminal)) {
+            const revision = selectionRevision;
+            void restoreTerminalIdentity(terminal).then((identity) => {
+                if (identity && !disposed && selectionRevision === revision && vscode.window.activeTerminal === terminal) {
+                    void selectAgent(identity.harnessId);
+                }
+            });
+        }
+    };
     context.subscriptions.push(
         changes,
         vscode.commands.registerCommand("multiHarness.selectSessionAgent", async (id?: string, activate?: boolean) => {
@@ -69,13 +91,12 @@ export function registerSessionContext(context: vscode.ExtensionContext): Sessio
         }),
         vscode.window.onDidChangeActiveTextEditor(() => changes.fire()),
         vscode.workspace.onDidChangeWorkspaceFolders(() => changes.fire()),
-        vscode.window.onDidChangeActiveTerminal((terminal) => {
-            const agent = terminal ? harnessForTerminalName(terminal.name) : undefined;
-            if (agent) {
-                void selectAgent(agent.id);
-            }
-        })
+        { dispose: () => { disposed = true; } },
+        vscode.window.onDidChangeActiveTerminal(followTerminal)
     );
+    if (restoreInitialSelection) {
+        followTerminal(vscode.window.activeTerminal);
+    }
     return {
         onDidChange: changes.event,
         getScope: () => ({ agent: HARNESSES.find((agent) => agent.id === selectedId), cwd: workspaceFolder()?.uri.fsPath }),

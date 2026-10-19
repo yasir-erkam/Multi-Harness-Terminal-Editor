@@ -331,6 +331,12 @@ async function readWindows(file: string, size: number): Promise<Record<string, a
 }
 
 function parseSession(harnessId: string, file: string, modified: number, rows: Record<string, any>[]): SavedSession | undefined {
+    if (harnessId === "ohMyPi") {
+        const name = path.basename(file);
+        if (name === "__advisor.jsonl" || (name.startsWith("__advisor.") && name.endsWith(".jsonl"))) {
+            return undefined;
+        }
+    }
     let header: Record<string, any> | undefined;
     if (harnessId === "codex") {
         header = rows.find((row) => row.type === "session_meta")?.payload;
@@ -344,6 +350,15 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
         }
     } else {
         header = rows.find((row) => row.type === "session");
+        if (harnessId === "ohMyPi" && typeof header?.parentSession === "string"
+            && path.isAbsolute(header.parentSession) && header.parentSession.endsWith(".jsonl")) {
+            // Task transcripts live under their parent's artifact directory even
+            // after its JSONL disappears. Sibling forks also have parentSession.
+            const relative = path.relative(header.parentSession.slice(0, -".jsonl".length), file);
+            if (relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+                return undefined;
+            }
+        }
         if (harnessId === "deepseek" && (header?.origin === "subagent" || (typeof header?.delegationDepth === "number" && header.delegationDepth > 0))) {
             return undefined;
         }

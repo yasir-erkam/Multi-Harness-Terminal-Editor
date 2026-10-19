@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.11
+
+- Agents, agent commands and the picker now open a fresh terminal instead of revealing the agent's previous default terminal. Saved conversations still focus the terminal matching their conversation identity.
+- Let fresh terminal and profile titles follow CLI title updates instead of pinning the agent name. Keep agent selection, open-terminal lists, status and exit notifications independent of editable terminal titles.
+- OMP oturumu başarıyla silindiğinde açık sekmesini kapatmak için güncel terminal–oturum eşlemesini kullan. Windows'ta yeni açılan OMP terminallerine benzersiz terminal kimliği ver; oturum terminal içinde değiştirildiğinde eski konuşmanın silinmesi yanlış sekmeyi kapatmasın.
+- Ana dosyası silinmiş OMP advisor ve alt-agent kayıtlarını da Sessions listesinden dışla. Gerçek dallanmış konuşmaları ve kullanıcının “session update” başlıklı oturumlarını koru.
+
 ## 0.8.10
 
 - Sessions altında mevcut konum ve tüm konumlar arasında geçiş ekle. Seçili ajan korunur; kapsam çalışma alanı başına hatırlanır ve kart/liste görünümleri arasında paylaşılır. Tüm konumlar açık klasör olmadan da çalışır.

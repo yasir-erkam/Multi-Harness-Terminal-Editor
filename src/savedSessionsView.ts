@@ -9,7 +9,7 @@ import { supportsSessionDeletion, resumeArguments, scanSavedSessions, sessionRoo
 import { type AgentStatus } from "./status";
 import { type SessionContext, type SessionScope } from "./sessionContext";
 import { SessionDeletionError, validateSessionDeletion } from "./deleteSession";
-import { restoreTerminalIdentity } from "./terminalIdentity";
+import { ompTerminalSessionFile, restoreTerminalIdentity } from "./terminalIdentity";
 
 export interface SavedSessions {
     readonly onDidChange: vscode.Event<void>;
@@ -112,10 +112,15 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     async function closeSessionTerminals(session: SavedSession): Promise<void> {
         const terminals = [...vscode.window.terminals];
         const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
+        const root = session.harnessId === "ohMyPi" ? getRoots().find((candidate) => candidate.harnessId === "ohMyPi") : undefined;
+        const activeFiles = root ? await Promise.all(terminals.map((terminal) => ompTerminalSessionFile(terminal, root.directory))) : [];
         for (const [index, terminal] of terminals.entries()) {
             const identity = identities[index];
-            if (identity?.harnessId === session.harnessId && identity.sessionId === session.id
-                && vscode.window.terminals.includes(terminal)) {
+            const activeFile = activeFiles[index];
+            const matches = activeFile
+                ? path.relative(activeFile, session.file) === ""
+                : identity?.sessionId === session.id;
+            if (identity?.harnessId === session.harnessId && matches && vscode.window.terminals.includes(terminal)) {
                 terminal.dispose();
             }
         }
