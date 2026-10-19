@@ -1977,6 +1977,8 @@ try {
         outfile: join(activationDir, "extension.windows.cjs"), bundle: true, format: "cjs", platform: "node",
         external: ["vscode"], define: { "process.platform": '"win32"' }, logLevel: "silent",
     });
+    vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
+    vscodeStub.window.activeTextEditor = undefined;
     const windowsContext = { ...context, subscriptions: [] };
     requireFrom(join(activationDir, "extension.windows.cjs")).activate(windowsContext);
     const windowsCommand = (id) => vscodeStub.__calls.commands.filter((entry) => entry.id === `multiHarness.${id}`).at(-1).handler;
