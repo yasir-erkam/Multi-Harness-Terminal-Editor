@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.14
+
+- Require successful validation and an existing VSIX output before any gallery publish or GitHub release. Both galleries receive the same validated package.
+- Restore explicit project scope in the cross-platform OMP deletion regression. Includes session-topic tab titles.
+
 ## 0.8.13
 
 - Correct the card-view regression fixture to reopen a previously closed terminal before testing its actions. Includes the session-topic tab titles from 0.8.12.
