@@ -1387,6 +1387,7 @@ try {
     assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openSettings"]);
     vscodeStub.window.terminals = [firstPrime, secondPrime];
     vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(firstPrime));
+    vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(secondPrime));
     await new Promise((resolve) => setImmediate(resolve));
     const cardSession = cardMessages.at(-1).sessions[1];
     assert.equal(cardSession.label, "Prime Agent #2");

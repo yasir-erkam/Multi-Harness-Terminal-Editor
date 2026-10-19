@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.13
+
+- Correct the card-view regression fixture to reopen a previously closed terminal before testing its actions. Includes the session-topic tab titles from 0.8.12.
+
 ## 0.8.12
 
 - Show the saved session topic in the active terminal tab as `<agent command> - <session title>`, preserving emoji. Follow OMP terminal/session breadcrumbs and resumed conversation identities; refresh on focus and every three seconds without stealing focus.
