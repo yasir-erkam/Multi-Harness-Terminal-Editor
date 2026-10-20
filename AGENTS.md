@@ -8,7 +8,8 @@ VS Code workspace extension that opens separately installed/authenticated AI cod
 
 - `src/extension.ts` is the composition root: creates shared services/models and registers commands, terminal profiles, native trees, and the cards webview. `src/harnesses.ts` owns the ordered `HARNESSES` registry and ID/settings/icon helpers.
 - Launch commands → `sessionContext.ts` selection → `launch.ts` resource-scoped configuration/project resolution → `resolveExecutable.ts` lookup → direct or shell terminal creation. `profiles.ts` reuses launch resolution but always creates direct-mode profiles. `status.ts` observes shell execution events, not conversation progress.
-- `sessionsView.ts` models live terminals; `savedSessions.ts` reads provider-native stores; `savedSessionsView.ts` adds scoped caching, cancellation, resume and deletion orchestration. `deleteSession.ts` validates live identity and store boundaries before destructive operations.
+- `workspaceContext.ts` resolves the active editor's workspace folder, then the remembered folder if still present, then the first workspace folder. Launches fall back to the home directory; saved-history scope requires a project unless all locations is selected.
+- `sessionsView.ts` models live terminals; `savedSessions.ts` reads provider-native stores; `savedSessionsView.ts` shares a scope-keyed cached scan promise with cancellation and stale-result guards. Discovery uses bounded metadata reads and traversal; `deleteSession.ts` instead inspects complete records and validates live identity, non-symlink files and canonical store boundaries before deletion. SQLite history is not deletable through this workflow.
 - Native trees and `cardsView.ts` share models and commands. `media/sidebar.js` receives full state snapshots and sends action IDs; the extension resolves IDs against current models. Keep authoritative paths/terminal objects out of webview requests.
 - `terminalIdentity.ts` stores versioned launch metadata in terminal environment variables; identity must survive editable titles and reconnection. `terminalTitles.ts` updates display names separately. VS Code owns terminal/process persistence; deactivation must not kill sessions.
 
@@ -50,7 +51,7 @@ No dedicated lint, formatter, start, or watch scripts. Use **F5 / Run Extension*
 ## Important Files
 
 - `package.json`: extension contributions, activation events, commands, settings, profiles and npm scripts; `package-lock.json` pins npm dependencies.
-- `tsconfig.json`: strict/no-unused checking; `esbuild.mjs`: CommonJS Node-targeted bundle with `vscode` external and source maps.
+- `tsconfig.json`: strict/no-unused ES2022 typechecking; `esbuild.mjs`: CommonJS Node 16-targeted bundle with `vscode` external and source maps.
 - `src/extension.ts`, `src/harnesses.ts`, `src/launch.ts`, `src/savedSessions.ts`: entry point, agent registry, terminal lifecycle and history formats.
 - `scripts/dev.mjs`: shared validation/package/install pipeline; `scripts/validate-manifest.mjs`: manifest/localization/icon contract checks.
 - `README.md`: behavior/settings/development instructions; `PUBLISHING.md`: release constraints. Do not publish to Marketplace or Open VSX as part of routine development.
@@ -59,11 +60,12 @@ No dedicated lint, formatter, start, or watch scripts. Use **F5 / Run Extension*
 
 Use **Node.js 22 and npm**, matching CI; no Bun workflow. Use a current Node 22 release supporting the tests' `node:sqlite` and `node:zlib` Zstandard APIs. The extension has no production npm dependencies. Preserve VS Code `^1.67.0` compatibility and esbuild's Node 16 target: build-tool runtime requirements are not extension-host requirements. Feature-detect newer VS Code APIs and keep SQLite history optional on older hosts.
 
-The documented local workflow is browser-based code-server in Docker on Ubuntu Server. After extension changes, run `npm run compile` and `npm run dev:install`; routine local installation is authorized. If Node/npm are absent from PATH, use `/app/code-server/lib/node scripts/dev.mjs install`. Report actual runtime/check results, then ask the user to run **Developer: Reload Window** with specific behavior to verify. Documentation-only changes need no installation. If no code-server installer exists, use manual **Install from VSIX** rather than assuming installation succeeded.
+The documented local workflow is browser-based code-server in Docker on Ubuntu Server. After extension changes, run `npm run compile` and `npm run dev:install`; routine local installation is authorized. If Node/npm are absent from PATH, use `/app/code-server/lib/node scripts/dev.mjs install`. Installation tries `/usr/local/bin/install-extension`, then `/app/code-server/bin/code-server`; otherwise it reports a manual **Install from VSIX** requirement. Report actual runtime/check results, then ask the user to run **Developer: Reload Window** with specific behavior to verify. Documentation-only changes need no installation; never assume installation succeeded.
 
 ## Testing & QA
 
 - Tests are plain `.mjs` scripts using `node:assert/strict`, not Jest/Vitest or `node:test`. `scripts/test.mjs` bundles TypeScript with esbuild into `.build/`, uses temporary real stores and recording VS Code stubs, and includes Windows-defined variants. Keep tests deterministic and clean fixtures in `finally`.
 - `scripts/test-sidebar.mjs` runs the actual sidebar script in a VM with a lightweight DOM stub, not a browser. `scripts/test-terminal-titles.mjs` controls timers; `scripts/test-workflow.mjs` checks pipeline sequencing/failure propagation. `scripts/test.mjs` also imports sidebar and manifest checks.
+- CI runs on Linux with Node 22, `npm ci`, then `npm run package`. Windows symlink tests may skip without Developer Mode/elevation; POSIX executable-bit checks skip Windows. Generated platform variants do not replace native-platform or real-host testing.
 - Add descriptive behavior-based regressions for changed functionality: launch/resume, reconnection, workspace scope, cancellation/stale reads, provider parsing, deletion safety and platform differences. Reuse injectable roots/environment/platform inputs instead of coupling tests to the developer's machine.
 - No numeric coverage threshold is configured. Run `npm run compile` before submitting extension changes and manually exercise affected terminal/sidebar behavior; stubs do not prove actual VS Code interactions. Report only checks actually performed and include screenshots for visible UI changes.
