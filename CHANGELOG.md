@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.17
+
+- Clarify that saved-session integrations for Gemini CLI, Goose, Aider, Crush, Qwen Code, Copilot CLI and Cursor Agent are future plans, not currently supported saved-session features.
+
 ## 0.8.16
 
 - Order agents by descending GitHub repository stars from a documented 2026-10-20 snapshot instead of adoption surveys. Keep favorites first and agents without a verified product-specific repository in an alphabetical tail; preserve favorite and selected-agent settings. Include exact counts, upstream mappings and API sources in the ordering documentation.
