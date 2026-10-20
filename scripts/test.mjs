@@ -280,7 +280,7 @@ await build({
     outfile: join(outdir, "savedSessions.test.mjs"),
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
 });
-const { scanSavedSessions, resumeArguments, sessionRoots } = await import(pathToFileURL(join(outdir, "savedSessions.test.mjs")).href);
+const { scanSavedSessions, resumeArguments, sessionRoots, supportsSessionDeletion } = await import(pathToFileURL(join(outdir, "savedSessions.test.mjs")).href);
 await build({
     entryPoints: [join(projectRoot, "src", "deleteSession.ts")],
     outfile: join(outdir, "deleteSession.test.mjs"),
@@ -290,7 +290,7 @@ const { validateSessionDeletion } = await import(pathToFileURL(join(outdir, "del
 const deletionDir = mkdtempSync(join(tmpdir(), "mhte-delete-"));
 try {
     const roots = sessionRoots(deletionDir, {});
-    for (const root of roots.filter((root) => root.harnessId !== "antigravity")) {
+    for (const root of roots.filter((root) => supportsSessionDeletion(root.harnessId))) {
         mkdirSync(root.directory, { recursive: true });
         const id = `delete-${root.harnessId}`;
         const header = root.harnessId === "codex" ? { type: "session_meta", payload: { id, cwd: deletionDir } }
@@ -367,7 +367,7 @@ try {
 }
 const savedDir = mkdtempSync(join(tmpdir(), "mhte-saved-"));
 try {
-    const roots = sessionRoots(savedDir, {}).filter((root) => root.harnessId !== "antigravity");
+    const roots = sessionRoots(savedDir, {}).filter((root) => supportsSessionDeletion(root.harnessId));
     const fixture = (harnessId, id, cwd, title, modified) => {
         const root = roots.find((candidate) => candidate.harnessId === harnessId);
         mkdirSync(root.directory, { recursive: true });
@@ -538,6 +538,50 @@ try {
 } finally {
     rmSync(savedDir, { recursive: true, force: true });
 }
+
+const openCodeDir = mkdtempSync(join(tmpdir(), "mhte-opencode-"));
+try {
+    const cwd = join(openCodeDir, "project");
+    mkdirSync(cwd);
+    const root = { harnessId: "openCode", directory: join(openCodeDir, "data") };
+    const legacy = join(root.directory, "storage", "session", "project-id");
+    mkdirSync(legacy, { recursive: true });
+    const legacyFile = join(legacy, "ses_legacy.json");
+    writeFileSync(legacyFile, JSON.stringify({ id: "ses_legacy", directory: cwd, title: "Legacy title", time: { updated: 10 } }));
+    writeFileSync(join(legacy, "partial.json"), "{");
+    assert.equal((await scanSavedSessions([root])).sessions[0].file, legacyFile);
+    const file = join(root.directory, "opencode.db");
+    const db = new DatabaseSync(file);
+    db.exec("CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, title TEXT, time_updated INTEGER, parent_id TEXT, time_archived INTEGER)");
+    const insert = db.prepare("INSERT INTO session VALUES (?, ?, ?, ?, ?, ?)");
+    insert.run("ses_main", cwd, "Main title", 100, null, null);
+    insert.run("ses_other", openCodeDir, "Other project", 200, null, null);
+    insert.run("ses_child", cwd, "Child", 300, "ses_main", null);
+    insert.run("ses_archived", cwd, "Archived", 400, null, 400);
+    db.close();
+    const before = readFileSync(file);
+    const all = await scanSavedSessions([root]);
+    assert.deepEqual(all.unreadable, []);
+    assert.deepEqual(all.sessions.map((session) => session.id), ["ses_other", "ses_main"], "SQLite is authoritative over leftover legacy metadata");
+    const scoped = await scanSavedSessions([root], 100, { harnessId: "openCode", cwd });
+    assert.deepEqual(scoped.sessions.map((session) => session.id), ["ses_main"]);
+    assert.equal(scoped.sessions[0].title, "Main title");
+    assert.equal(scoped.sessions[0].modified, 100);
+    assert.equal(scoped.sessions[0].file, file);
+    assert.deepEqual(resumeArguments(scoped.sessions[0]), ["--session", "ses_main"]);
+    assert.equal(supportsSessionDeletion("openCode"), false);
+    await assert.rejects(validateSessionDeletion(scoped.sessions[0], [root]));
+    assert.deepEqual(readFileSync(file), before, "OpenCode discovery never modifies its database");
+    assert.equal(sessionRoots(openCodeDir, {}).find((candidate) => candidate.harnessId === "openCode").directory, join(openCodeDir, ".local", "share", "opencode"));
+    assert.equal(sessionRoots(openCodeDir, { XDG_DATA_HOME: "~/xdg" }).find((candidate) => candidate.harnessId === "openCode").directory, join(openCodeDir, "xdg", "opencode"));
+    writeFileSync(file, "corrupt database");
+    assert.deepEqual(await scanSavedSessions([root]), { sessions: [], unreadable: ["openCode"] }, "corrupt SQLite must not resurrect stale JSON history");
+    rmSync(file);
+    mkdirSync(file);
+    assert.deepEqual(await scanSavedSessions([root]), { sessions: [], unreadable: ["openCode"] }, "nonregular SQLite paths must not resurrect stale JSON history");
+    passed += 1;
+    console.log("ok: OpenCode SQLite and legacy history preserve project scope, resume IDs and read-only deletion protection");
+} finally { rmSync(openCodeDir, { recursive: true, force: true }); }
 
 function antigravityFixture(directory, cwd) {
     mkdirSync(join(directory, "conversations"), { recursive: true });
@@ -1157,7 +1201,7 @@ try {
     const savedSessionRows = async () => (await Promise.all((await savedView.provider.getChildren()).map((item) =>
         "day" in item ? savedView.provider.getChildren(item) : []))).flat();
     const savedRoot = join(activationDir, "saved-conversations");
-    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity", "deepseek"]) {
+    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity", "deepseek", "openCode"]) {
         vscodeStub.__fixture.multiHarness[id] ??= {};
         vscodeStub.__fixture.multiHarness[id].sessionDirectory = join(savedRoot, id);
     }
@@ -1306,6 +1350,27 @@ try {
     assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--conversation", "recorded-agy", ...agyArgs]);
     assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
     rmSync(agyStore, { recursive: true, force: true });
+    refreshSaved.handler();
+    vscodeStub.__fixture.multiHarness.openCode.executablePath = fakeCli;
+    vscodeStub.__fixture.multiHarness.openCode.arguments = ["--model", "test-model"];
+    const openCodeStore = vscodeStub.__fixture.multiHarness.openCode.sessionDirectory;
+    mkdirSync(openCodeStore, { recursive: true });
+    const openCodeDb = new DatabaseSync(join(openCodeStore, "opencode.db"));
+    openCodeDb.exec("CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, title TEXT, time_updated INTEGER, parent_id TEXT, time_archived INTEGER)");
+    openCodeDb.prepare("INSERT INTO session VALUES (?, ?, ?, ?, NULL, NULL)").run("ses_recorded", projectDirectory, "OpenCode saved session", Date.now());
+    openCodeDb.close();
+    await selectSessionAgent.handler("openCode");
+    assert.equal(savedView.message, undefined, "OpenCode is a supported saved-session provider");
+    const openCodeSaved = (await savedSessionRows())[0];
+    assert.equal(openCodeSaved.id, "ses_recorded");
+    assert.equal(savedView.provider.getTreeItem(openCodeSaved).contextValue, "savedSessionReadOnly");
+    const beforeOpenCodeResume = vscodeStub.__calls.created.length;
+    await resume.handler({ harnessId: "openCode", id: "ses_recorded" });
+    assert.equal(vscodeStub.__calls.created.length, beforeOpenCodeResume + 1);
+    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--session", "ses_recorded", "--model", "test-model"]);
+    assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
+    assert.equal(vscodeStub.__calls.created.at(-1).options.shellPath, fakeCli);
+    rmSync(openCodeStore, { recursive: true, force: true });
     refreshSaved.handler();
     delete vscodeStub.__fixture.multiHarness.deepseek.arguments;
     await selectSessionAgent.handler("deepseek");
@@ -2157,7 +2222,7 @@ try {
 
 const HARNESS_IDS = manifest.contributes.terminal.map((t) => t.id.replace("multiHarness.", ""));
 const iconSources = JSON.parse(readFileSync(join(projectRoot, "media", "sources", "icons.json"), "utf8"));
-assert.deepEqual(Object.keys(iconSources), HARNESS_IDS, "every harness has an attributed icon source");
+assert.deepEqual(Object.keys(iconSources).sort(), [...HARNESS_IDS].sort(), "every harness has an attributed icon source");
 execFileSync(process.execPath, [join(here, "gen-icons.mjs"), "--check"], { stdio: "inherit" });
 
 function relativeLuminance(hex) {

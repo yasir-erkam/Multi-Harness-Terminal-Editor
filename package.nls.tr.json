@@ -109,6 +109,7 @@
   "savedSessions.missing": "Oturum dosyasına veya asıl proje dizinine erişilemiyor. Yolu kontrol edip listeyi yenileyin.",
   "codex.sessionDirectory.description": "Codex oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
   "claudeCode.sessionDirectory.description": "Claude Code oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
+  "openCode.sessionDirectory.description": "opencode.db dosyasını veya eski storage/ dizinini içeren mutlak OpenCode veri kök dizini. XDG_DATA_HOME/opencode konumunu; XDG_DATA_HOME ayarlanmamışsa ~/.local/share/opencode konumunu kullanmak için boş bırakın.",
   "pi.sessionDirectory.description": "Pi oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
   "ohMyPi.sessionDirectory.description": "Oh My Pi oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",
   "primeAgent.sessionDirectory.description": "Prime Agent oturumlarının tutulduğu mutlak dizin. Varsayılan kayıt konumunu kullanmak için boş bırakın.",

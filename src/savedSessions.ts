@@ -135,7 +135,7 @@ export function scanZstdFrames(buffer: Buffer): ZstdFrameScan {
 
 /** SQLite histories require provider-specific deletion beyond the JSONL trash workflow. */
 export function supportsSessionDeletion(harnessId: string): boolean {
-    return harnessId !== "antigravity";
+    return harnessId !== "antigravity" && harnessId !== "openCode";
 }
 
 /** Native session stores only; unsupported agents are deliberately not inferred. */
@@ -150,6 +150,7 @@ export function sessionRoots(home = os.homedir(), env: NodeJS.ProcessEnv = proce
         { harnessId: "primeAgent", directory: env.PRIME_AGENT_SESSION_DIR ? expand(env.PRIME_AGENT_SESSION_DIR) : path.join(base("PRIME_AGENT_CODING_AGENT_DIR", ".prime/agent"), "sessions") },
         { harnessId: "antigravity", directory: path.join(home, ".gemini", "antigravity-cli") },
         { harnessId: "deepseek", directory: path.join(base("DSH_HOME", ".dsh"), "sessions") },
+        { harnessId: "openCode", directory: path.join(base("XDG_DATA_HOME", ".local/share"), "opencode") },
     ];
 }
 
@@ -254,6 +255,66 @@ async function scanAntigravity(root: SessionRoot, matches: (directory: string) =
         }
         sessions.push({ harnessId: root.harnessId, id, cwd, file, modified, title: clean(row.title) || clean(row.preview) || id });
     }
+    return sessions;
+}
+
+/** OpenCode v1.2+ uses SQLite; older releases store individual session metadata JSON. */
+async function scanOpenCode(root: SessionRoot, matches: (directory: string) => Promise<boolean>, options: SessionScanOptions): Promise<SavedSession[]> {
+    const index = path.join(root.directory, "opencode.db");
+    const sessions: SavedSession[] = [];
+    async function add(row: Record<string, any>, file: string): Promise<void> {
+        if (options.signal?.aborted || typeof row.id !== "string" || !/^ses_[a-zA-Z0-9]+$/.test(row.id)
+            || typeof row.directory !== "string" || !path.isAbsolute(row.directory) || !await matches(row.directory)) return;
+        const modified = row.time_updated ?? row.time?.updated;
+        if (typeof modified !== "number" || !Number.isFinite(modified)) return;
+        sessions.push({ harnessId: root.harnessId, id: row.id, cwd: row.directory, file,
+            modified, title: clean(row.title) || row.id });
+    }
+    let exists = false;
+    try {
+        if (!(await fs.stat(index)).isFile()) throw new Error("OpenCode database is not a regular file");
+        exists = true;
+    } catch (error) {
+        if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+    }
+    if (exists) {
+        // Optional on older extension hosts: static loading would break JSON session providers too.
+        const { DatabaseSync } = await import("node:sqlite");
+        const db = new DatabaseSync(index, { readOnly: true });
+        try {
+            const rows = db.prepare("SELECT id, directory, title, time_updated FROM session "
+                + "WHERE parent_id IS NULL AND time_archived IS NULL ORDER BY time_updated DESC LIMIT 5000").all();
+            for (const row of rows) await add(row, index);
+        } finally {
+            db.close();
+        }
+        return sessions;
+    }
+    let visited = 0;
+    async function walk(directory: string, depth: number): Promise<void> {
+        try {
+            const entries = await fs.opendir(directory);
+            for await (const entry of entries) {
+                if (options.signal?.aborted) return;
+                if (++visited > (options.maxEntries ?? 20_000)) throw new Error("OpenCode metadata scan limit exceeded");
+                const file = path.join(directory, entry.name);
+                if (entry.isDirectory() && depth === 0) await walk(file, depth + 1);
+                else if (entry.isFile() && depth === 1 && entry.name.endsWith(".json")) {
+                    try {
+                        const stat = await fs.stat(file);
+                        if (stat.size > WINDOW_BYTES) continue;
+                        const row = JSON.parse(await fs.readFile(file, "utf8"));
+                        if (row && !row.parentID && row.time?.archived == null) await add(row, file);
+                    } catch (error) {
+                        if (!(error instanceof SyntaxError) && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+                    }
+                }
+            }
+        } catch (error) {
+            if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+        }
+    }
+    await walk(path.join(root.directory, "storage", "session"), 0);
     return sessions;
 }
 
@@ -510,6 +571,14 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
             unreadable.add(root.harnessId);
             return Promise.resolve();
         }
+        if (root.harnessId === "openCode") {
+            try {
+                indexedSessions.push(...await scanOpenCode(root, matches, options));
+            } catch {
+                unreadable.add(root.harnessId);
+            }
+            return;
+        }
         if (root.harnessId === "antigravity") {
             try {
                 indexedSessions.push(...await scanAntigravity(root, matches, options.signal));
@@ -568,6 +637,7 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
 
 export function resumeArguments(session: SavedSession): string[] {
     switch (session.harnessId) {
+        case "openCode": return ["--session", session.id];
         case "antigravity": return ["--conversation", session.id];
         case "codex": return ["resume", session.id];
         case "claudeCode":

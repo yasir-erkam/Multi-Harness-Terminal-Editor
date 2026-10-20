@@ -20,7 +20,7 @@ Run fifteen AI coding-agent CLIs in native editor-area terminals. Select an agen
 4. **Double-click the agent** to open its editor-area terminal, or select a saved conversation to resume it.
 5. Use the star to favorite an agent and the gear to open extension settings.
 
-Saved conversations are supported for **Codex, Claude Code, Pi, Oh My Pi, Prime Agent, Antigravity CLI and DeepSeek Harness**. All fifteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
+Saved conversations are supported for **Codex, Claude Code, OpenCode, Pi, Oh My Pi, Prime Agent, Antigravity CLI and DeepSeek Harness**. All fifteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
 
 The native list is the default. Switch to cards from the view header for search and larger icons. Favorites and the selected agent are shared between layouts; the selected agent is remembered per workspace.
 
@@ -34,10 +34,10 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 
 - **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all fifteen agents and includes a gear button for extension settings. Click an agent once to select it and show its saved sessions for the current project; double-click to open its terminal. Both sidebar layouts use this behavior.
 - **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
-- **Saved sessions.** The Sessions view lists up to 100 recent conversations for the selected agent whose recorded working directory matches the current project folder. Launch an agent, focus its terminal, or use Select Session Agent in the Sessions header to change the agent filter. In multi-root workspaces the folder follows the active editor and stays selected while focus moves to the sidebar or terminal. Symlink aliases match the same directory. This preview supports Codex, Claude Code, Pi, Oh My Pi, Prime Agent, Antigravity CLI and DeepSeek Harness. Click a conversation to resume its exact record; closed tabs do not remove saved history. Use Refresh Sessions for new records and title changes. Unsupported agents show an explanation instead of another agent's history.
+- **Saved sessions.** The Sessions view lists up to 100 recent conversations for the selected agent whose recorded working directory matches the current project folder. Launch an agent, focus its terminal, or use Select Session Agent in the Sessions header to change the agent filter. In multi-root workspaces the folder follows the active editor and stays selected while focus moves to the sidebar or terminal. Symlink aliases match the same directory. This preview supports Codex, Claude Code, OpenCode, Pi, Oh My Pi, Prime Agent, Antigravity CLI and DeepSeek Harness. Click a conversation to resume its exact record; closed tabs do not remove saved history. Use Refresh Sessions for new records and title changes. Unsupported agents show an explanation instead of another agent's history.
 - **Session location scope.** Switch between **Current location** and **All locations** below Sessions in cards, or use the globe button in the native Sessions header. All locations removes only the project-folder filter: the selected agent and 100-conversation limit remain unchanged, and no open folder is required. The choice is remembered per workspace and shared between layouts. Changing location scope clears deletion selections; resumed conversations still open in their recorded directory.
 - **Open terminals.** The Open Terminals view lists open agent terminal tabs, including resumed sessions, using their current terminal titles. Conversations with the same title remain separate by their saved identity. Click a row to focus that exact terminal, or its close (×) button to close it and stop its running process. Both list and card layouts support closing individual terminals. A dot marks the active terminal. Saved conversation files are kept; this view is separate from saved history and does not claim to track agent process state.
-- **Delete saved conversations.** Available for Codex, Claude Code, Pi, Oh My Pi, Prime Agent and DeepSeek Harness; Antigravity history is read-only. Use a session's trash button (or the native list's right-click menu) for one conversation. Choose Select in Sessions to enter selection mode, mark conversations with checkboxes, then Delete Selected. Select All selects the currently listed agent/project results (up to 100); in cards it also respects the search field. Selections survive refreshes and title changes, are shared between layouts, and clear when you change agents or projects. The confirmation lists the selected titles. The extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. Unsuccessful deletions remain selected. Only the selected conversation's JSONL file is removed; auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed and reconnected terminals. Canceled or failed deletions keep their terminals open. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks; cards always show checkboxes.
+- **Delete saved conversations.** Available for Codex, Claude Code, Pi, Oh My Pi, Prime Agent and DeepSeek Harness; Antigravity and OpenCode history is read-only. Use a session's trash button (or the native list's right-click menu) for one conversation. Choose Select in Sessions to enter selection mode, mark conversations with checkboxes, then Delete Selected. Select All selects the currently listed agent/project results (up to 100); in cards it also respects the search field. Selections survive refreshes and title changes, are shared between layouts, and clear when you change agents or projects. The confirmation lists the selected titles. The extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. Unsuccessful deletions remain selected. Only the selected conversation's JSONL file is removed; auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed and reconnected terminals. Canceled or failed deletions keep their terminals open. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks; cards always show checkboxes.
 - **Fifteen agents.** Each agent has an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, settings and icon.
 - **New conversations.** Opening an agent from Agents, the picker or its command starts a new terminal each time. Use **Open Terminals** to focus an existing tab. Saved conversations reuse terminals by conversation identity, so resuming the same conversation does not start a duplicate process.
 - **Session topic tab titles.** The active terminal follows its saved conversation title in the form `omp - 🏷️ SEKME: Sekmede ajan yerine oturum konusunu göster`. Titles are checked every three seconds and when terminal focus changes, without focusing another tab. OMP uses its terminal/session breadcrumb, including new conversations and session switches; other supported history providers use the saved identity of resumed conversations. Emoji and title text are preserved. Without a matching saved record, the CLI/process title remains unchanged. Existing OMP terminals created before terminal identity tracking must be reopened once.
@@ -60,27 +60,29 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 
 ## Supported agents
 
-The default order approximates adoption using the 2026 Stack Overflow Developer Survey, with a smaller CLI survey as a fallback. Favorites stay first; both favorite and other agents follow the default order. Agents without comparable data appear last alphabetically. This is a fixed snapshot, not a live or definitive global CLI usage ranking. See [ordering sources and limitations](docs/agent-order.md).
+The default order follows descending GitHub repository star counts from a fixed **2026-10-20** snapshot. Favorites stay first; both favorite and other agents follow the default order. Agents without a verified product-specific repository appear last alphabetically, not as zero-star entries. This is not a live ranking or a measure of CLI usage. See [exact counts, sources and limitations](docs/agent-order.md).
 
 | Harness id | Display name | Open command | Default executable |
 | --- | --- | --- | --- |
-| `claudeCode` | Claude Code | `multiHarness.openClaudeCode` | `claude` |
-| `copilot` | Copilot CLI | `multiHarness.openCopilot` | `copilot` |
-| `codex` | Codex | `multiHarness.openCodex` | `codex` |
-| `cursorAgent` | Cursor Agent | `multiHarness.openCursorAgent` | `cursor-agent` |
-| `antigravity` | Antigravity CLI | `multiHarness.openAntigravity` | `agy` |
-| `openCode` | OpenCode | `multiHarness.openOpenCode` | `opencode` |
-| `pi` | Pi Agent | `multiHarness.openPi` | `pi` |
-| `aider` | Aider | `multiHarness.openAider` | `aider` |
-| `gemini` | Gemini CLI | `multiHarness.openGemini` | `gemini` |
-| `qwen` | Qwen Code | `multiHarness.openQwen` | `qwen` |
-| `crush` | Crush | `multiHarness.openCrush` | `crush` |
 | `deepseek` | DeepSeek Harness | `multiHarness.openDeepseek` | `dsh` |
+| `openCode` | OpenCode | `multiHarness.openOpenCode` | `opencode` |
+| `claudeCode` | Claude Code | `multiHarness.openClaudeCode` | `claude` |
+| `codex` | Codex | `multiHarness.openCodex` | `codex` |
+| `pi` | Pi Agent | `multiHarness.openPi` | `pi` |
+| `gemini` | Gemini CLI | `multiHarness.openGemini` | `gemini` |
 | `goose` | Goose | `multiHarness.openGoose` | `goose` |
+| `aider` | Aider | `multiHarness.openAider` | `aider` |
 | `ohMyPi` | Oh My Pi | `multiHarness.openOhMyPi` | `omp` |
+| `crush` | Crush | `multiHarness.openCrush` | `crush` |
+| `qwen` | Qwen Code | `multiHarness.openQwen` | `qwen` |
 | `primeAgent` | Prime Agent | `multiHarness.openPrimeAgent` | `prime-agent` |
+| `copilot` | Copilot CLI | `multiHarness.openCopilot` | `copilot` |
+| `antigravity` | Antigravity CLI | `multiHarness.openAntigravity` | `agy` |
+| `cursorAgent` | Cursor Agent | `multiHarness.openCursorAgent` | `cursor-agent` |
 
 Install [Antigravity CLI](https://antigravity.google/download#antigravity-cli) in the environment where the extension runs (the code-server container for remote development). Its command is `agy`; default locations are `~/.local/bin/agy` on Linux/macOS and `%LOCALAPPDATA%\agy\bin` on Windows. Both are discovered automatically. Saved sessions are read from `~/.gemini/antigravity-cli/conversation_summaries.db` and resumed with `agy --conversation <id>`. This requires an extension host with `node:sqlite` (Node.js 22.13+); unavailable SQLite support appears as an unreadable-store notice. Antigravity history is read-only: deletion is not supported.
+
+OpenCode saved history is read locally from `~/.local/share/opencode/opencode.db` (also under the user's home directory on Windows), or `$XDG_DATA_HOME/opencode/opencode.db` when `XDG_DATA_HOME` is set. SQLite history requires an extension host with `node:sqlite` support (Node.js 22.13+). When the database is absent, older JSON records under `storage/session/<projectID>/<id>.json` are supported; an existing database is authoritative, so legacy files are not mixed into its results. Only top-level, non-archived sessions are listed. Selecting one resumes it with `opencode --session <id>` in its recorded project directory. OpenCode history is read-only in the extension.
 
 ## Commands
 
@@ -94,27 +96,27 @@ The following commands appear in the Command Palette under the `Multi-Harness` c
 | `multiHarness.refreshSessions` | Refresh Sessions | Reload saved conversations for the selected agent and project. |
 | `multiHarness.selectSessionAgent` | Select Session Agent | Choose the agent whose saved conversations are shown. |
 | `multiHarness.toggleSessionLocationScope` | Switch Sessions: Current Location / All Locations | Toggle the project-folder filter while keeping the selected agent. |
-| `multiHarness.openClaudeCode` | Open Claude Code | Open a Claude Code terminal. |
-| `multiHarness.openCopilot` | Open Copilot CLI | Open a Copilot CLI terminal. |
-| `multiHarness.openCodex` | Open Codex | Open a Codex terminal. |
-| `multiHarness.openCursorAgent` | Open Cursor Agent | Open a Cursor Agent terminal. |
-| `multiHarness.openAntigravity` | Open Antigravity CLI | Open an Antigravity CLI terminal. |
-| `multiHarness.openOpenCode` | Open OpenCode | Open an OpenCode terminal. |
-| `multiHarness.openPi` | Open Pi Agent | Open a Pi Agent terminal. |
-| `multiHarness.openAider` | Open Aider | Open an Aider terminal. |
-| `multiHarness.openGemini` | Open Gemini CLI | Open a Gemini CLI terminal. |
-| `multiHarness.openQwen` | Open Qwen Code | Open a Qwen Code terminal. |
-| `multiHarness.openCrush` | Open Crush | Open a Crush terminal. |
 | `multiHarness.openDeepseek` | Open DeepSeek Harness | Open a DeepSeek Harness terminal. |
+| `multiHarness.openOpenCode` | Open OpenCode | Open an OpenCode terminal. |
+| `multiHarness.openClaudeCode` | Open Claude Code | Open a Claude Code terminal. |
+| `multiHarness.openCodex` | Open Codex | Open a Codex terminal. |
+| `multiHarness.openPi` | Open Pi Agent | Open a Pi Agent terminal. |
+| `multiHarness.openGemini` | Open Gemini CLI | Open a Gemini CLI terminal. |
 | `multiHarness.openGoose` | Open Goose | Open a Goose terminal. |
+| `multiHarness.openAider` | Open Aider | Open an Aider terminal. |
 | `multiHarness.openOhMyPi` | Open Oh My Pi | Open an Oh My Pi terminal. |
+| `multiHarness.openCrush` | Open Crush | Open a Crush terminal. |
+| `multiHarness.openQwen` | Open Qwen Code | Open a Qwen Code terminal. |
 | `multiHarness.openPrimeAgent` | Open Prime Agent | Open a Prime Agent terminal. |
+| `multiHarness.openCopilot` | Open Copilot CLI | Open a Copilot CLI terminal. |
+| `multiHarness.openAntigravity` | Open Antigravity CLI | Open an Antigravity CLI terminal. |
+| `multiHarness.openCursorAgent` | Open Cursor Agent | Open a Cursor Agent terminal. |
 
 ## Settings
 
 Every setting lives under the `multiHarness` section.
 
-For the seven supported session providers, `multiHarness.<id>.sessionDirectory`
+For the eight supported session providers, `multiHarness.<id>.sessionDirectory`
 can override the session storage root with an absolute path (or a path starting
 with `~/`). Leave it empty to use the agent's default store. Conversation metadata
 is read locally; JSONL reads are bounded, and missing or malformed records are
@@ -129,8 +131,8 @@ format may require an extension update.
 
 Agent or project changes cancel outdated scans. JSONL directory traversal is
 limited to 20,000 entries and four directory levels below the storage root; a
-notice indicates the entry limit or access failures. Antigravity scans up to
-5,000 recent index entries before filtering by project. Only the latest 100
+notice indicates the entry limit or access failures. Antigravity and OpenCode
+SQLite scans read up to 5,000 recent index entries before filtering by project. Only the latest 100
 matching conversations are displayed.
 After fixing a path or permission, use **Refresh Sessions** to try again.
 Resumed conversations use their recorded project's CLI settings and directory.
@@ -148,7 +150,7 @@ See [Launch modes](#launch-modes) for shell integration and status tracking.
 
 **Session storage overrides — `multiHarness.<id>.sessionDirectory`**
 
-All seven settings are strings, default to `""` (use the default store), and have
+All eight settings are strings, default to `""` (use the default store), and have
 `machine-overridable` scope. Set the directory containing the agent’s history,
 not an individual conversation file.
 
@@ -156,6 +158,7 @@ not an individual conversation file.
 | --- | --- |
 | `multiHarness.codex.sessionDirectory` | `~/.codex/sessions` |
 | `multiHarness.claudeCode.sessionDirectory` | `~/.claude/projects` |
+| `multiHarness.openCode.sessionDirectory` | `~/.local/share/opencode` |
 | `multiHarness.pi.sessionDirectory` | `~/.pi/agent/sessions` |
 | `multiHarness.ohMyPi.sessionDirectory` | `~/.omp/agent/sessions` |
 | `multiHarness.primeAgent.sessionDirectory` | `~/.prime/agent/sessions` |
@@ -165,9 +168,12 @@ not an individual conversation file.
 These defaults use the extension host’s home directory. When no setting override
 is provided, discovery also honors `CODEX_HOME`, `CLAUDE_CONFIG_DIR`,
 `PI_CODING_AGENT_SESSION_DIR` / `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`,
-`PRIME_AGENT_SESSION_DIR` / `PRIME_AGENT_CODING_AGENT_DIR`, and `DSH_HOME` for
-their respective agents. For Codex, point to the `sessions` directory; its
-optional title index is read from the parent directory.
+`PRIME_AGENT_SESSION_DIR` / `PRIME_AGENT_CODING_AGENT_DIR`, `DSH_HOME`, and
+`XDG_DATA_HOME` (with an `opencode` subdirectory) for their respective agents.
+For Codex, point to the `sessions` directory; its optional title index is read
+from the parent directory. For OpenCode, point to the data root containing
+`opencode.db` or the legacy `storage/` directory, not to the database file or
+an individual session record.
 
 **Editor layout**
 
@@ -185,61 +191,61 @@ groups. Terminal profile launches always use the active group.
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
-| `multiHarness.showClaudeCodeIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showCopilotIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showCodexIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showCursorAgentIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showAntigravityIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showOpenCodeIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showPiIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showAiderIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showGeminiIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showQwenIcon` | `boolean` | `false` | `window` |
-| `multiHarness.showCrushIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showDeepseekIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showOpenCodeIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showClaudeCodeIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showCodexIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showPiIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showGeminiIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showGooseIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showAiderIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showOhMyPiIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showCrushIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showQwenIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showPrimeAgentIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showCopilotIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showAntigravityIcon` | `boolean` | `false` | `window` |
+| `multiHarness.showCursorAgentIcon` | `boolean` | `false` | `window` |
 
 **Executable overrides — `multiHarness.<id>.executablePath`** (machine-overridable; reset the setting to use the default executable)
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
-| `multiHarness.claudeCode.executablePath` | `string` | `"claude"` | machine-overridable |
-| `multiHarness.copilot.executablePath` | `string` | `"copilot"` | machine-overridable |
-| `multiHarness.codex.executablePath` | `string` | `"codex"` | machine-overridable |
-| `multiHarness.cursorAgent.executablePath` | `string` | `"cursor-agent"` | machine-overridable |
-| `multiHarness.antigravity.executablePath` | `string` | `"agy"` | machine-overridable |
-| `multiHarness.openCode.executablePath` | `string` | `"opencode"` | machine-overridable |
-| `multiHarness.pi.executablePath` | `string` | `"pi"` | machine-overridable |
-| `multiHarness.aider.executablePath` | `string` | `"aider"` | machine-overridable |
-| `multiHarness.gemini.executablePath` | `string` | `"gemini"` | machine-overridable |
-| `multiHarness.qwen.executablePath` | `string` | `"qwen"` | machine-overridable |
-| `multiHarness.crush.executablePath` | `string` | `"crush"` | machine-overridable |
 | `multiHarness.deepseek.executablePath` | `string` | `"dsh"` | machine-overridable |
+| `multiHarness.openCode.executablePath` | `string` | `"opencode"` | machine-overridable |
+| `multiHarness.claudeCode.executablePath` | `string` | `"claude"` | machine-overridable |
+| `multiHarness.codex.executablePath` | `string` | `"codex"` | machine-overridable |
+| `multiHarness.pi.executablePath` | `string` | `"pi"` | machine-overridable |
+| `multiHarness.gemini.executablePath` | `string` | `"gemini"` | machine-overridable |
 | `multiHarness.goose.executablePath` | `string` | `"goose"` | machine-overridable |
+| `multiHarness.aider.executablePath` | `string` | `"aider"` | machine-overridable |
 | `multiHarness.ohMyPi.executablePath` | `string` | `"omp"` | machine-overridable |
+| `multiHarness.crush.executablePath` | `string` | `"crush"` | machine-overridable |
+| `multiHarness.qwen.executablePath` | `string` | `"qwen"` | machine-overridable |
 | `multiHarness.primeAgent.executablePath` | `string` | `"prime-agent"` | machine-overridable |
+| `multiHarness.copilot.executablePath` | `string` | `"copilot"` | machine-overridable |
+| `multiHarness.antigravity.executablePath` | `string` | `"agy"` | machine-overridable |
+| `multiHarness.cursorAgent.executablePath` | `string` | `"cursor-agent"` | machine-overridable |
 
 **Extra arguments — `multiHarness.<id>.arguments`**
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
-| `multiHarness.claudeCode.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.copilot.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.codex.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.cursorAgent.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.antigravity.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.openCode.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.pi.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.aider.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.gemini.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.qwen.arguments` | `array` of `string` | `[]` | `resource` |
-| `multiHarness.crush.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.deepseek.arguments` | `array` of `string` | `["--profile", "tui"]` | `resource` |
+| `multiHarness.openCode.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.claudeCode.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.codex.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.pi.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.gemini.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.goose.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.aider.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.ohMyPi.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.crush.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.qwen.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.primeAgent.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.copilot.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.antigravity.arguments` | `array` of `string` | `[]` | `resource` |
+| `multiHarness.cursorAgent.arguments` | `array` of `string` | `[]` | `resource` |
 
 **Notifications**
 
@@ -329,7 +335,7 @@ The shell-integration API is stable since VS Code 1.93. The extension still decl
 - **VS Code 1.67.0 or newer** (`engines.vscode: ^1.67.0`). The extension uses `TerminalOptions.location` / `TerminalLocation` (stable since 1.64), `isTransient` (stable since 1.65) and `window.tabGroups` with `TabInputTerminal` (stable since 1.67). Shell mode additionally needs the shell-integration API from **1.93+**; on older builds it degrades to direct launching (feature-detected at runtime).
 - **A trusted, non-virtual workspace.** Because of the two capability declarations above, the extension does not activate in Restricted Mode or in virtual workspaces.
 - `extensionKind: ["workspace"]` — it runs in the workspace extension host, where the terminal API is available.
-- **An installed agent CLI and its own prerequisites.** The extension does not install or authenticate agents. No separate Node.js/npm installation is required by the extension itself; individual CLIs may require one. Antigravity saved history additionally requires an extension host with `node:sqlite` support (Node.js 22.13+).
+- **An installed agent CLI and its own prerequisites.** The extension does not install or authenticate agents. No separate Node.js/npm installation is required by the extension itself; individual CLIs may require one. Antigravity saved history and OpenCode SQLite history additionally require an extension host with `node:sqlite` support (Node.js 22.13+).
 
 ## Known limitations
 

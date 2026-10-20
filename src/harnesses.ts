@@ -11,23 +11,23 @@ export interface Harness {
     readonly commandId: string;
 }
 
-/** Approximate adoption order; sources and unmeasured-agent fallback: docs/agent-order.md. */
+/** Descending GitHub stars snapshot; sources and unranked-agent fallback: docs/agent-order.md. */
 export const HARNESSES: readonly Harness[] = [
-    { id: "claudeCode", displayName: "Claude Code", defaultExecutable: "claude", commandId: "multiHarness.openClaudeCode" },
-    { id: "copilot", displayName: "Copilot CLI", defaultExecutable: "copilot", commandId: "multiHarness.openCopilot" },
-    { id: "codex", displayName: "Codex", defaultExecutable: "codex", commandId: "multiHarness.openCodex" },
-    { id: "cursorAgent", displayName: "Cursor Agent", defaultExecutable: "cursor-agent", commandId: "multiHarness.openCursorAgent" },
-    { id: "antigravity", displayName: "Antigravity CLI", defaultExecutable: "agy", commandId: "multiHarness.openAntigravity" },
-    { id: "openCode", displayName: "OpenCode", defaultExecutable: "opencode", commandId: "multiHarness.openOpenCode" },
-    { id: "pi", displayName: "Pi Agent", defaultExecutable: "pi", commandId: "multiHarness.openPi" },
-    { id: "aider", displayName: "Aider", defaultExecutable: "aider", commandId: "multiHarness.openAider" },
-    { id: "gemini", displayName: "Gemini CLI", defaultExecutable: "gemini", commandId: "multiHarness.openGemini" },
-    { id: "qwen", displayName: "Qwen Code", defaultExecutable: "qwen", commandId: "multiHarness.openQwen" },
-    { id: "crush", displayName: "Crush", defaultExecutable: "crush", commandId: "multiHarness.openCrush" },
     { id: "deepseek", displayName: "DeepSeek Harness", defaultExecutable: "dsh", defaultArgs: ["--profile", "tui"], commandId: "multiHarness.openDeepseek" },
+    { id: "openCode", displayName: "OpenCode", defaultExecutable: "opencode", commandId: "multiHarness.openOpenCode" },
+    { id: "claudeCode", displayName: "Claude Code", defaultExecutable: "claude", commandId: "multiHarness.openClaudeCode" },
+    { id: "codex", displayName: "Codex", defaultExecutable: "codex", commandId: "multiHarness.openCodex" },
+    { id: "pi", displayName: "Pi Agent", defaultExecutable: "pi", commandId: "multiHarness.openPi" },
+    { id: "gemini", displayName: "Gemini CLI", defaultExecutable: "gemini", commandId: "multiHarness.openGemini" },
     { id: "goose", displayName: "Goose", defaultExecutable: "goose", commandId: "multiHarness.openGoose" },
+    { id: "aider", displayName: "Aider", defaultExecutable: "aider", commandId: "multiHarness.openAider" },
     { id: "ohMyPi", displayName: "Oh My Pi", defaultExecutable: "omp", commandId: "multiHarness.openOhMyPi" },
+    { id: "crush", displayName: "Crush", defaultExecutable: "crush", commandId: "multiHarness.openCrush" },
+    { id: "qwen", displayName: "Qwen Code", defaultExecutable: "qwen", commandId: "multiHarness.openQwen" },
     { id: "primeAgent", displayName: "Prime Agent", defaultExecutable: "prime-agent", commandId: "multiHarness.openPrimeAgent" },
+    { id: "copilot", displayName: "Copilot CLI", defaultExecutable: "copilot", commandId: "multiHarness.openCopilot" },
+    { id: "antigravity", displayName: "Antigravity CLI", defaultExecutable: "agy", commandId: "multiHarness.openAntigravity" },
+    { id: "cursorAgent", displayName: "Cursor Agent", defaultExecutable: "cursor-agent", commandId: "multiHarness.openCursorAgent" },
 ];
 
 export function harnessForTerminalName(name: string): Harness | undefined {

@@ -109,6 +109,7 @@
   "savedSessions.missing": "The saved session file or its original project directory is unavailable. Check the path and refresh the list.",
   "codex.sessionDirectory.description": "Absolute directory containing Codex session records. Leave empty to use the default storage location.",
   "claudeCode.sessionDirectory.description": "Absolute directory containing Claude Code session records. Leave empty to use the default storage location.",
+  "openCode.sessionDirectory.description": "Absolute OpenCode data-root directory containing opencode.db or the legacy storage/ directory. Leave empty to use XDG_DATA_HOME/opencode, or ~/.local/share/opencode when XDG_DATA_HOME is unset.",
   "pi.sessionDirectory.description": "Absolute directory containing Pi session records. Leave empty to use the default storage location.",
   "ohMyPi.sessionDirectory.description": "Absolute directory containing Oh My Pi session records. Leave empty to use the default storage location.",
   "primeAgent.sessionDirectory.description": "Absolute directory containing Prime Agent session records. Leave empty to use the default storage location.",

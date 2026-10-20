@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.16
+
+- Order agents by descending GitHub repository stars from a documented 2026-10-20 snapshot instead of adoption surveys. Keep favorites first and agents without a verified product-specific repository in an alphabetical tail; preserve favorite and selected-agent settings. Include exact counts, upstream mappings and API sources in the ordering documentation.
+- Support OpenCode saved conversations from its local SQLite database, with legacy JSON history when no database exists. List top-level, non-archived sessions in native and card layouts and resume the selected session with `opencode --session <id>` in its recorded project directory. Keep OpenCode history read-only; add a data-root override and honor `XDG_DATA_HOME`, with English and Turkish setting descriptions. SQLite history requires `node:sqlite` in the extension host.
+
 ## 0.8.15
 
 - Group saved sessions by the local calendar day of their last user or assistant message, newest days and conversations first, in both card and list views. Creation and title-update timestamps do not move conversations between days. Stores without readable message timestamps retain their file/index modification-time fallback.

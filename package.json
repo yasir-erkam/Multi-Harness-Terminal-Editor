@@ -2,7 +2,7 @@
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
   "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI, DeepSeek Harness) in native editor-area terminal tabs.",
-  "version": "0.8.15",
+  "version": "0.8.16",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -189,48 +189,12 @@
         "icon": "$(gear)"
       },
       {
-        "command": "multiHarness.openClaudeCode",
-        "title": "%command.openClaudeCode.title%",
+        "command": "multiHarness.openDeepseek",
+        "title": "%command.openDeepseek.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/claudeCode-light.svg",
-          "dark": "media/claudeCode-dark.svg"
-        }
-      },
-      {
-        "command": "multiHarness.openCopilot",
-        "title": "%command.openCopilot.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/copilot-light.svg",
-          "dark": "media/copilot-dark.svg"
-        }
-      },
-      {
-        "command": "multiHarness.openCodex",
-        "title": "%command.openCodex.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/codex-light.svg",
-          "dark": "media/codex-dark.svg"
-        }
-      },
-      {
-        "command": "multiHarness.openCursorAgent",
-        "title": "%command.openCursorAgent.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/cursorAgent-light.svg",
-          "dark": "media/cursorAgent-dark.svg"
-        }
-      },
-      {
-        "command": "multiHarness.openAntigravity",
-        "title": "%command.openAntigravity.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/antigravity-light.svg",
-          "dark": "media/antigravity-dark.svg"
+          "light": "media/deepseek-light.svg",
+          "dark": "media/deepseek-dark.svg"
         }
       },
       {
@@ -243,21 +207,30 @@
         }
       },
       {
+        "command": "multiHarness.openClaudeCode",
+        "title": "%command.openClaudeCode.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/claudeCode-light.svg",
+          "dark": "media/claudeCode-dark.svg"
+        }
+      },
+      {
+        "command": "multiHarness.openCodex",
+        "title": "%command.openCodex.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/codex-light.svg",
+          "dark": "media/codex-dark.svg"
+        }
+      },
+      {
         "command": "multiHarness.openPi",
         "title": "%command.openPi.title%",
         "category": "%category%",
         "icon": {
           "light": "media/pi-light.svg",
           "dark": "media/pi-dark.svg"
-        }
-      },
-      {
-        "command": "multiHarness.openAider",
-        "title": "%command.openAider.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/aider-light.svg",
-          "dark": "media/aider-dark.svg"
         }
       },
       {
@@ -270,12 +243,30 @@
         }
       },
       {
-        "command": "multiHarness.openQwen",
-        "title": "%command.openQwen.title%",
+        "command": "multiHarness.openGoose",
+        "title": "%command.openGoose.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/qwen-light.svg",
-          "dark": "media/qwen-dark.svg"
+          "light": "media/goose-light.svg",
+          "dark": "media/goose-dark.svg"
+        }
+      },
+      {
+        "command": "multiHarness.openAider",
+        "title": "%command.openAider.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/aider-light.svg",
+          "dark": "media/aider-dark.svg"
+        }
+      },
+      {
+        "command": "multiHarness.openOhMyPi",
+        "title": "%command.openOhMyPi.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/ohMyPi-light.svg",
+          "dark": "media/ohMyPi-dark.svg"
         }
       },
       {
@@ -288,12 +279,21 @@
         }
       },
       {
-        "command": "multiHarness.openGoose",
-        "title": "%command.openGoose.title%",
+        "command": "multiHarness.openQwen",
+        "title": "%command.openQwen.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/goose-light.svg",
-          "dark": "media/goose-dark.svg"
+          "light": "media/qwen-light.svg",
+          "dark": "media/qwen-dark.svg"
+        }
+      },
+      {
+        "command": "multiHarness.openPrimeAgent",
+        "title": "%command.openPrimeAgent.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/primeAgent-light.svg",
+          "dark": "media/primeAgent-dark.svg"
         }
       },
       {
@@ -302,12 +302,12 @@
         "category": "%category%"
       },
       {
-        "command": "multiHarness.openOhMyPi",
-        "title": "%command.openOhMyPi.title%",
+        "command": "multiHarness.openCopilot",
+        "title": "%command.openCopilot.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/ohMyPi-light.svg",
-          "dark": "media/ohMyPi-dark.svg"
+          "light": "media/copilot-light.svg",
+          "dark": "media/copilot-dark.svg"
         }
       },
       {
@@ -383,21 +383,21 @@
         "enablement": "multiHarness.hasSelectedSessions && !multiHarness.deletingSessions"
       },
       {
-        "command": "multiHarness.openPrimeAgent",
-        "title": "%command.openPrimeAgent.title%",
+        "command": "multiHarness.openAntigravity",
+        "title": "%command.openAntigravity.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/primeAgent-light.svg",
-          "dark": "media/primeAgent-dark.svg"
+          "light": "media/antigravity-light.svg",
+          "dark": "media/antigravity-dark.svg"
         }
       },
       {
-        "command": "multiHarness.openDeepseek",
-        "title": "%command.openDeepseek.title%",
+        "command": "multiHarness.openCursorAgent",
+        "title": "%command.openCursorAgent.title%",
         "category": "%category%",
         "icon": {
-          "light": "media/deepseek-light.svg",
-          "dark": "media/deepseek-dark.svg"
+          "light": "media/cursorAgent-light.svg",
+          "dark": "media/cursorAgent-dark.svg"
         }
       }
     ],
@@ -529,39 +529,39 @@
       ],
       "editor/title": [
         {
-          "command": "multiHarness.openClaudeCode",
+          "command": "multiHarness.openDeepseek",
           "group": "navigation@101",
-          "when": "config.multiHarness.showClaudeCodeIcon"
-        },
-        {
-          "command": "multiHarness.openCopilot",
-          "group": "navigation@102",
-          "when": "config.multiHarness.showCopilotIcon"
-        },
-        {
-          "command": "multiHarness.openCodex",
-          "group": "navigation@103",
-          "when": "config.multiHarness.showCodexIcon"
-        },
-        {
-          "command": "multiHarness.openCursorAgent",
-          "group": "navigation@104",
-          "when": "config.multiHarness.showCursorAgentIcon"
-        },
-        {
-          "command": "multiHarness.openAntigravity",
-          "group": "navigation@105",
-          "when": "config.multiHarness.showAntigravityIcon"
+          "when": "config.multiHarness.showDeepseekIcon"
         },
         {
           "command": "multiHarness.openOpenCode",
-          "group": "navigation@106",
+          "group": "navigation@102",
           "when": "config.multiHarness.showOpenCodeIcon"
         },
         {
+          "command": "multiHarness.openClaudeCode",
+          "group": "navigation@103",
+          "when": "config.multiHarness.showClaudeCodeIcon"
+        },
+        {
+          "command": "multiHarness.openCodex",
+          "group": "navigation@104",
+          "when": "config.multiHarness.showCodexIcon"
+        },
+        {
           "command": "multiHarness.openPi",
-          "group": "navigation@107",
+          "group": "navigation@105",
           "when": "config.multiHarness.showPiIcon"
+        },
+        {
+          "command": "multiHarness.openGemini",
+          "group": "navigation@106",
+          "when": "config.multiHarness.showGeminiIcon"
+        },
+        {
+          "command": "multiHarness.openGoose",
+          "group": "navigation@107",
+          "when": "config.multiHarness.showGooseIcon"
         },
         {
           "command": "multiHarness.openAider",
@@ -569,45 +569,57 @@
           "when": "config.multiHarness.showAiderIcon"
         },
         {
-          "command": "multiHarness.openGemini",
-          "group": "navigation@109",
-          "when": "config.multiHarness.showGeminiIcon"
-        },
-        {
-          "command": "multiHarness.openQwen",
-          "group": "navigation@110",
-          "when": "config.multiHarness.showQwenIcon"
-        },
-        {
-          "command": "multiHarness.openCrush",
-          "group": "navigation@111",
-          "when": "config.multiHarness.showCrushIcon"
-        },
-        {
-          "command": "multiHarness.openDeepseek",
-          "group": "navigation@112",
-          "when": "config.multiHarness.showDeepseekIcon"
-        },
-        {
-          "command": "multiHarness.openGoose",
-          "group": "navigation@113",
-          "when": "config.multiHarness.showGooseIcon"
-        },
-        {
           "command": "multiHarness.openOhMyPi",
-          "group": "navigation@114",
+          "group": "navigation@109",
           "when": "config.multiHarness.showOhMyPiIcon"
         },
         {
+          "command": "multiHarness.openCrush",
+          "group": "navigation@110",
+          "when": "config.multiHarness.showCrushIcon"
+        },
+        {
+          "command": "multiHarness.openQwen",
+          "group": "navigation@111",
+          "when": "config.multiHarness.showQwenIcon"
+        },
+        {
           "command": "multiHarness.openPrimeAgent",
-          "group": "navigation@115",
+          "group": "navigation@112",
           "when": "config.multiHarness.showPrimeAgentIcon"
+        },
+        {
+          "command": "multiHarness.openCopilot",
+          "group": "navigation@113",
+          "when": "config.multiHarness.showCopilotIcon"
+        },
+        {
+          "command": "multiHarness.openAntigravity",
+          "group": "navigation@114",
+          "when": "config.multiHarness.showAntigravityIcon"
+        },
+        {
+          "command": "multiHarness.openCursorAgent",
+          "group": "navigation@115",
+          "when": "config.multiHarness.showCursorAgentIcon"
         }
       ]
     },
     "configuration": {
       "title": "%configuration.title%",
       "properties": {
+        "multiHarness.showDeepseekIcon": {
+          "type": "boolean",
+          "default": false,
+          "description": "%showDeepseekIcon.description%",
+          "scope": "window"
+        },
+        "multiHarness.showOpenCodeIcon": {
+          "type": "boolean",
+          "default": false,
+          "description": "%showOpenCodeIcon.description%",
+          "scope": "window"
+        },
         "multiHarness.showClaudeCodeIcon": {
           "type": "boolean",
           "default": false,
@@ -620,22 +632,10 @@
           "description": "%showCodexIcon.description%",
           "scope": "window"
         },
-        "multiHarness.showOpenCodeIcon": {
-          "type": "boolean",
-          "default": false,
-          "description": "%showOpenCodeIcon.description%",
-          "scope": "window"
-        },
         "multiHarness.showPiIcon": {
           "type": "boolean",
           "default": false,
           "description": "%showPiIcon.description%",
-          "scope": "window"
-        },
-        "multiHarness.showOhMyPiIcon": {
-          "type": "boolean",
-          "default": false,
-          "description": "%showOhMyPiIcon.description%",
           "scope": "window"
         },
         "multiHarness.showGeminiIcon": {
@@ -644,22 +644,22 @@
           "description": "%showGeminiIcon.description%",
           "scope": "window"
         },
-        "multiHarness.showCopilotIcon": {
+        "multiHarness.showGooseIcon": {
           "type": "boolean",
           "default": false,
-          "description": "%showCopilotIcon.description%",
-          "scope": "window"
-        },
-        "multiHarness.showCursorAgentIcon": {
-          "type": "boolean",
-          "default": false,
-          "description": "%showCursorAgentIcon.description%",
+          "description": "%showGooseIcon.description%",
           "scope": "window"
         },
         "multiHarness.showAiderIcon": {
           "type": "boolean",
           "default": false,
           "description": "%showAiderIcon.description%",
+          "scope": "window"
+        },
+        "multiHarness.showOhMyPiIcon": {
+          "type": "boolean",
+          "default": false,
+          "description": "%showOhMyPiIcon.description%",
           "scope": "window"
         },
         "multiHarness.showCrushIcon": {
@@ -674,11 +674,23 @@
           "description": "%showQwenIcon.description%",
           "scope": "window"
         },
-        "multiHarness.showGooseIcon": {
+        "multiHarness.showPrimeAgentIcon": {
           "type": "boolean",
           "default": false,
-          "description": "%showGooseIcon.description%",
+          "description": "%showPrimeAgentIcon.description%",
           "scope": "window"
+        },
+        "multiHarness.deepseek.executablePath": {
+          "type": "string",
+          "default": "dsh",
+          "description": "%deepseek.executablePath.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.openCode.executablePath": {
+          "type": "string",
+          "default": "opencode",
+          "description": "%openCode.executablePath.description%",
+          "scope": "machine-overridable"
         },
         "multiHarness.claudeCode.executablePath": {
           "type": "string",
@@ -692,22 +704,10 @@
           "description": "%codex.executablePath.description%",
           "scope": "machine-overridable"
         },
-        "multiHarness.openCode.executablePath": {
-          "type": "string",
-          "default": "opencode",
-          "description": "%openCode.executablePath.description%",
-          "scope": "machine-overridable"
-        },
         "multiHarness.pi.executablePath": {
           "type": "string",
           "default": "pi",
           "description": "%pi.executablePath.description%",
-          "scope": "machine-overridable"
-        },
-        "multiHarness.ohMyPi.executablePath": {
-          "type": "string",
-          "default": "omp",
-          "description": "%ohMyPi.executablePath.description%",
           "scope": "machine-overridable"
         },
         "multiHarness.gemini.executablePath": {
@@ -716,22 +716,22 @@
           "description": "%gemini.executablePath.description%",
           "scope": "machine-overridable"
         },
-        "multiHarness.copilot.executablePath": {
+        "multiHarness.goose.executablePath": {
           "type": "string",
-          "default": "copilot",
-          "description": "%copilot.executablePath.description%",
-          "scope": "machine-overridable"
-        },
-        "multiHarness.cursorAgent.executablePath": {
-          "type": "string",
-          "default": "cursor-agent",
-          "description": "%cursorAgent.executablePath.description%",
+          "default": "goose",
+          "description": "%goose.executablePath.description%",
           "scope": "machine-overridable"
         },
         "multiHarness.aider.executablePath": {
           "type": "string",
           "default": "aider",
           "description": "%aider.executablePath.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.ohMyPi.executablePath": {
+          "type": "string",
+          "default": "omp",
+          "description": "%ohMyPi.executablePath.description%",
           "scope": "machine-overridable"
         },
         "multiHarness.crush.executablePath": {
@@ -746,11 +746,32 @@
           "description": "%qwen.executablePath.description%",
           "scope": "machine-overridable"
         },
-        "multiHarness.goose.executablePath": {
+        "multiHarness.primeAgent.executablePath": {
           "type": "string",
-          "default": "goose",
-          "description": "%goose.executablePath.description%",
+          "default": "prime-agent",
+          "description": "%primeAgent.executablePath.description%",
           "scope": "machine-overridable"
+        },
+        "multiHarness.deepseek.arguments": {
+          "type": "array",
+          "default": [
+            "--profile",
+            "tui"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "%deepseek.arguments.description%",
+          "scope": "resource"
+        },
+        "multiHarness.openCode.arguments": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "%openCode.arguments.description%",
+          "scope": "resource"
         },
         "multiHarness.claudeCode.arguments": {
           "type": "array",
@@ -770,15 +791,6 @@
           "description": "%codex.arguments.description%",
           "scope": "resource"
         },
-        "multiHarness.openCode.arguments": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "description": "%openCode.arguments.description%",
-          "scope": "resource"
-        },
         "multiHarness.pi.arguments": {
           "type": "array",
           "default": [],
@@ -786,15 +798,6 @@
             "type": "string"
           },
           "description": "%pi.arguments.description%",
-          "scope": "resource"
-        },
-        "multiHarness.ohMyPi.arguments": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "description": "%ohMyPi.arguments.description%",
           "scope": "resource"
         },
         "multiHarness.gemini.arguments": {
@@ -806,22 +809,13 @@
           "description": "%gemini.arguments.description%",
           "scope": "resource"
         },
-        "multiHarness.copilot.arguments": {
+        "multiHarness.goose.arguments": {
           "type": "array",
           "default": [],
           "items": {
             "type": "string"
           },
-          "description": "%copilot.arguments.description%",
-          "scope": "resource"
-        },
-        "multiHarness.cursorAgent.arguments": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "description": "%cursorAgent.arguments.description%",
+          "description": "%goose.arguments.description%",
           "scope": "resource"
         },
         "multiHarness.aider.arguments": {
@@ -831,6 +825,15 @@
             "type": "string"
           },
           "description": "%aider.arguments.description%",
+          "scope": "resource"
+        },
+        "multiHarness.ohMyPi.arguments": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "%ohMyPi.arguments.description%",
           "scope": "resource"
         },
         "multiHarness.crush.arguments": {
@@ -851,13 +854,13 @@
           "description": "%qwen.arguments.description%",
           "scope": "resource"
         },
-        "multiHarness.goose.arguments": {
+        "multiHarness.primeAgent.arguments": {
           "type": "array",
           "default": [],
           "items": {
             "type": "string"
           },
-          "description": "%goose.arguments.description%",
+          "description": "%primeAgent.arguments.description%",
           "scope": "resource"
         },
         "multiHarness.notifyOnExit": {
@@ -886,26 +889,32 @@
           "description": "%launchMode.description%",
           "scope": "window"
         },
-        "multiHarness.showPrimeAgentIcon": {
+        "multiHarness.showCopilotIcon": {
           "type": "boolean",
           "default": false,
-          "description": "%showPrimeAgentIcon.description%",
+          "description": "%showCopilotIcon.description%",
           "scope": "window"
         },
-        "multiHarness.primeAgent.executablePath": {
+        "multiHarness.copilot.executablePath": {
           "type": "string",
-          "default": "prime-agent",
-          "description": "%primeAgent.executablePath.description%",
+          "default": "copilot",
+          "description": "%copilot.executablePath.description%",
           "scope": "machine-overridable"
         },
-        "multiHarness.primeAgent.arguments": {
+        "multiHarness.copilot.arguments": {
           "type": "array",
           "default": [],
           "items": {
             "type": "string"
           },
-          "description": "%primeAgent.arguments.description%",
+          "description": "%copilot.arguments.description%",
           "scope": "resource"
+        },
+        "multiHarness.openCode.sessionDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%openCode.sessionDirectory.description%",
+          "scope": "machine-overridable"
         },
         "multiHarness.codex.sessionDirectory": {
           "type": "string",
@@ -978,28 +987,25 @@
           "description": "%antigravity.sessionDirectory.description%",
           "scope": "machine-overridable"
         },
-        "multiHarness.showDeepseekIcon": {
+        "multiHarness.showCursorAgentIcon": {
           "type": "boolean",
           "default": false,
-          "description": "%showDeepseekIcon.description%",
+          "description": "%showCursorAgentIcon.description%",
           "scope": "window"
         },
-        "multiHarness.deepseek.executablePath": {
+        "multiHarness.cursorAgent.executablePath": {
           "type": "string",
-          "default": "dsh",
-          "description": "%deepseek.executablePath.description%",
+          "default": "cursor-agent",
+          "description": "%cursorAgent.executablePath.description%",
           "scope": "machine-overridable"
         },
-        "multiHarness.deepseek.arguments": {
+        "multiHarness.cursorAgent.arguments": {
           "type": "array",
-          "default": [
-            "--profile",
-            "tui"
-          ],
+          "default": [],
           "items": {
             "type": "string"
           },
-          "description": "%deepseek.arguments.description%",
+          "description": "%cursorAgent.arguments.description%",
           "scope": "resource"
         },
         "multiHarness.deepseek.sessionDirectory": {
@@ -1012,64 +1018,64 @@
     },
     "terminal": [
       {
-        "id": "multiHarness.claudeCode",
-        "title": "%terminal.profile.claudeCode.title%"
-      },
-      {
-        "id": "multiHarness.copilot",
-        "title": "%terminal.profile.copilot.title%"
-      },
-      {
-        "id": "multiHarness.codex",
-        "title": "%terminal.profile.codex.title%"
-      },
-      {
-        "id": "multiHarness.cursorAgent",
-        "title": "%terminal.profile.cursorAgent.title%"
-      },
-      {
-        "id": "multiHarness.antigravity",
-        "title": "%terminal.profile.antigravity.title%"
+        "id": "multiHarness.deepseek",
+        "title": "%terminal.profile.deepseek.title%"
       },
       {
         "id": "multiHarness.openCode",
         "title": "%terminal.profile.openCode.title%"
       },
       {
-        "id": "multiHarness.pi",
-        "title": "%terminal.profile.pi.title%"
+        "id": "multiHarness.claudeCode",
+        "title": "%terminal.profile.claudeCode.title%"
       },
       {
-        "id": "multiHarness.aider",
-        "title": "%terminal.profile.aider.title%"
+        "id": "multiHarness.codex",
+        "title": "%terminal.profile.codex.title%"
+      },
+      {
+        "id": "multiHarness.pi",
+        "title": "%terminal.profile.pi.title%"
       },
       {
         "id": "multiHarness.gemini",
         "title": "%terminal.profile.gemini.title%"
       },
       {
-        "id": "multiHarness.qwen",
-        "title": "%terminal.profile.qwen.title%"
-      },
-      {
-        "id": "multiHarness.crush",
-        "title": "%terminal.profile.crush.title%"
-      },
-      {
-        "id": "multiHarness.deepseek",
-        "title": "%terminal.profile.deepseek.title%"
-      },
-      {
         "id": "multiHarness.goose",
         "title": "%terminal.profile.goose.title%"
+      },
+      {
+        "id": "multiHarness.aider",
+        "title": "%terminal.profile.aider.title%"
       },
       {
         "id": "multiHarness.ohMyPi",
         "title": "%terminal.profile.ohMyPi.title%"
       },
       {
+        "id": "multiHarness.crush",
+        "title": "%terminal.profile.crush.title%"
+      },
+      {
+        "id": "multiHarness.qwen",
+        "title": "%terminal.profile.qwen.title%"
+      },
+      {
         "id": "multiHarness.primeAgent",
         "title": "%terminal.profile.primeAgent.title%"
+      },
+      {
+        "id": "multiHarness.copilot",
+        "title": "%terminal.profile.copilot.title%"
+      },
+      {
+        "id": "multiHarness.antigravity",
+        "title": "%terminal.profile.antigravity.title%"
+      },
+      {
+        "id": "multiHarness.cursorAgent",
+        "title": "%terminal.profile.cursorAgent.title%"
       }
     ]
   },

@@ -1,40 +1,56 @@
 # Default agent order
 
-Reviewed on 2026-10-16. This is a fixed, approximate adoption snapshot, not a
-measurement of worldwide CLI users. No usage data is collected by the extension
-and no network requests are made to calculate the order at runtime.
+The default order is a fixed snapshot of descending GitHub repository stars,
+fetched on **2026-10-20 UTC**, from `2026-10-20T04:53:56.012Z` to
+`2026-10-20T04:54:57.202Z` (client timestamps). Counts below are the exact GitHub
+REST API `stargazers_count` values, not rounded display counts.
+The extension makes no network requests to calculate the order at runtime.
 
-## Primary source
+## Star snapshot and sources
 
-The [2026 Stack Overflow Developer Survey: AI coding agents](https://survey.stackoverflow.co/2026/ai/data/ai-code-agent)
-reports past-year use among 12,255 respondents to this question. Supported tools
-with a matching product entry follow that survey's descending usage order:
+Each repository link identifies the upstream product; each count links to the
+GitHub API endpoint used to fetch it.
 
-Claude Code → Copilot CLI → Codex → Cursor Agent → Antigravity CLI → OpenCode →
-Pi Agent → Aider.
+| Order | Agent | GitHub repository | Stars |
+| --- | --- | --- | ---: |
+| 1 | DeepSeek Harness | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) | [254,720](https://api.github.com/repos/deepseek-ai/deepseek-harness) |
+| 2 | OpenCode | [anomalyco/opencode](https://github.com/anomalyco/opencode) | [218,004](https://api.github.com/repos/anomalyco/opencode) |
+| 3 | Claude Code | [anthropics/claude-code](https://github.com/anthropics/claude-code) | [152,745](https://api.github.com/repos/anthropics/claude-code) |
+| 4 | Codex | [openai/codex](https://github.com/openai/codex) | [129,970](https://api.github.com/repos/openai/codex) |
+| 5 | Pi Agent | [earendil-works/pi](https://github.com/earendil-works/pi) | [116,475](https://api.github.com/repos/earendil-works/pi) |
+| 6 | Gemini CLI | [google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) | [107,459](https://api.github.com/repos/google-gemini/gemini-cli) |
+| 7 | Goose | [aaif-goose/goose](https://github.com/aaif-goose/goose) | [55,451](https://api.github.com/repos/block/goose) |
+| 8 | Aider | [Aider-AI/aider](https://github.com/Aider-AI/aider) | [49,648](https://api.github.com/repos/Aider-AI/aider) |
+| 9 | Oh My Pi | [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi) | [35,981](https://api.github.com/repos/can1357/oh-my-pi) |
+| 10 | Crush | [charmbracelet/crush](https://github.com/charmbracelet/crush) | [28,713](https://api.github.com/repos/charmbracelet/crush) |
+| 11 | Qwen Code | [QwenLM/qwen-code](https://github.com/QwenLM/qwen-code) | [28,587](https://api.github.com/repos/QwenLM/qwen-code) |
+| 12 | Prime Agent | [PrimeIntellect-ai/prime-agent](https://github.com/PrimeIntellect-ai/prime-agent) | [22,186](https://api.github.com/repos/PrimeIntellect-ai/prime-agent) |
+| 13 | Copilot CLI | [github/copilot-cli](https://github.com/github/copilot-cli) | [11,276](https://api.github.com/repos/github/copilot-cli) |
+| 14 | Antigravity CLI | [google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli) | [2,604](https://api.github.com/repos/google-antigravity/antigravity-cli) |
+| Unranked tail | Cursor Agent | No verified CLI-specific upstream repository | Unknown |
 
-Copilot, Codex, Cursor and Antigravity entries cover their broader products;
-their CLI variants are mapped to those products as an adoption proxy. This
-does not establish the relative number of users of those specific CLIs.
+## Repository mapping and limitations
 
-Attribution: Stack Exchange Inc. (2026), “AI coding agents”, Stack Overflow
-Developer Survey 2026. Response data is licensed under
-[ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/).
+- [Pi's official site](https://pi.dev) links to `earendil-works/pi`. Its stars
+  cover the containing agent toolkit repository, not just the coding-agent CLI.
+- The existing `block/goose` upstream URL redirects to `aaif-goose/goose`;
+  the API response identifies that canonical repository.
+- Antigravity's repository documents the `agy` command and links to its
+  [official CLI documentation](https://antigravity.google/docs/cli/overview).
+  Its installer matches the [official download page](https://antigravity.google/download#antigravity-cli).
+- A product-specific public repository can hold documentation, issues and
+  releases rather than the product's implementation source. Its stars still
+  count here; this policy does not rank source-code openness.
+- No CLI-specific official repository was verified for
+  [Cursor Agent](https://cursor.com/docs/cli/overview).
+  [cursor/cursor](https://github.com/cursor/cursor) covers the broader Cursor
+  product and community, so its stars are not substituted for the CLI's.
 
-## Secondary source and agents without data
-
-For agents missing from the primary source, use the
-[July 2026 Coding Agent Survey](https://codingagentsurvey.org/reports/2026-07):
-Gemini CLI precedes Qwen Code. Its 163 responses are a small, self-selected
-sample; its counts are not compared with the larger survey. These two agents
-follow the primary-source group. Gemini Code Assist in the primary source is
-not treated as Gemini CLI.
-
-Crush, DeepSeek Harness, Goose, Oh My Pi and Prime Agent follow alphabetically
-because neither source supplies comparable entries for them. Missing data does
-not imply zero users or lower actual usage. In particular, the boundaries
-between these groups are a presentation fallback, not a measured usage
-comparison.
+Agents without a verified product-specific repository follow the measured
+group alphabetically by display name. Unknown does not mean zero stars or
+lower actual adoption. Cursor Agent is currently the only such agent. Stars
+measure repository interest, not active users, CLI usage or product quality;
+counts change after this snapshot and are not refreshed automatically.
 
 ## Applying and maintaining the order
 

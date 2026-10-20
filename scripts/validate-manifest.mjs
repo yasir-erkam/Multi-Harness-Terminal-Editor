@@ -8,21 +8,21 @@ const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const nls = JSON.parse(readFileSync(join(root, "package.nls.json"), "utf8"));
 
 const harnessIds = [
-    "claudeCode",
-    "copilot",
-    "codex",
-    "cursorAgent",
-    "antigravity",
-    "openCode",
-    "pi",
-    "aider",
-    "gemini",
-    "qwen",
-    "crush",
     "deepseek",
+    "openCode",
+    "claudeCode",
+    "codex",
+    "pi",
+    "gemini",
     "goose",
+    "aider",
     "ohMyPi",
+    "crush",
+    "qwen",
     "primeAgent",
+    "copilot",
+    "antigravity",
+    "cursorAgent",
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
@@ -169,7 +169,7 @@ check(!menuIds.includes("multiHarness.openAgentPicker"), "picker command has no 
 agentCommandIds.forEach((id, index) => {
     check(menuIds[index] === id, `editor/title entry ${index} opens ${id}`);
     const entry = menus[index];
-    check(/navigation@\d+/.test(entry.group ?? ""), `menu entry ${id} uses navigation group`);
+    check(entry.group === `navigation@${101 + index}`, `menu entry ${id} follows the default navigation order`);
     const expectedWhen = `config.multiHarness.show${harnessIds[index].charAt(0).toUpperCase()}${harnessIds[index].slice(1)}Icon`;
     check(entry.when === expectedWhen, `menu entry ${id} when-clause is ${expectedWhen}`);
 });
@@ -191,6 +191,8 @@ const agySessions = properties["multiHarness.antigravity.sessionDirectory"];
 check(agySessions?.type === "string" && agySessions.default === "" && agySessions.scope === "machine-overridable", "Antigravity session directory override is declared");
 const dshSessions = properties["multiHarness.deepseek.sessionDirectory"];
 check(dshSessions?.type === "string" && dshSessions.default === "" && dshSessions.scope === "machine-overridable", "DeepSeek Harness session directory override is declared");
+const openCodeSessions = properties["multiHarness.openCode.sessionDirectory"];
+check(openCodeSessions?.type === "string" && openCodeSessions.default === "" && openCodeSessions.scope === "machine-overridable", "OpenCode session directory override is declared");
 const fullEditorArea = properties["multiHarness.useFullEditorArea"];
 check(fullEditorArea?.type === "boolean" && fullEditorArea.default === true && fullEditorArea.scope === "window", "full editor area defaults to enabled with window scope");
 const launchMode = properties["multiHarness.launchMode"];
@@ -216,6 +218,7 @@ check(harnessIds.every((id) => /^[a-z][A-Za-z]*$/.test(id)), "harness ids are lo
 const profiles = manifest.contributes.terminal ?? [];
 check(profiles.length === harnessIds.length, "one terminal profile is contributed per harness");
 const profileIds = profiles.map((profile) => profile.id);
+check(JSON.stringify(profileIds) === JSON.stringify(harnessIds.map((id) => `multiHarness.${id}`)), "terminal profiles follow the default agent order");
 harnessIds.forEach((id) => {
     const profileId = `multiHarness.${id}`;
     check(profileIds.includes(profileId), `terminal profile ${profileId} exists`);
