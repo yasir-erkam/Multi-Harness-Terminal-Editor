@@ -1,4 +1,4 @@
-import { readFile, readlink } from "node:fs/promises";
+import { readFile, readdir, readlink, realpath } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -112,4 +112,54 @@ export async function ompTerminalSessionFile(terminal: vscode.Terminal, sessions
         const file = breadcrumb.split("\n")[1]?.trim();
         return file && path.isAbsolute(file) ? file : undefined;
     } catch { return undefined; }
+}
+
+/** Find live Codex rollouts, including a CLI below a shell or Node launcher. */
+export async function codexTerminalSessionFiles(terminal: vscode.Terminal, sessionsRoot: string): Promise<string[]> {
+    if (process.platform !== "linux" || terminal.exitStatus
+        || (await restoreTerminalIdentity(terminal))?.harnessId !== "codex") return [];
+    try {
+        const pid = await terminal.processId;
+        if (!pid || !Number.isSafeInteger(pid) || pid <= 0) return [];
+        const root = await realpath(sessionsRoot);
+        const pending = [pid];
+        const visited = new Set<number>();
+        const files = new Set<string>();
+        let remainingDescriptors = 1024;
+        while (pending.length && visited.size < 64 && remainingDescriptors > 0) {
+            const current = pending.shift()!;
+            if (visited.has(current)) continue;
+            visited.add(current);
+            const base = `/proc/${current}`;
+            try {
+                const command = (await readFile(`${base}/comm`, "utf8")).trim();
+                if (/^codex(?:-|$)/.test(command)) {
+                    const descriptors = (await readdir(`${base}/fd`)).slice(0, Math.min(256, remainingDescriptors));
+                    remainingDescriptors -= descriptors.length;
+                    for (const descriptor of descriptors) {
+                        try {
+                            const file = await readlink(`${base}/fd/${descriptor}`);
+                            const relative = path.relative(root, file);
+                            if (!file.endsWith(".jsonl") || !relative || relative === ".."
+                                || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) continue;
+                            const info = await readFile(`${base}/fdinfo/${descriptor}`, "utf8");
+                            const flags = /^flags:\s+([0-7]+)$/m.exec(info)?.[1];
+                            // Reading history must not identify it as the active session.
+                            if (flags && (Number.parseInt(flags, 8) & 3) !== 0) files.add(file);
+                        } catch { /* Processes can close descriptors during discovery. */ }
+                    }
+                    // A Codex launched by a tool belongs to a separate conversation.
+                    continue;
+                }
+                const children = await readFile(`${base}/task/${current}/children`, "utf8");
+                for (const child of children.trim().split(/\s+/)) {
+                    const childPid = Number(child);
+                    if (Number.isSafeInteger(childPid) && childPid > 0 && pending.length < 64) pending.push(childPid);
+                }
+            } catch { /* A process may exit or restrict access to /proc. */ }
+        }
+        return [...files];
+    } catch {
+        return [];
+    }
 }

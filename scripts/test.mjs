@@ -2163,6 +2163,92 @@ try {
             outfile: join(activationDir, "identity.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent",
         });
         const identities = requireFrom(join(activationDir, "identity.cjs"));
+        const codexRoot = vscodeStub.__fixture.multiHarness.codex.sessionDirectory;
+        mkdirSync(codexRoot, { recursive: true });
+        const codexFiles = ["fresh-codex", "switched-codex"].map((id) => join(codexRoot, `${id}.jsonl`));
+        for (const [index, file] of codexFiles.entries()) {
+            writeFileSync(file, JSON.stringify({ type: "session_meta", payload: { id: ["fresh-codex", "switched-codex"][index], cwd: projectDirectory } }) + "\n");
+        }
+        const codexScript = `
+            const fs = require("node:fs");
+            process.title = "codex";
+            const files = process.argv.slice(1);
+            let fd = fs.openSync(files[0], "a");
+            fs.openSync(files[1], "r");
+            process.stdout.write("ready\\n");
+            process.stdin.on("data", () => {
+                fs.closeSync(fd);
+                fd = fs.openSync(files[1], "a");
+                process.stdout.write("ready\\n");
+            });
+        `;
+        // Exercise a shell/Node wrapper, not only the terminal's immediate PID.
+        const wrapperScript = `
+            const { spawn } = require("node:child_process");
+            const child = spawn(process.execPath, ["-e", ${JSON.stringify(codexScript)}, ...process.argv.slice(1)], { stdio: "inherit" });
+            process.on("SIGTERM", () => child.kill());
+            child.on("exit", () => process.exit());
+        `;
+        const codexProcess = spawn(process.execPath, ["-e", wrapperScript, ...codexFiles], {
+            env: { ...process.env, MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "codex", launchMode: "shell" }) },
+            stdio: ["pipe", "pipe", "inherit"],
+        });
+        const ready = () => new Promise((resolve, reject) => {
+            codexProcess.stdout.once("data", resolve);
+            codexProcess.once("error", reject);
+        });
+        const codexContext = { ...context, subscriptions: [] };
+        try {
+            await ready();
+            const freshCodex = deletionTerminal(undefined, "codex");
+            freshCodex.processId = Promise.resolve(codexProcess.pid);
+            // The same live process can be restored without its creation options.
+            const reconnectedCodex = deletionTerminal(undefined, "codex", "shell");
+            reconnectedCodex.creationOptions = {};
+            reconnectedCodex.processId = Promise.resolve(codexProcess.pid);
+            const otherCodex = deletionTerminal("unrelated-codex", "codex");
+            vscodeStub.window.terminals = [freshCodex, reconnectedCodex, otherCodex];
+            freshExtension.activate(codexContext);
+            const codexCommand = (id) => vscodeStub.__calls.commands.filter((entry) => entry.id === `multiHarness.${id}`).at(-1).handler;
+            await codexCommand("selectSessionAgent")("codex");
+            assert.deepEqual(await identities.codexTerminalSessionFiles(freshCodex, codexRoot), [codexFiles[0]], "only writable Codex rollouts identify the active conversation");
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await codexCommand("deleteSession")({ harnessId: "codex", id: "switched-codex" });
+            assert.equal(freshCodex.disposed, 0, "reading another session does not link its deletion to this terminal");
+            // Recreate the second session and switch the running CLI to it.
+            writeFileSync(codexFiles[1], JSON.stringify({ type: "session_meta", payload: { id: "switched-codex", cwd: projectDirectory } }) + "\n");
+            const switched = ready();
+            codexProcess.stdin.write("switch\n");
+            await switched;
+            freshCodex.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY = JSON.stringify({ version: 1, harnessId: "codex", launchMode: "direct", sessionId: "fresh-codex" });
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await codexCommand("deleteSession")({ harnessId: "codex", id: "fresh-codex" });
+            assert.equal(freshCodex.disposed, 0, "live Codex identity overrides the old resumed session ID after a switch");
+            await codexCommand("deleteSession")({ harnessId: "codex", id: "switched-codex" });
+            assert.equal(freshCodex.disposed, 0, "canceling deletion leaves a fresh Codex terminal open");
+            const diskDelete = vscodeStub.workspace.fs.delete;
+            try {
+                vscodeStub.workspace.fs.delete = async () => { throw new Error("permission denied"); };
+                vscodeStub.__calls.warningResults.push("Move to Trash", "Delete Permanently");
+                await codexCommand("deleteSession")({ harnessId: "codex", id: "switched-codex" });
+                assert.equal(freshCodex.disposed, 0, "failed Codex deletion preserves the terminal");
+            } finally {
+                vscodeStub.workspace.fs.delete = diskDelete;
+            }
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await codexCommand("deleteSession")({ harnessId: "codex", id: "switched-codex" });
+            assert.equal(freshCodex.disposed, 1, "successful deletion closes a Codex terminal matched through its live rollout");
+            assert.equal(reconnectedCodex.disposed, 1, "successful deletion also closes a renamed reconnected Codex terminal");
+            assert.equal(otherCodex.disposed, 0, "unrelated Codex terminals remain open");
+            passed += 1;
+            console.log("ok: Codex deletion follows live rollout files through wrappers, reconnection and session switches");
+        } finally {
+            for (const subscription of codexContext.subscriptions) subscription.dispose();
+            const exited = new Promise((resolve) => codexProcess.once("exit", resolve));
+            codexProcess.kill();
+            await exited;
+            vscodeStub.window.terminals = [];
+        }
         const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
             env: { ...process.env, ...resumed.options.env }, stdio: "ignore",
         });

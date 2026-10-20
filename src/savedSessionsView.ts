@@ -9,7 +9,7 @@ import { supportsSessionDeletion, resumeArguments, scanSavedSessions, sessionRoo
 import { type AgentStatus } from "./status";
 import { type SessionContext, type SessionScope } from "./sessionContext";
 import { SessionDeletionError, validateSessionDeletion } from "./deleteSession";
-import { ompTerminalSessionFile, restoreTerminalIdentity } from "./terminalIdentity";
+import { codexTerminalSessionFiles, ompTerminalSessionFile, restoreTerminalIdentity } from "./terminalIdentity";
 
 export interface SavedSessions {
     readonly onDidChange: vscode.Event<void>;
@@ -111,20 +111,27 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         else selected.add(key);
         notifySelection();
     }
-    async function closeSessionTerminals(session: SavedSession): Promise<void> {
+    async function sessionTerminals(session: SavedSession): Promise<vscode.Terminal[]> {
         const terminals = [...vscode.window.terminals];
         const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
         const root = session.harnessId === "ohMyPi" ? getRoots().find((candidate) => candidate.harnessId === "ohMyPi") : undefined;
         const activeFiles = root ? await Promise.all(terminals.map((terminal) => ompTerminalSessionFile(terminal, root.directory))) : [];
-        for (const [index, terminal] of terminals.entries()) {
+        const codexRoot = session.harnessId === "codex" ? getRoots().find((candidate) => candidate.harnessId === "codex") : undefined;
+        const codexFiles = codexRoot ? await Promise.all(terminals.map((terminal) => codexTerminalSessionFiles(terminal, codexRoot.directory))) : [];
+        const sessionFile = codexRoot ? await fs.realpath(session.file) : session.file;
+        return terminals.filter((_terminal, index) => {
             const identity = identities[index];
             const activeFile = activeFiles[index];
-            const matches = activeFile
-                ? path.relative(activeFile, session.file) === ""
-                : identity?.sessionId === session.id;
-            if (identity?.harnessId === session.harnessId && matches && vscode.window.terminals.includes(terminal)) {
-                terminal.dispose();
-            }
+            const files = codexFiles[index];
+            const matches = files?.length
+                ? files.some((file) => path.relative(file, sessionFile) === "")
+                : activeFile ? path.relative(activeFile, session.file) === "" : identity?.sessionId === session.id;
+            return identity?.harnessId === session.harnessId && matches;
+        });
+    }
+    function closeSessionTerminals(terminals: vscode.Terminal[]): void {
+        for (const terminal of terminals) {
+            if (vscode.window.terminals.includes(terminal)) terminal.dispose();
         }
     }
     async function deleteSessions(request?: { harnessId?: string; id?: string }): Promise<void> {
@@ -159,9 +166,11 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                     continue;
                 }
                 try {
+                    const terminals = await sessionTerminals(session);
+                    await validateSessionDeletion(session, roots);
                     await vscode.workspace.fs.delete(vscode.Uri.file(session.file), { recursive: false, useTrash: true });
                     selected.delete(sessionKey(session));
-                    await closeSessionTerminals(session);
+                    closeSessionTerminals(terminals);
                 } catch {
                     trashFailed.push(session);
                 }
@@ -179,9 +188,11 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                     }
                     try {
                         await validateSessionDeletion(session, roots);
+                        const terminals = await sessionTerminals(session);
+                        await validateSessionDeletion(session, roots);
                         await vscode.workspace.fs.delete(vscode.Uri.file(session.file), { recursive: false, useTrash: false });
                         selected.delete(sessionKey(session));
-                        await closeSessionTerminals(session);
+                        closeSessionTerminals(terminals);
                     } catch (error) { fail(session, error); }
                 }
             }

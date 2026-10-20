@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.18
+
+- Close fresh and reconnected Codex terminal tabs after successful saved-session deletion on Linux/code-server by matching the CLI's live rollout file, including shell/Node launchers and in-process session switches.
+
 ## 0.8.17
 
 - Clarify that saved-session integrations for Gemini CLI, Goose, Aider, Crush, Qwen Code, Copilot CLI and Cursor Agent are future plans, not currently supported saved-session features.
