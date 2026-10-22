@@ -9,7 +9,7 @@ import { supportsSessionDeletion, resumeArguments, scanSavedSessions, sessionRoo
 import { type AgentStatus } from "./status";
 import { type SessionContext, type SessionScope } from "./sessionContext";
 import { SessionDeletionError, sessionDeletionFiles } from "./deleteSession";
-import { codexTerminalSessionFiles, ompTerminalSessionFile, restoreTerminalIdentity } from "./terminalIdentity";
+import { codexTerminalSessionFiles, ompTerminalSessionFile, restoreTerminalIdentity, windowsCodexSessionMatches } from "./terminalIdentity";
 
 export interface SavedSessions {
     readonly onDidChange: vscode.Event<void>;
@@ -119,13 +119,14 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         const codexRoot = session.harnessId === "codex" ? getRoots().find((candidate) => candidate.harnessId === "codex") : undefined;
         const codexFiles = codexRoot ? await Promise.all(terminals.map((terminal) => codexTerminalSessionFiles(terminal, codexRoot.directory))) : [];
         const sessionFile = codexRoot ? await fs.realpath(session.file) : session.file;
+        const windowsMatches = codexRoot ? await windowsCodexSessionMatches(terminals, sessionFile) : new Map<vscode.Terminal, boolean>();
         return terminals.filter((_terminal, index) => {
             const identity = identities[index];
             const activeFile = activeFiles[index];
             const files = codexFiles[index];
-            const matches = files?.length
+            const matches = windowsMatches.get(_terminal) ?? (files?.length
                 ? files.some((file) => path.relative(file, sessionFile) === "")
-                : activeFile ? path.relative(activeFile, session.file) === "" : identity?.sessionId === session.id;
+                : activeFile ? path.relative(activeFile, session.file) === "" : identity?.sessionId === session.id);
             return identity?.harnessId === session.harnessId && matches;
         });
     }

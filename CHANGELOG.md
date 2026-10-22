@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.20
+
+- Close fresh Codex terminals after successful session deletion on Windows desktop VS Code. Match the session file's writable native handle to the marked terminal's Codex process tree, including PowerShell/Node launchers and in-process session switches. Exclude read-only handles, nested tool-launched agents and reused process IDs; keep terminals open when deletion is canceled or fails.
+- Add native Windows process/file-handle regressions. Query Windows ownership in a hidden, bounded PowerShell helper; retain saved resume identity as a fallback when native inspection is unavailable.
+
 ## 0.8.19
 
 - Restrict deletion controls to the six writable session providers. Permit Claude Code metadata rows without a working directory when a later identity record validates it, and validate DeepSeek JSONL/UTF-8 records across Zstandard frame boundaries.

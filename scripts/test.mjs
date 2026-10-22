@@ -1,7 +1,9 @@
 // Unit tests: resolveExecutable (pure node module, esbuild-bundled on the fly)
 // plus the full manifest validation from validate-manifest.mjs.
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, utimesSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, utimesSync, symlinkSync, copyFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+import { once } from "node:events";
 import { tmpdir, homedir } from "node:os";
 import { join, dirname, sep, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -287,6 +289,33 @@ await build({
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
 });
 const { validateSessionDeletion, sessionDeletionFiles } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
+await build({
+    entryPoints: [join(projectRoot, "src", "windowsSessionProcesses.ts")],
+    outfile: join(outdir, "windowsSessionProcesses.test.mjs"),
+    bundle: true, format: "esm", platform: "node", logLevel: "silent",
+});
+const { windowsCodexUsesSession } = await import(pathToFileURL(join(outdir, "windowsSessionProcesses.test.mjs")).href);
+{
+    const snapshot = {
+        owners: [{ id: 30, started: 300 }],
+        processes: [
+            { id: 10, parentId: 1, name: "powershell.exe", started: 100 },
+            { id: 20, parentId: 10, name: "node.exe", started: 200 },
+            { id: 30, parentId: 20, name: "codex.exe", started: 300 },
+            { id: 40, parentId: 30, name: "codex.exe", started: 400 },
+            { id: 50, parentId: 1, name: "codex.exe", started: 500 },
+        ],
+    };
+    assert.equal(windowsCodexUsesSession(10, snapshot), true, "PowerShell/Node wrappers resolve their Codex file owner");
+    assert.equal(windowsCodexUsesSession(30, snapshot), true);
+    assert.equal(windowsCodexUsesSession(50, snapshot), false, "other Codex terminals do not match");
+    assert.equal(windowsCodexUsesSession(999, snapshot), undefined);
+    assert.equal(windowsCodexUsesSession(10, { ...snapshot, owners: [{ id: 40, started: 400 }] }), false, "tool-launched nested Codex sessions do not identify the parent conversation");
+    assert.equal(windowsCodexUsesSession(10, { ...snapshot, owners: [{ id: 30, started: 1000 }] }), false, "reused process IDs must not match an old owner");
+    assert.equal(windowsCodexUsesSession(10, { ...snapshot, processes: snapshot.processes.map((row) => row.id === 20 ? { ...row, started: 50 } : row) }), undefined, "reused parent IDs cannot link older processes");
+    passed += 1;
+    console.log("ok: Windows Codex process matching follows wrappers and rejects other sessions, nested agents and reused PIDs");
+}
 const deletionDir = mkdtempSync(join(tmpdir(), "mhte-delete-"));
 try {
     const roots = sessionRoots(deletionDir, {});
@@ -2237,6 +2266,74 @@ try {
     vscodeStub.__calls.warningResults.push("Move to Trash");
     await windowsCommand("deleteSession")({ harnessId: "ohMyPi", id: "switched-omp" });
     assert.equal(switchedOmp.disposed, 1, "deletion follows the currently active OMP session after an in-process switch");
+    if (process.platform === "win32") {
+        const nativeDirectory = mkdtempSync(join(tmpdir(), "mhte-codex-windows-"));
+        const codexBinary = join(nativeDirectory, "codex.exe");
+        copyFileSync(process.execPath, codexBinary);
+        const codexRoot = vscodeStub.__fixture.multiHarness.codex.sessionDirectory;
+        mkdirSync(codexRoot, { recursive: true });
+        const codexFiles = ["windows-fresh", "windows-switched"].map((id) => join(codexRoot, `${id}.jsonl`));
+        const writeCodex = (file, id) => writeFileSync(file, JSON.stringify({ type: "session_meta", payload: { id, cwd: projectDirectory } }) + "\n");
+        codexFiles.forEach((file, index) => writeCodex(file, ["windows-fresh", "windows-switched"][index]));
+        const nativeCodex = spawn(codexBinary, ["-e", `
+            const fs = require("node:fs");
+            const files = process.argv.slice(1);
+            let writer = fs.openSync(files[0], "a");
+            const reader = fs.openSync(files[1], "r");
+            process.stdout.write("ready\\n");
+            process.stdin.on("data", () => {
+                fs.closeSync(writer);
+                writer = fs.openSync(files[1], "a");
+                process.stdout.write("ready\\n");
+            });
+        `, ...codexFiles], { stdio: ["pipe", "pipe", "inherit"], windowsHide: true });
+        const lines = createInterface({ input: nativeCodex.stdout });
+        try {
+            await once(lines, "line");
+            const direct = deletionTerminal(undefined, "codex");
+            direct.processId = Promise.resolve(nativeCodex.pid);
+            const wrapper = deletionTerminal(undefined, "codex", "shell");
+            wrapper.processId = Promise.resolve(process.pid);
+            const unrelated = deletionTerminal("unrelated", "codex");
+            vscodeStub.window.terminals = [direct, wrapper, unrelated];
+            await windowsCommand("selectSessionAgent")("codex");
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await windowsCommand("deleteSession")({ harnessId: "codex", id: "windows-switched" });
+            assert.equal(direct.disposed, 0, "a read-only Windows handle must not link another conversation");
+            assert.equal(wrapper.disposed, 0);
+            writeCodex(codexFiles[1], "windows-switched");
+            const switched = once(lines, "line");
+            nativeCodex.stdin.write("switch\n");
+            await switched;
+            direct.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY = JSON.stringify({ version: 1, harnessId: "codex", launchMode: "direct", sessionId: "windows-fresh" });
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await windowsCommand("deleteSession")({ harnessId: "codex", id: "windows-fresh" });
+            assert.equal(direct.disposed, 0, "Windows live process discovery overrides a stale resume ID after switching");
+            await windowsCommand("deleteSession")({ harnessId: "codex", id: "windows-switched" });
+            assert.equal(direct.disposed, 0, "canceling deletion preserves the Windows Codex terminal");
+            const diskDelete = vscodeStub.workspace.fs.delete;
+            try {
+                vscodeStub.workspace.fs.delete = async () => { throw new Error("permission denied"); };
+                vscodeStub.__calls.warningResults.push("Move to Trash", "Delete Permanently");
+                await windowsCommand("deleteSession")({ harnessId: "codex", id: "windows-switched" });
+                assert.equal(direct.disposed, 0, "failed deletion preserves the Windows Codex terminal");
+            } finally { vscodeStub.workspace.fs.delete = diskDelete; }
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await windowsCommand("deleteSession")({ harnessId: "codex", id: "windows-switched" });
+            assert.equal(direct.disposed, 1, "native Windows writable handles identify a fresh Codex terminal");
+            assert.equal(wrapper.disposed, 1, "native Windows matching closes the terminal above a launcher too");
+            assert.equal(unrelated.disposed, 0);
+            passed += 1;
+            console.log("ok: native Windows Codex deletion follows writable handles, launchers and switches while preserving readers, canceled and failed deletions");
+        } finally {
+            lines.close();
+            const exited = once(nativeCodex, "exit");
+            nativeCodex.kill();
+            await exited;
+            rmSync(nativeDirectory, { recursive: true, force: true });
+            for (const file of codexFiles) rmSync(file, { force: true });
+        }
+    }
     for (const subscription of windowsContext.subscriptions) subscription.dispose();
     vscodeStub.window.terminals = [];
     passed += 1;

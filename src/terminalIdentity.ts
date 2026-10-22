@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { HARNESSES, harnessForTerminalName, type Harness } from "./harnesses";
+import { inspectWindowsSessionProcesses, windowsCodexUsesSession } from "./windowsSessionProcesses";
 
 // Environment metadata stays with the process across browser reconnections.
 // Keep identity separate from the editable title and do not store conversation text.
@@ -162,4 +163,26 @@ export async function codexTerminalSessionFiles(terminal: vscode.Terminal, sessi
     } catch {
         return [];
     }
+}
+
+/** Windows has no /proc: match writable file owners to marked terminal trees. */
+export async function windowsCodexSessionMatches(terminals: readonly vscode.Terminal[], file: string): Promise<Map<vscode.Terminal, boolean>> {
+    const matches = new Map<vscode.Terminal, boolean>();
+    if (process.platform !== "win32") return matches;
+    const candidates = await Promise.all(terminals.map(async (terminal) => {
+        if (terminal.exitStatus || terminalIdentity(terminal)?.harnessId !== "codex") return undefined;
+        try {
+            const pid = await terminal.processId;
+            return pid && Number.isSafeInteger(pid) && pid > 0 ? { terminal, pid } : undefined;
+        } catch { return undefined; }
+    }));
+    if (!candidates.some(Boolean)) return matches;
+    const snapshot = await inspectWindowsSessionProcesses(file);
+    if (!snapshot) return matches;
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        const result = windowsCodexUsesSession(candidate.pid, snapshot);
+        if (result !== undefined) matches.set(candidate.terminal, result);
+    }
+    return matches;
 }
