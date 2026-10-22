@@ -8,6 +8,7 @@ import { workspaceFolder } from "./workspaceContext";
 import { extensionStrings } from "./localization";
 import { showEditorTerminal } from "./editorTerminal";
 import { ompTerminalSessionFile, restoreTerminalIdentity, terminalIdentityEnv } from "./terminalIdentity";
+import { codexLaunchArgs } from "./codexLaunch";
 
 /** How long shell mode waits for shell integration before degrading. */
 export const SHELL_INTEGRATION_TIMEOUT_MS = 10_000;
@@ -207,6 +208,7 @@ async function launchAgentTerminal(
     }
 
     const launch = resolveAgentLaunch(context, harness, resume?.cwd);
+    const configuredArgs = launch.args;
     if (resume) {
         launch.name = resume.terminalName;
         // `dsh` parses launcher flags like `--profile tui` only before inner app flags like `--resume`.
@@ -218,6 +220,13 @@ async function launchAgentTerminal(
     if (!executable) {
         await offerOpenSettings(launch.name, launch.executable, harness);
         return;
+    }
+    if (harness.id === "codex") {
+        // Probe only configured TUI options; resume arguments are extension-owned.
+        const args = await codexLaunchArgs(executable, configuredArgs);
+        if (args !== configuredArgs) {
+            launch.args = ["--no-daemon", ...(launch.args ?? [])];
+        }
     }
 
     // Shell mode needs the 1.93 shell-integration API; without it, falling back

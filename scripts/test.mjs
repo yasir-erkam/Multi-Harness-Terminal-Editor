@@ -295,6 +295,26 @@ await build({
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
 });
 const { windowsCodexUsesSession } = await import(pathToFileURL(join(outdir, "windowsSessionProcesses.test.mjs")).href);
+await build({
+    entryPoints: [join(projectRoot, "src", "codexLaunch.ts")],
+    outfile: join(outdir, "codexLaunch.test.mjs"),
+    bundle: true, format: "esm", platform: "node", logLevel: "silent",
+});
+const { codexLaunchArgs } = await import(pathToFileURL(join(outdir, "codexLaunch.test.mjs")).href);
+{
+    let probes = 0;
+    const supported = async () => { probes++; return true; };
+    assert.deepEqual(await codexLaunchArgs("codex.cmd", undefined, "win32", supported), ["--no-daemon"]);
+    assert.deepEqual(await codexLaunchArgs("codex.cmd", ["--model", "test", "-c", "a=b"], "win32", supported), ["--no-daemon", "--model", "test", "-c", "a=b"]);
+    for (const args of [["--remote", "ws://localhost:1234"], ["exec", "task"], ["resume", "custom"], ["prompt"], ["--no-daemon"], ["--unknown"], ["--model"]]) {
+        assert.equal(await codexLaunchArgs("codex.cmd", args, "win32", supported), args, "custom routing and unsupported argument shapes stay untouched");
+    }
+    assert.equal(probes, 2, "custom commands must not even run the capability probe");
+    assert.equal(await codexLaunchArgs("codex", undefined, "linux", supported), undefined);
+    assert.equal(await codexLaunchArgs("old-codex.cmd", undefined, "win32", async () => false), undefined, "older or inaccessible CLIs keep their arguments");
+    passed++;
+    console.log("ok: Windows standalone Codex arguments are capability-gated and preserve custom routing and older CLIs");
+}
 {
     const snapshot = {
         owners: [{ id: 30, started: 300 }],
@@ -311,6 +331,7 @@ const { windowsCodexUsesSession } = await import(pathToFileURL(join(outdir, "win
     assert.equal(windowsCodexUsesSession(50, snapshot), false, "other Codex terminals do not match");
     assert.equal(windowsCodexUsesSession(999, snapshot), undefined);
     assert.equal(windowsCodexUsesSession(10, { ...snapshot, owners: [{ id: 40, started: 400 }] }), false, "tool-launched nested Codex sessions do not identify the parent conversation");
+    assert.equal(windowsCodexUsesSession(10, { ...snapshot, owners: [{ id: 60, started: 600 }], processes: [...snapshot.processes, { id: 60, parentId: 1, name: "codex.exe", started: 600 }] }), false, "a shared detached daemon never identifies a terminal as owning its rollout");
     assert.equal(windowsCodexUsesSession(10, { ...snapshot, owners: [{ id: 30, started: 1000 }] }), false, "reused process IDs must not match an old owner");
     assert.equal(windowsCodexUsesSession(10, { ...snapshot, processes: snapshot.processes.map((row) => row.id === 20 ? { ...row, started: 50 } : row) }), undefined, "reused parent IDs cannot link older processes");
     passed += 1;
@@ -952,6 +973,31 @@ try {
     writeFileSync(fakeCli, "#!/bin/sh\n");
     chmodSync(fakeCli, 0o755);
     vscodeStub.__fixture.multiHarness.ohMyPi.executablePath = fakeCli;
+    const windowsLaunchPlugin = {
+        name: "codex-capability-probe",
+        setup(build) {
+            build.onResolve({ filter: /^node:child_process$/ }, () => ({ path: "probe", namespace: "codex-test" }));
+            build.onLoad({ filter: /.*/, namespace: "codex-test" }, () => ({ contents: 'export function execFile(executable, args, options, callback) { callback(null, "  --no-daemon\\n"); }' }));
+        },
+    };
+    await build({ entryPoints: [join(projectRoot, "src", "launch.ts")], outfile: join(activationDir, "launch.windows.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], define: { "process.platform": '"win32"' }, plugins: [windowsLaunchPlugin], logLevel: "silent" });
+    const windowsLauncher = requireFrom(join(activationDir, "launch.windows.cjs"));
+    const codexHarness = { id: "codex", displayName: "Codex", defaultExecutable: "codex", commandId: "multiHarness.openCodex" };
+    vscodeStub.__fixture.multiHarness.codex = { executablePath: fakeCli, arguments: ["--model", "test"] };
+    const codexResume = { sessionId: "standalone-session", terminalName: "Codex resume", cwd: activationDir, args: ["resume", "standalone-session"] };
+    vscodeStub.window.terminals = [];
+    await windowsLauncher.openAgentTerminal(context, codexHarness, undefined, codexResume);
+    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--no-daemon", "resume", "standalone-session", "--model", "test"]);
+    for (const args of [["--no-daemon"], ["--remote", "ws://localhost:1234"]]) {
+        vscodeStub.__fixture.multiHarness.codex.arguments = args;
+        vscodeStub.window.terminals = [];
+        await windowsLauncher.openAgentTerminal(context, codexHarness, undefined, codexResume);
+        assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, [...codexResume.args, ...args], "explicit standalone and remote resume arguments are not duplicated or overridden");
+    }
+    delete vscodeStub.__fixture.multiHarness.codex;
+    vscodeStub.window.terminals = [];
+    passed++;
+    console.log("ok: Windows Codex resume orders standalone options without duplicating explicit flags or overriding remote routing");
 
     const registeredCommands = vscodeStub.__calls.commands.map((c) => c.id).sort();
     const registeredProfiles = vscodeStub.__calls.profiles.map((p) => p.id).sort();
@@ -1065,7 +1111,7 @@ try {
     assert.equal(primeTerminal.shellPath, fakeCli);
     assert.deepEqual(primeTerminal.shellArgs, ["--resume"]);
     const primeProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.primeAgent");
-    const profileOptions = primeProfile.provider.provideTerminalProfile({}).options;
+    const profileOptions = (await primeProfile.provider.provideTerminalProfile({})).options;
     assert.equal(profileOptions.shellPath, fakeCli);
     assert.deepEqual(profileOptions.shellArgs, ["--resume"]);
     await addFavorite.handler(primeAgent);
@@ -1083,7 +1129,7 @@ try {
     assert.equal(antigravityTerminal.shellPath, fakeCli);
     assert.deepEqual(antigravityTerminal.shellArgs, ["--model", "test-model"]);
     const antigravityProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.antigravity");
-    const antigravityOptions = antigravityProfile.provider.provideTerminalProfile({}).options;
+    const antigravityOptions = (await antigravityProfile.provider.provideTerminalProfile({})).options;
     assert.equal(antigravityOptions.shellPath, fakeCli);
     assert.deepEqual(antigravityOptions.shellArgs, ["--model", "test-model"]);
     await addFavorite.handler(antigravity);
@@ -1104,7 +1150,7 @@ try {
     assert.equal(deepseekDefaultTerminal.shellPath, fakeCli);
     assert.deepEqual(deepseekDefaultTerminal.shellArgs, ["--profile", "tui"]);
     const deepseekProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.deepseek");
-    const deepseekProfileOptions = deepseekProfile.provider.provideTerminalProfile({}).options;
+    const deepseekProfileOptions = (await deepseekProfile.provider.provideTerminalProfile({})).options;
     assert.equal(deepseekProfileOptions.shellPath, fakeCli);
     assert.deepEqual(deepseekProfileOptions.shellArgs, ["--profile", "tui"]);
     vscodeStub.window.terminals = [];
@@ -1132,12 +1178,12 @@ try {
     assert.equal(agyTerminal.shellPath, agyCli);
     assert.deepEqual(agyTerminal.shellArgs, agyArgs);
     const agyProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.antigravity");
-    const agyProfileOptions = agyProfile.provider.provideTerminalProfile({}).options;
+    const agyProfileOptions = (await agyProfile.provider.provideTerminalProfile({})).options;
     assert.equal(agyProfileOptions.shellPath, agyCli);
     assert.deepEqual(agyProfileOptions.shellArgs, agyArgs);
     assert.deepEqual(agyProfileOptions.iconPath, agyTerminal.iconPath);
     vscodeStub.__fixture.multiHarness.antigravity.executablePath = join(activationDir, "missing-agy");
-    assert.equal(agyProfile.provider.provideTerminalProfile({}), undefined);
+    assert.equal(await agyProfile.provider.provideTerminalProfile({}), undefined);
     vscodeStub.__fixture.multiHarness.antigravity.executablePath = agyCli;
     await addFavorite.handler(antigravity);
     assert.equal(agentsView.provider.getTreeItem(antigravity).contextValue, "favoriteAgent");
@@ -1818,7 +1864,7 @@ try {
     assert.equal(workspaceLaunch.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", workspaceCli));
     assert.deepEqual(workspaceLaunch.shellArgs, ["--project", folderB.uri.fsPath]);
     const ompProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.ohMyPi");
-    const workspaceProfile = ompProfile.provider.provideTerminalProfile({});
+    const workspaceProfile = await ompProfile.provider.provideTerminalProfile({});
     assert.equal(workspaceProfile.options.cwd, folderB.uri.fsPath);
     assert.equal(workspaceProfile.options.isTransient, false, "profile terminals allow persistence across reloads");
     assert.deepEqual(workspaceProfile.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "terminal profiles use the active editor group");
@@ -1826,7 +1872,7 @@ try {
     vscodeStub.workspace.workspaceFolders = [folderA];
     vscodeStub.__calls.workspaceFolderHandlers.forEach((handler) => handler({}));
     assert.ok(savedView.description.includes("project-a"), "removed folders are no longer retained");
-    assert.equal(ompProfile.provider.provideTerminalProfile({}).options.cwd, folderA.uri.fsPath);
+    assert.equal((await ompProfile.provider.provideTerminalProfile({})).options.cwd, folderA.uri.fsPath);
     passed += 1;
     console.log("ok: command, profile and sidebar keep the last focused project and forget removed folders");
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.21
+
+- Keep newly launched local Windows Codex terminals in standalone mode when the configured CLI advertises `--no-daemon`, restoring per-terminal writable rollout ownership for saved-session deletion. Apply the same policy to direct, shell, resume and terminal-profile launches; leave older CLIs, explicit standalone/remote routing, custom commands and unrecognized arguments unchanged.
+- Existing daemon-connected tabs need a fresh launch; shared daemon file ownership is never treated as ownership by an arbitrary terminal. Linux/macOS launch behavior is unchanged.
+- Include the unpublished 0.8.19–0.8.20 work since the last gallery release (0.8.18): safe Windows Codex terminal closure after deletion; writable-provider deletion controls; Claude Code and DeepSeek record validation and migration cleanup; resilient terminal closure and resume scope checks; and live OMP resume identity, including macOS breadcrumbs. Details remain in the version entries below.
+
 ## 0.8.20
 
 - Close fresh Codex terminals after successful session deletion on Windows desktop VS Code. Match the session file's writable native handle to the marked terminal's Codex process tree, including PowerShell/Node launchers and in-process session switches. Exclude read-only handles, nested tool-launched agents and reused process IDs; keep terminals open when deletion is canceled or fails.
