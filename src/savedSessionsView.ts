@@ -8,7 +8,7 @@ import { extensionStrings } from "./localization";
 import { supportsSessionDeletion, resumeArguments, scanSavedSessions, sessionRoots, type SavedSession, type SessionScan } from "./savedSessions";
 import { type AgentStatus } from "./status";
 import { type SessionContext, type SessionScope } from "./sessionContext";
-import { SessionDeletionError, validateSessionDeletion } from "./deleteSession";
+import { SessionDeletionError, sessionDeletionFiles } from "./deleteSession";
 import { codexTerminalSessionFiles, ompTerminalSessionFile, restoreTerminalIdentity } from "./terminalIdentity";
 
 export interface SavedSessions {
@@ -130,9 +130,13 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         });
     }
     function closeSessionTerminals(terminals: vscode.Terminal[]): void {
+        const errors: unknown[] = [];
         for (const terminal of terminals) {
-            if (vscode.window.terminals.includes(terminal)) terminal.dispose();
+            if (vscode.window.terminals.includes(terminal)) {
+                try { terminal.dispose(); } catch (error) { errors.push(error); }
+            }
         }
+        if (errors.length) throw errors[0];
     }
     async function deleteSessions(request?: { harnessId?: string; id?: string }): Promise<void> {
         if (deleting || !supportsSessionDeletion(selection.getScope().agent?.id ?? "")) return;
@@ -157,23 +161,36 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                     : error instanceof Error ? error.message : String(error);
                 failures.push(`${session.title}: ${reason}`);
             };
-            for (const session of targets) {
+            const finishDeletion = (session: SavedSession, terminals: vscode.Terminal[]): void => {
+                selected.delete(sessionKey(session));
                 try {
-                    await validateSessionDeletion(session, roots);
+                    closeSessionTerminals(terminals);
+                } catch (error) {
+                    failures.push(`${session.title}: ${strings["savedSessions.closeFailed"]} (${error instanceof Error ? error.message : String(error)})`);
+                }
+            };
+            for (const session of targets) {
+                let files: SavedSession[];
+                let terminals: vscode.Terminal[];
+                try {
+                    await sessionDeletionFiles(session, roots);
+                    terminals = await sessionTerminals(session);
+                    // Live-process discovery can take time; revalidate before deleting.
+                    files = await sessionDeletionFiles(session, roots);
                 } catch (error) {
                     if ((error as NodeJS.ErrnoException).code === "ENOENT") selected.delete(sessionKey(session));
                     else fail(session, error);
                     continue;
                 }
                 try {
-                    const terminals = await sessionTerminals(session);
-                    await validateSessionDeletion(session, roots);
-                    await vscode.workspace.fs.delete(vscode.Uri.file(session.file), { recursive: false, useTrash: true });
-                    selected.delete(sessionKey(session));
-                    closeSessionTerminals(terminals);
+                    for (const file of files) {
+                        await vscode.workspace.fs.delete(vscode.Uri.file(file.file), { recursive: false, useTrash: true });
+                    }
                 } catch {
                     trashFailed.push(session);
+                    continue;
                 }
+                finishDeletion(session, terminals);
             }
             if (trashFailed.length) {
                 const permanent = strings["savedSessions.deletePermanently"];
@@ -187,12 +204,13 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                         continue;
                     }
                     try {
-                        await validateSessionDeletion(session, roots);
+                        await sessionDeletionFiles(session, roots);
                         const terminals = await sessionTerminals(session);
-                        await validateSessionDeletion(session, roots);
-                        await vscode.workspace.fs.delete(vscode.Uri.file(session.file), { recursive: false, useTrash: false });
-                        selected.delete(sessionKey(session));
-                        closeSessionTerminals(terminals);
+                        const files = await sessionDeletionFiles(session, roots);
+                        for (const file of files) {
+                            await vscode.workspace.fs.delete(vscode.Uri.file(file.file), { recursive: false, useTrash: false });
+                        }
+                        finishDeletion(session, terminals);
                     } catch (error) { fail(session, error); }
                 }
             }
@@ -200,10 +218,10 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                 selectionMode = true;
                 for (const key of failedKeys) selected.add(key);
             }
+            refresh();
             if (failures.length) {
                 await vscode.window.showErrorMessage(`${strings["savedSessions.deleteFailed"]}\n${failures.join("\n")}`);
             }
-            refresh();
         } catch (error) {
             await vscode.window.showErrorMessage(`${strings["savedSessions.deleteFailed"]}\n${error instanceof Error ? error.message : String(error)}`);
         } finally {
@@ -352,12 +370,13 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         vscode.commands.registerCommand("multiHarness.deleteSession", deleteSessions),
         vscode.commands.registerCommand("multiHarness.deleteSelectedSessions", () => deleteSessions()),
         vscode.commands.registerCommand("multiHarness.resumeSession", async (request?: { harnessId?: string; id?: string }) => {
-            if (!request || typeof request.harnessId !== "string" || typeof request.id !== "string") {
+            if (deleting || !request || typeof request.harnessId !== "string" || typeof request.id !== "string") {
                 return;
             }
+            const originalScope = scopeKey();
             const session = (await getSessions()).sessions.find((candidate) => candidate.harnessId === request.harnessId && candidate.id === request.id);
             const harness = HARNESSES.find((candidate) => candidate.id === session?.harnessId);
-            if (!session || !harness) {
+            if (deleting || !session || !harness) {
                 return;
             }
             try {
@@ -369,8 +388,11 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                 refresh();
                 return;
             }
+            if (deleting || originalScope !== scopeKey()) return;
             await openAgentTerminal(context, harness, status, {
                 sessionId: session.id,
+                sessionFile: session.file,
+                sessionsRoot: getRoots().find((root) => root.harnessId === session.harnessId)?.directory,
                 terminalName: `${harness.displayName} — ${session.title}`,
                 cwd: session.cwd,
                 args: resumeArguments(session),

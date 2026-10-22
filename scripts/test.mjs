@@ -286,10 +286,13 @@ await build({
     outfile: join(outdir, "deleteSession.test.mjs"),
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
 });
-const { validateSessionDeletion } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
+const { validateSessionDeletion, sessionDeletionFiles } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
 const deletionDir = mkdtempSync(join(tmpdir(), "mhte-delete-"));
 try {
     const roots = sessionRoots(deletionDir, {});
+    for (const id of ["", "unknown", "gemini", "goose", "aider", "crush", "qwen", "copilot", "cursorAgent", "openCode", "antigravity"]) {
+        assert.equal(supportsSessionDeletion(id), false, `${id} must not expose unsupported deletion actions`);
+    }
     for (const root of roots.filter((root) => supportsSessionDeletion(root.harnessId))) {
         mkdirSync(root.directory, { recursive: true });
         const id = `delete-${root.harnessId}`;
@@ -300,6 +303,12 @@ try {
         writeFileSync(file, JSON.stringify(header) + "\n");
         const [session] = (await scanSavedSessions([root])).sessions;
         await validateSessionDeletion(session, roots);
+        if (root.harnessId === "claudeCode") {
+            writeFileSync(file, JSON.stringify({ type: "queue-operation", sessionId: id }) + "\n" + JSON.stringify(header) + "\n");
+            await validateSessionDeletion(session, roots);
+            writeFileSync(file, JSON.stringify({ type: "queue-operation", sessionId: id }) + "\n");
+            await assert.rejects(validateSessionDeletion(session, roots), /record changed/);
+        }
         const moved = root.harnessId === "codex" ? { ...header, payload: { ...header.payload, cwd: root.directory } }
             : { ...header, cwd: root.directory };
         writeFileSync(file, JSON.stringify(moved) + "\n");
@@ -319,6 +328,7 @@ try {
         rmSync(file);
         if (fileSymlink(outside, file)) {
             await assert.rejects(validateSessionDeletion(session, roots), /regular JSONL/);
+            rmSync(file);
         }
     }
     const dshRoot = roots.find((root) => root.harnessId === "deepseek");
@@ -331,6 +341,19 @@ try {
     const [zstdSession] = (await scanSavedSessions([dshRoot])).sessions;
     assert.equal(zstdSession.id, "delete-zstd");
     await validateSessionDeletion(zstdSession, roots);
+    const splitRecord = Buffer.from(JSON.stringify({ type: "session", id: zstdSession.id, cwd: deletionDir, title: "🧪 session" }) + "\n");
+    const splitAt = splitRecord.indexOf(Buffer.from("🧪")) + 2;
+    writeFileSync(zstdFile, Buffer.concat([
+        zstdCompressSync(splitRecord.subarray(0, splitAt)), zstdCompressSync(splitRecord.subarray(splitAt)),
+    ]));
+    await validateSessionDeletion(zstdSession, roots);
+    writeFileSync(zstdFile, zstdHeader);
+    const oldGeneration = join(dshRoot.directory, "session.v3.jsonl");
+    writeFileSync(oldGeneration, JSON.stringify({ type: "session", id: zstdSession.id, cwd: deletionDir }) + "\n");
+    assert.deepEqual((await sessionDeletionFiles(zstdSession, roots)).map((entry) => entry.file), [oldGeneration, zstdFile]);
+    writeFileSync(oldGeneration, JSON.stringify({ type: "session", id: "foreign", cwd: deletionDir }) + "\n");
+    await assert.rejects(sessionDeletionFiles(zstdSession, roots), /another conversation/);
+    rmSync(oldGeneration);
     await assert.rejects(validateSessionDeletion({ ...zstdSession, harnessId: "pi" }, roots), /regular JSONL/);
     writeFileSync(zstdFile, Buffer.concat([
         zstdHeader,
@@ -1665,6 +1688,58 @@ try {
     assert.equal(failedTerminal.disposed, 1, "single-session deletion closes its linked terminal once");
     assert.equal(vscodeStub.__calls.warnings.length, warningsBeforeConcurrent + 1, "concurrent deletion commands produce one confirmation and operation");
     assert.ok(!existsSync(extraFiles[0]));
+    // Exercise the actual deletion command for every writable history provider.
+    await cancelSelection();
+    for (const harnessId of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "deepseek"]) {
+        const store = vscodeStub.__fixture.multiHarness[harnessId].sessionDirectory;
+        mkdirSync(store, { recursive: true });
+        const file = join(store, "audit-session.jsonl");
+        const id = `audit-${harnessId}`;
+        const header = harnessId === "codex" ? { type: "session_meta", payload: { id, cwd: projectDirectory } }
+            : harnessId === "claudeCode" ? { type: "user", sessionId: id, cwd: projectDirectory }
+            : { type: "session", id, cwd: projectDirectory };
+        writeFileSync(file, JSON.stringify(header) + "\n");
+        await selectSessionAgent.handler(harnessId);
+        refreshSaved.handler();
+        const direct = deletionTerminal(id, harnessId);
+        const shell = deletionTerminal(id, harnessId, "shell");
+        const unrelated = deletionTerminal("unrelated", harnessId);
+        vscodeStub.window.terminals = [direct, shell, unrelated];
+        const warningsBefore = vscodeStub.__calls.warnings.length;
+        vscodeStub.__calls.warningResults.push("Move to Trash");
+        if (harnessId === "codex") direct.dispose = () => { throw new Error("terminal close failed"); };
+        await deleteOne({ harnessId, id });
+        assert.ok(!existsSync(file), `${harnessId} deletes its session record`);
+        assert.equal(shell.disposed, 1, `${harnessId} closes linked shell terminals even if another close throws`);
+        if (harnessId !== "codex") assert.equal(direct.disposed, 1, `${harnessId} closes linked direct terminals`);
+        assert.equal(unrelated.disposed, 0);
+        assert.equal(vscodeStub.__calls.warnings.length, warningsBefore + 1, "terminal close failures must not prompt for permanent deletion");
+        assert.ok(!(await savedSessionRows()).some((row) => row.id === id));
+    }
+    // Deleting the current DeepSeek generation must also remove its migrations.
+    const generationStore = vscodeStub.__fixture.multiHarness.deepseek.sessionDirectory;
+    const generationDirectory = join(generationStore, "audit-generations");
+    mkdirSync(generationDirectory, { recursive: true });
+    const generationFiles = ["session.jsonl", "session.v3.jsonl", "session.v4.jsonl.zstd"].map((name) => join(generationDirectory, name));
+    const generationRecord = JSON.stringify({ type: "session", id: "audit-generations", cwd: projectDirectory }) + "\n";
+    for (const file of generationFiles) writeFileSync(file, file.endsWith(".zstd") ? zstdCompressSync(Buffer.from(generationRecord)) : generationRecord);
+    refreshSaved.handler();
+    const generationTerminal = deletionTerminal("audit-generations", "deepseek");
+    vscodeStub.window.terminals = [generationTerminal];
+    const originalWarning = vscodeStub.window.showWarningMessage;
+    vscodeStub.window.showWarningMessage = async (...args) => {
+        const before = vscodeStub.__calls.created.length;
+        await resume.handler({ harnessId: "deepseek", id: "audit-generations" });
+        assert.equal(vscodeStub.__calls.created.length, before, "resume cannot launch while deletion confirmation is pending");
+        return originalWarning(...args);
+    };
+    vscodeStub.__calls.warningResults.push("Move to Trash");
+    await deleteOne({ harnessId: "deepseek", id: "audit-generations" });
+    vscodeStub.window.showWarningMessage = originalWarning;
+    assert.ok(generationFiles.every((file) => !existsSync(file)));
+    assert.equal(generationTerminal.disposed, 1);
+    assert.deepEqual(await savedSessionRows(), [], "older DeepSeek generations must not resurrect deleted sessions");
+    await selectSessionAgent.handler("primeAgent");
     writeSession(savedFile, "recorded-prime");
     await cancelSelection();
     vscodeStub.window.terminals = [];
@@ -2145,6 +2220,16 @@ try {
     writeFileSync(join(crumbs, "apple-switched-tab"), `${projectDirectory}\n${switchedFile}\n`);
     vscodeStub.window.terminals = [freshOmp, switchedOmp];
     await windowsCommand("selectSessionAgent")("ohMyPi");
+    freshOmp.shown = switchedOmp.shown = 0;
+    freshOmp.show = function () { this.shown++; };
+    switchedOmp.show = function () { this.shown++; };
+    const beforeBreadcrumbResume = vscodeStub.__calls.created.length;
+    await windowsCommand("resumeSession")({ harnessId: "ohMyPi", id: "fresh-omp" });
+    assert.equal(freshOmp.shown, 1, "resuming a fresh OMP conversation reveals its live breadcrumb terminal");
+    assert.equal(switchedOmp.shown, 0, "the obsolete launch ID must not reveal a switched conversation");
+    await windowsCommand("resumeSession")({ harnessId: "ohMyPi", id: "switched-omp" });
+    assert.equal(switchedOmp.shown, 1);
+    assert.equal(vscodeStub.__calls.created.length, beforeBreadcrumbResume, "breadcrumb matches do not launch duplicate OMP processes");
     vscodeStub.__calls.warningResults.push("Move to Trash");
     await windowsCommand("deleteSession")({ harnessId: "ohMyPi", id: "fresh-omp" });
     assert.equal(freshOmp.disposed, 1, "deleting a fresh OMP session closes its renamed terminal without a launch session ID");
@@ -2156,6 +2241,20 @@ try {
     vscodeStub.window.terminals = [];
     passed += 1;
     console.log("ok: OMP deletion follows live terminal breadcrumbs for fresh and switched sessions");
+
+    await build({
+        entryPoints: [join(projectRoot, "src", "terminalIdentity.ts")],
+        outfile: join(activationDir, "identity.macos.cjs"), bundle: true, format: "cjs", platform: "node",
+        external: ["vscode"], define: { "process.platform": '"darwin"' }, logLevel: "silent",
+    });
+    const macIdentity = requireFrom(join(activationDir, "identity.macos.cjs"));
+    const macEnv = macIdentity.terminalIdentityEnv(agents.find((agent) => agent.id === "ohMyPi"), "direct");
+    assert.ok(macEnv.TERM_SESSION_ID, "macOS OMP terminals receive a durable breadcrumb ID");
+    const macTerminal = { creationOptions: { env: macEnv } };
+    writeFileSync(join(crumbs, `apple-${macEnv.TERM_SESSION_ID}`), `${projectDirectory}\n${freshFile}\n`);
+    assert.equal(await macIdentity.ompTerminalSessionFile(macTerminal, ompRoot), freshFile);
+    passed += 1;
+    console.log("ok: macOS OMP identity resolves fresh-session breadcrumbs");
 
     if (process.platform === "linux") {
         await build({

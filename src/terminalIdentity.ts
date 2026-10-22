@@ -22,7 +22,7 @@ export function terminalIdentityEnv(
     launchMode: TerminalIdentity["launchMode"],
     sessionId?: string
 ): Record<string, string> {
-    const terminalSessionId = harness.id === "ohMyPi" && process.platform === "win32" ? randomUUID() : undefined;
+    const terminalSessionId = harness.id === "ohMyPi" && (process.platform === "win32" || process.platform === "darwin") ? randomUUID() : undefined;
     return {
         [TERMINAL_IDENTITY_ENV]: JSON.stringify({ version: 1, harnessId: harness.id, launchMode, sessionId, terminalSessionId }),
         ...(terminalSessionId ? { TERM_SESSION_ID: terminalSessionId } : {}),
@@ -103,7 +103,7 @@ export async function ompTerminalSessionFile(terminal: vscode.Terminal, sessions
             const tty = await readlink(`/proc/${pid}/fd/0`);
             if (tty.startsWith("/dev/")) terminalId = tty.slice(5).replace(/\//g, "-");
         } catch { return undefined; }
-    } else if (process.platform === "win32" && identity.terminalSessionId) {
+    } else if ((process.platform === "win32" || process.platform === "darwin") && identity.terminalSessionId) {
         terminalId = `apple-${identity.terminalSessionId}`;
     }
     if (!terminalId || !/^[a-zA-Z0-9_-]+$/.test(terminalId)) return undefined;

@@ -1,4 +1,5 @@
 import * as os from "node:os";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { fullSettingKey, iconFile, settingKey, type Harness } from "./harnesses";
 import { resolveExecutable } from "./resolveExecutable";
@@ -6,7 +7,7 @@ import { hasShellIntegrationApi, type AgentStatus } from "./status";
 import { workspaceFolder } from "./workspaceContext";
 import { extensionStrings } from "./localization";
 import { showEditorTerminal } from "./editorTerminal";
-import { restoreTerminalIdentity, terminalIdentityEnv } from "./terminalIdentity";
+import { ompTerminalSessionFile, restoreTerminalIdentity, terminalIdentityEnv } from "./terminalIdentity";
 
 /** How long shell mode waits for shell integration before degrading. */
 export const SHELL_INTEGRATION_TIMEOUT_MS = 10_000;
@@ -24,6 +25,8 @@ export interface AgentLaunch {
 
 export interface ResumeLaunch {
     readonly sessionId?: string;
+    readonly sessionFile?: string;
+    readonly sessionsRoot?: string;
     readonly terminalName: string;
     readonly cwd: string;
     readonly args: readonly string[];
@@ -183,11 +186,16 @@ async function launchAgentTerminal(
         // Restored terminals are new API objects; their launch metadata is durable.
         const terminals = [...vscode.window.terminals];
         const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
+        const activeFiles = harness.id === "ohMyPi" && resume.sessionsRoot
+            ? await Promise.all(terminals.map((terminal) => ompTerminalSessionFile(terminal, resume.sessionsRoot!))) : [];
         const existing = terminals.find((terminal, index) => {
-            if (terminal.exitStatus) {
+            if (terminal.exitStatus || !vscode.window.terminals.includes(terminal)) {
                 return false;
             }
             const identity = identities[index];
+            if (activeFiles[index] && resume.sessionFile) {
+                return identity?.harnessId === harness.id && path.relative(activeFiles[index]!, resume.sessionFile) === "";
+            }
             return resume.sessionId
                 ? identity?.harnessId === harness.id && identity.sessionId === resume.sessionId
                 : terminal.name === resume.terminalName;

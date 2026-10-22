@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.19
+
+- Restrict deletion controls to the six writable session providers. Permit Claude Code metadata rows without a working directory when a later identity record validates it, and validate DeepSeek JSONL/UTF-8 records across Zstandard frame boundaries.
+- Delete validated sibling DeepSeek migration generations before the selected record to prevent deleted history from reappearing. Preserve artifacts and unrelated files.
+- Report terminal-close failures separately, continue closing other linked terminals, and prevent resume commands during deletion. Recheck project scope before resuming.
+- Resolve OMP resume targets through live terminal breadcrumbs so fresh or switched sessions focus the correct tab. Extend the existing explicit terminal breadcrumb identity to macOS.
+- Document fresh-session, in-process switching and reconnection identity limits for other providers; add per-provider deletion and terminal lifecycle regressions.
+
 ## 0.8.18
 
 - Close fresh and reconnected Codex terminal tabs after successful saved-session deletion on Linux/code-server by matching the CLI's live rollout file, including shell/Node launchers and in-process session switches.

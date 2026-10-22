@@ -135,7 +135,7 @@ export function scanZstdFrames(buffer: Buffer): ZstdFrameScan {
 
 /** SQLite histories require provider-specific deletion beyond the JSONL trash workflow. */
 export function supportsSessionDeletion(harnessId: string): boolean {
-    return harnessId !== "antigravity" && harnessId !== "openCode";
+    return ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "deepseek"].includes(harnessId);
 }
 
 /** Native session stores only; unsupported agents are deliberately not inferred. */

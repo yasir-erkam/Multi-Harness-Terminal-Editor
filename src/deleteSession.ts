@@ -3,12 +3,29 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
 import * as zlib from "node:zlib";
+import { StringDecoder } from "node:string_decoder";
 import { scanZstdFrames, supportsSessionDeletion, type SavedSession, type SessionRoot } from "./savedSessions";
 
 export class SessionDeletionError extends Error {
     constructor(readonly reason: "invalidFile" | "outsideStore" | "sharedFile" | "changedFile", message: string) {
         super(message);
     }
+}
+
+/** DeepSeek migrations leave older generations that would otherwise reappear. */
+export async function sessionDeletionFiles(session: SavedSession, roots: readonly SessionRoot[]): Promise<SavedSession[]> {
+    const files: SavedSession[] = [];
+    const generation = /^session(?:\.v[1-9]\d*)?\.jsonl(?:\.zstd)?$/;
+    if (session.harnessId === "deepseek" && generation.test(path.basename(session.file))) {
+        for (const entry of await fs.readdir(path.dirname(session.file), { withFileTypes: true })) {
+            const file = path.join(path.dirname(session.file), entry.name);
+            if (generation.test(entry.name) && file !== session.file) files.push({ ...session, file });
+        }
+    }
+    // Keep the listed generation until all its older records have been removed.
+    files.push(session);
+    for (const file of files) await validateSessionDeletion(file, roots);
+    return files;
 }
 
 /** Validate the live file, never a path supplied by a view or webview. */
@@ -51,7 +68,9 @@ export async function validateSessionDeletion(session: SavedSession, roots: read
             }
             if (!identified) {
                 const cwd = session.harnessId === "codex" ? row.payload?.cwd : row.cwd;
-                if (typeof cwd !== "string" || await normalize(cwd) !== await normalize(session.cwd)) {
+                // Claude queue/metadata rows can carry an ID without a cwd.
+                if (typeof cwd !== "string") return;
+                if (await normalize(cwd) !== await normalize(session.cwd)) {
                     throw new SessionDeletionError("changedFile", "The session record changed; refresh the session list.");
                 }
             }
@@ -64,6 +83,8 @@ export async function validateSessionDeletion(session: SavedSession, roots: read
         if (scan.error || scan.completePrefixLength !== buffer.length || scan.frames.length === 0) {
             throw new SessionDeletionError("changedFile", "The session record changed; refresh the session list.");
         }
+        const decoder = new StringDecoder("utf8");
+        let partial = "";
         for (const frame of scan.frames) {
             let chunk: Buffer;
             try {
@@ -71,10 +92,13 @@ export async function validateSessionDeletion(session: SavedSession, roots: read
             } catch {
                 throw new SessionDeletionError("changedFile", "The session record changed; refresh the session list.");
             }
-            for (const line of chunk.toString("utf8").split("\n")) {
+            const lines = (partial + decoder.write(chunk)).split("\n");
+            partial = lines.pop()!;
+            for (const line of lines) {
                 await inspectLine(line);
             }
         }
+        await inspectLine(partial + decoder.end());
     } else {
         const stream = createReadStream(file, { encoding: "utf8" });
         const lines = createInterface({ input: stream, crlfDelay: Infinity });
