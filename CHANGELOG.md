@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0
+
+- Release the existing fifteen-agent terminal launcher as 1.0.0, with native and card sidebars, shared favorites, configurable launches and terminal profiles.
+- Include saved-session browsing and resume for eight providers, project/all-location scope, and confirmed deletion for the six writable providers. OpenCode and Antigravity history remain read-only; the other seven agents remain terminal-only.
+- Include the Windows Codex standalone-launch and deletion-safety improvements documented in 0.8.19–0.8.21. Existing daemon-connected Codex tabs need a fresh launch; no new agent integrations are introduced in this release.
+
 ## 0.8.21
 
 - Keep newly launched local Windows Codex terminals in standalone mode when the configured CLI advertises `--no-daemon`, restoring per-terminal writable rollout ownership for saved-session deletion. Apply the same policy to direct, shell, resume and terminal-profile launches; leave older CLIs, explicit standalone/remote routing, custom commands and unrecognized arguments unchanged.
