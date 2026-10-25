@@ -142,12 +142,13 @@ export function supportsSessionDeletion(harnessId: string): boolean {
 export function sessionRoots(home = os.homedir(), env: NodeJS.ProcessEnv = process.env): SessionRoot[] {
     const expand = (value: string): string => value.replace(/^~(?=$|[/\\])/, home);
     const base = (key: string, fallback: string): string => expand(env[key] || path.join(home, fallback));
+    const primeSessionDirectory = env.PRIME_AGENT_SESSION_DIR ?? env.PRIME_AGENT_CODING_AGENT_SESSION_DIR;
     return [
         { harnessId: "codex", directory: path.join(base("CODEX_HOME", ".codex"), "sessions") },
         { harnessId: "claudeCode", directory: path.join(base("CLAUDE_CONFIG_DIR", ".claude"), "projects") },
         { harnessId: "pi", directory: env.PI_CODING_AGENT_SESSION_DIR ? expand(env.PI_CODING_AGENT_SESSION_DIR) : path.join(base("PI_CODING_AGENT_DIR", ".pi/agent"), "sessions") },
         { harnessId: "ohMyPi", directory: path.join(base("PI_CONFIG_DIR", ".omp"), "agent", "sessions") },
-        { harnessId: "primeAgent", directory: env.PRIME_AGENT_SESSION_DIR ? expand(env.PRIME_AGENT_SESSION_DIR) : path.join(base("PRIME_AGENT_CODING_AGENT_DIR", ".prime/agent"), "sessions") },
+        { harnessId: "primeAgent", directory: primeSessionDirectory ? expand(primeSessionDirectory) : path.join(base("PRIME_AGENT_CODING_AGENT_DIR", ".prime/agent"), "sessions") },
         { harnessId: "antigravity", directory: path.join(home, ".gemini", "antigravity-cli") },
         { harnessId: "deepseek", directory: path.join(base("DSH_HOME", ".dsh"), "sessions") },
         { harnessId: "openCode", directory: path.join(base("XDG_DATA_HOME", ".local/share"), "opencode") },
@@ -415,6 +416,9 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
         }
     } else {
         header = rows.find((row) => row.type === "session");
+        if (harnessId === "primeAgent" && typeof header?.rlmDepth === "number" && header.rlmDepth > 0) {
+            return undefined;
+        }
         if (harnessId === "ohMyPi" && typeof header?.parentSession === "string"
             && path.isAbsolute(header.parentSession) && header.parentSession.endsWith(".jsonl")) {
             // Task transcripts live under their parent's artifact directory even
@@ -448,7 +452,8 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
         if (row.type === "title" || row.type === "custom-title") {
             title = clean(row.title ?? row.customTitle) || title;
         } else if (row.type === "session_info" || row.type === "sessionInfo") {
-            title = clean(row.name) || title;
+            // Prime persists a null/empty name when the user clears a rename.
+            title = harnessId === "primeAgent" ? clean(row.name) : clean(row.name) || title;
         } else if (row.type === "session/title") {
             title = clean(row.data?.title) || title;
         }

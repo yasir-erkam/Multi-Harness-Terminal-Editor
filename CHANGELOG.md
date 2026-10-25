@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix Prime Agent history: exclude recursive subagent records without hiding root forks, honor the legacy `PRIME_AGENT_CODING_AGENT_SESSION_DIR` fallback, and restore the first-message title after a session name is cleared.
+
 ## 1.0.0
 
 - Release the existing fifteen-agent terminal launcher as 1.0.0, with native and card sidebars, shared favorites, configurable launches and terminal profiles.

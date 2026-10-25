@@ -417,6 +417,37 @@ try {
 } finally {
     rmSync(deletionDir, { recursive: true, force: true });
 }
+const primeDir = mkdtempSync(join(tmpdir(), "mhte-prime-"));
+try {
+    const primeRoot = { harnessId: "primeAgent", directory: primeDir };
+    const writePrime = (id, rlmDepth, names = []) => {
+        writeFileSync(join(primeDir, `${id}.jsonl`), [
+            { type: "session", version: 3, id, cwd: primeDir, rlmDepth, parentSession: rlmDepth === 0 ? "original.jsonl" : undefined },
+            { type: "message", message: { role: "user", content: "Original request" } },
+            ...names.map((name) => ({ type: "session_info", name })),
+        ].map(JSON.stringify).join("\n"));
+    };
+    writePrime("root", 0, ["Old name", "New name"]);
+    writePrime("cleared", 0, ["Stale name", null]);
+    writePrime("empty-name", 0, ["Stale name", ""]);
+    writePrime("legacy", undefined);
+    writePrime("child", 1);
+    writePrime("nested-child", 2);
+    const scan = await scanSavedSessions([primeRoot]);
+    assert.deepEqual(scan.unreadable, []);
+    assert.deepEqual(scan.sessions.map((session) => session.id).sort(), ["cleared", "empty-name", "legacy", "root"],
+        "Prime recursive subagents stay hidden without hiding root forks or legacy sessions");
+    assert.equal(scan.sessions.find((session) => session.id === "root").title, "New name");
+    assert.equal(scan.sessions.find((session) => session.id === "cleared").title, "Original request");
+    assert.equal(scan.sessions.find((session) => session.id === "empty-name").title, "Original request");
+    const rootFor = (env) => sessionRoots(primeDir, env).find((root) => root.harnessId === "primeAgent").directory;
+    assert.equal(rootFor({ PRIME_AGENT_CODING_AGENT_SESSION_DIR: "~/legacy" }), join(primeDir, "legacy"));
+    assert.equal(rootFor({ PRIME_AGENT_SESSION_DIR: "~/current", PRIME_AGENT_CODING_AGENT_SESSION_DIR: "~/legacy" }), join(primeDir, "current"));
+    passed += 1;
+    console.log("ok: Prime history excludes recursive children, honors cleared names and resolves legacy session roots");
+} finally {
+    rmSync(primeDir, { recursive: true, force: true });
+}
 const datedDir = mkdtempSync(join(tmpdir(), "mhte-dated-"));
 try {
     const writeDated = (id, timestamp, mtime) => {

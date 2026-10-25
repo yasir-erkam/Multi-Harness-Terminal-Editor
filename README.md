@@ -174,6 +174,10 @@ is provided, discovery also honors `CODEX_HOME`, `CLAUDE_CONFIG_DIR`,
 `PI_CODING_AGENT_SESSION_DIR` / `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`,
 `PRIME_AGENT_SESSION_DIR` / `PRIME_AGENT_CODING_AGENT_DIR`, `DSH_HOME`, and
 `XDG_DATA_HOME` (with an `opencode` subdirectory) for their respective agents.
+Prime also honors the legacy `PRIME_AGENT_CODING_AGENT_SESSION_DIR` when
+`PRIME_AGENT_SESSION_DIR` is unset. Recursive Prime subagent records (`rlmDepth > 0`)
+are excluded from saved history; root forks remain visible. Clearing a Prime
+session name restores the first user message as its display title.
 For Codex, point to the `sessions` directory; its optional title index is read
 from the parent directory. For OpenCode, point to the data root containing
 `opencode.db` or the legacy `storage/` directory, not to the database file or
