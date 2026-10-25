@@ -6,7 +6,7 @@ import { scanSavedSessions, sessionRoots } from "./savedSessions";
 import { ompTerminalSessionFile, restoreTerminalIdentity } from "./terminalIdentity";
 
 /** Rename only the active terminal: VS Code's rename command has no target argument. */
-export function registerTerminalTitles(context: vscode.ExtensionContext): void {
+export function registerTerminalTitles(context: vscode.ExtensionContext, onDidRename: () => void): void {
     let disposed = false;
     let running = false;
     async function update(): Promise<void> {
@@ -38,6 +38,7 @@ export function registerTerminalTitles(context: vscode.ExtensionContext): void {
             if (disposed || vscode.window.activeTerminal !== terminal || terminal.exitStatus
                 || !vscode.window.terminals.includes(terminal) || terminal.name === title) return;
             await vscode.commands.executeCommand("workbench.action.terminal.renameWithArg", { name: title });
+            if (!disposed && vscode.window.terminals.includes(terminal)) onDidRename();
         } catch {
             // History may be temporarily unavailable while the agent writes it.
         } finally {

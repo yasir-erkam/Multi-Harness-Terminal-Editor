@@ -12,6 +12,7 @@ export interface AgentSession {
 export interface AgentSessions {
     readonly onDidChange: vscode.Event<void>;
     getSessions(): AgentSession[];
+    refresh(): void;
 }
 
 export function sessionLabel(session: AgentSession): string {
@@ -103,5 +104,5 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
         vscode.window.onDidChangeActiveTerminal(() => changes.fire())
     );
     vscode.window.terminals.forEach(restore);
-    return { onDidChange: changes.event, getSessions };
+    return { onDidChange: changes.event, getSessions, refresh: () => changes.fire() };
 }

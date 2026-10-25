@@ -2479,8 +2479,112 @@ try {
     passed += 1;
     console.log("ok: start/end shell executions drive the status-bar text (exit code included)");
 
+    // Saved resumes stay single-flight for the entire integration wait, and
+    // expose their saved title before either launch path has run.
+    const savedShellConfig = vscodeStub.__fixture.multiHarness.ohMyPi;
+    const savedShellMode = vscodeStub.__fixture.multiHarness.launchMode;
+    const savedShellCreateTerminal = vscodeStub.window.createTerminal;
+    const savedShellSetTimeout = globalThis.setTimeout;
+    const savedShellClearTimeout = globalThis.clearTimeout;
+    const savedShellTerminals = vscodeStub.window.terminals;
+    try {
+        vscodeStub.__fixture.multiHarness.ohMyPi = { executablePath: fakeCli, arguments: [] };
+        vscodeStub.__fixture.multiHarness.launchMode = "shell";
+        vscodeStub.window.createTerminal = (options) => {
+            const terminal = savedShellCreateTerminal(options);
+            vscodeStub.window.terminals.push(terminal);
+            return terminal;
+        };
+        for (const outcome of ["integration", "timeout"]) {
+            vscodeStub.window.terminals = [];
+            const integrationTimeouts = [];
+            globalThis.setTimeout = (callback, delay, ...args) => {
+                if (delay !== 10000) return savedShellSetTimeout(callback, delay, ...args);
+                const timer = { callback, cleared: false };
+                integrationTimeouts.push(timer);
+                return timer;
+            };
+            globalThis.clearTimeout = (timer) => {
+                if (integrationTimeouts.includes(timer)) timer.cleared = true;
+                else savedShellClearTimeout(timer);
+            };
+            const request = {
+                sessionId: `pending-shell-${outcome}`,
+                terminalName: `omp - Saved shell ${outcome} title`,
+                cwd: projectDirectory,
+                args: ["--resume", `pending-shell-${outcome}`],
+            };
+            const createdBefore = vscodeStub.__calls.created.length;
+            const sendsBefore = vscodeStub.__calls.sendTexts.length;
+            const infosBefore = vscodeStub.__calls.infos.length;
+            const executeCalls = [];
+            let completed = 0;
+            const launch = () => resumeLauncher.openAgentTerminal(context,
+                agents.find((agent) => agent.id === "ohMyPi"), undefined, request)
+                .then(() => { completed += 1; });
+            const first = launch();
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(integrationTimeouts.length, 1, `${outcome}: integration is pending before the second request`);
+            const second = launch();
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(completed, 0, `${outcome}: both resumes wait for integration`);
+            assert.equal(vscodeStub.__calls.created.length, createdBefore + 1, `${outcome}: pending resumes create one terminal`);
+            assert.equal(integrationTimeouts.length, 1, `${outcome}: pending resumes share one integration timeout`);
+            const { terminal, options } = vscodeStub.__calls.created.at(-1);
+            assert.equal(options.name, request.terminalName, `${outcome}: saved title is passed at terminal creation`);
+            assert.equal(terminal.name, request.terminalName, `${outcome}: saved title exists before integration`);
+            const session = sessionsView.provider.getChildren().find((item) => item.terminal === terminal);
+            assert.ok(session, `${outcome}: pending terminal is listed in Open Terminals`);
+            assert.equal(sessionsView.provider.getTreeItem(session).label, request.terminalName,
+                `${outcome}: Open Terminals exposes the saved title before integration`);
+            assert.equal(vscodeStub.__calls.sendTexts.length, sendsBefore, `${outcome}: no command is sent before integration or timeout`);
+            const event = {
+                terminal,
+                shellIntegration: {
+                    executeCommand(executable, args) {
+                        executeCalls.push({ executable, args });
+                        return { commandLine: `${executable} ${args.join(" ")}` };
+                    },
+                },
+            };
+            if (outcome === "timeout") integrationTimeouts[0].callback();
+            else vscodeStub.__calls.shellIntegrationHandlers.forEach((handler) => handler(event));
+            await Promise.all([first, second]);
+            assert.equal(completed, 2, `${outcome}: both resume requests complete`);
+            assert.equal(integrationTimeouts[0].cleared, true, `${outcome}: integration timeout is cleared`);
+            // Deliver integration again, including after fallback, to catch a
+            // second launch from a late or repeated integration notification.
+            vscodeStub.__calls.shellIntegrationHandlers.forEach((handler) => handler(event));
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(vscodeStub.__calls.created.length, createdBefore + 1, `${outcome}: integration never creates a second terminal`);
+            assert.deepEqual(executeCalls, outcome === "integration" ? [{ executable: fakeCli, args: request.args }] : [],
+                `${outcome}: integration executes once, or never after timeout`);
+            assert.equal(vscodeStub.__calls.sendTexts.length, sendsBefore + (outcome === "timeout" ? 1 : 0),
+                `${outcome}: fallback sends exactly once and late integration never sends again`);
+            assert.equal(vscodeStub.__calls.infos.length, infosBefore + (outcome === "timeout" ? 1 : 0),
+                `${outcome}: only fallback announces unavailable status tracking`);
+            if (outcome === "timeout") {
+                const quote = process.platform === "win32" ? '"' : "'";
+                assert.equal(vscodeStub.__calls.sendTexts.at(-1).text,
+                    [fakeCli, ...request.args].map((arg) => `${quote}${arg}${quote}`).join(" "),
+                    "saved resume fallback preserves the executable and resume arguments");
+            }
+            passed += 1;
+            console.log(`ok: saved shell resume ${outcome} keeps one terminal, one launch and its initial title`);
+        }
+    } finally {
+        globalThis.setTimeout = savedShellSetTimeout;
+        globalThis.clearTimeout = savedShellClearTimeout;
+        vscodeStub.window.createTerminal = savedShellCreateTerminal;
+        vscodeStub.window.terminals = savedShellTerminals;
+        vscodeStub.__fixture.multiHarness.ohMyPi = savedShellConfig;
+        vscodeStub.__fixture.multiHarness.launchMode = savedShellMode;
+    }
+
     // (iv) the timeout path degrades to a quoted sendText plus one message.
     baseline();
+    const fallbackLaunchMode = vscodeStub.__fixture.multiHarness.launchMode;
+    const fallbackFullEditorArea = vscodeStub.__fixture.multiHarness.useFullEditorArea;
     vscodeStub.__fixture.multiHarness.launchMode = "shell";
     vscodeStub.__fixture.multiHarness.useFullEditorArea = false;
     const preservedShellGroups = [{ tabs: [] }, { tabs: [] }];
@@ -2488,22 +2592,27 @@ try {
     const realSetTimeout = globalThis.setTimeout;
     const realClearTimeout = globalThis.clearTimeout;
     const pendingTimeouts = [];
-    globalThis.setTimeout = (callback, delay) => {
-        pendingTimeouts.push({ callback, delay });
-        return { __fake: true };
-    };
-    globalThis.clearTimeout = () => {};
-    const fallbackPromise = ohMyPi.handler();
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(vscodeStub.window.tabGroups.all, preservedShellGroups, "shell mode also preserves the layout when full area is disabled");
-    assert.equal(vscodeStub.__calls.sendTexts.length, 0, "nothing is sent before the timeout fires");
-    assert.ok(pendingTimeouts.length >= 1, "shell mode arms the integration timeout");
-    assert.equal(pendingTimeouts[0].delay, 10000, `integration timeout is 10s (saw ${pendingTimeouts[0].delay})`);
-    pendingTimeouts[0].callback();
-    await fallbackPromise;
-    delete vscodeStub.__fixture.multiHarness.useFullEditorArea;
-    globalThis.setTimeout = realSetTimeout;
-    globalThis.clearTimeout = realClearTimeout;
+    try {
+        globalThis.setTimeout = (callback, delay) => {
+            pendingTimeouts.push({ callback, delay });
+            return { __fake: true };
+        };
+        globalThis.clearTimeout = () => {};
+        const fallbackPromise = ohMyPi.handler();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(vscodeStub.window.tabGroups.all, preservedShellGroups, "shell mode also preserves the layout when full area is disabled");
+        assert.equal(vscodeStub.__calls.sendTexts.length, 0, "nothing is sent before the timeout fires");
+        assert.ok(pendingTimeouts.length >= 1, "shell mode arms the integration timeout");
+        assert.equal(pendingTimeouts[0].delay, 10000, `integration timeout is 10s (saw ${pendingTimeouts[0].delay})`);
+        pendingTimeouts[0].callback();
+        await fallbackPromise;
+    } finally {
+        globalThis.setTimeout = realSetTimeout;
+        globalThis.clearTimeout = realClearTimeout;
+        vscodeStub.__fixture.multiHarness.launchMode = fallbackLaunchMode;
+        if (fallbackFullEditorArea === undefined) delete vscodeStub.__fixture.multiHarness.useFullEditorArea;
+        else vscodeStub.__fixture.multiHarness.useFullEditorArea = fallbackFullEditorArea;
+    }
     const sendText = vscodeStub.__calls.sendTexts.at(-1)?.text ?? "";
     const expectedFallback = process.platform === "win32" ? `"${fakeCli}" "--continue"` : `'${fakeCli}' '--continue'`;
     assert.equal(sendText, expectedFallback, `fallback quoting rule (saw ${sendText})`);

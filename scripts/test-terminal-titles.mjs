@@ -16,6 +16,7 @@ let tick;
 let activeChanged;
 let releaseRename;
 const renamed = () => new Promise((resolve) => { releaseRename = resolve; });
+const visibleTitles = [];
 const vscode = {
     window: { activeTerminal: terminal, terminals: [terminal], onDidChangeActiveTerminal(listener) { activeChanged = listener; return { dispose() {} }; } },
     workspace: { getConfiguration: () => ({ get: () => store }) },
@@ -30,14 +31,19 @@ try {
     writeTitle("first", "🏷️ SEKME: Sekmede ajan yerine oturum konusunu göster");
     writeFileSync(join(directory, "terminal-sessions", "apple-title-test"), `first\n${file}\n`);
     let done = renamed();
-    module.exports.registerTerminalTitles(context);
+    module.exports.registerTerminalTitles(context, () => visibleTitles.push(terminal.name));
     await Promise.race([done, new Promise((_, reject) => setTimeout(() => reject(new Error("Initial title timeout")), 3000))]);
     assert.equal(terminal.name, "omp - 🏷️ SEKME: Sekmede ajan yerine oturum konusunu göster");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(visibleTitles, [terminal.name], "the first topic update invalidates the terminal list");
     writeTitle("second", "Yeni konu");
     done = renamed();
     tick();
     await Promise.race([done, new Promise((_, reject) => setTimeout(() => reject(new Error("Updated title timeout")), 3000))]);
     assert.equal(terminal.name, "omp - Yeni konu", "session switches in the same terminal follow the breadcrumb file");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(visibleTitles, ["omp - 🏷️ SEKME: Sekmede ajan yerine oturum konusunu göster", "omp - Yeni konu"],
+        "a changed topic refreshes terminal consumers without a focus event");
     writeTitle("second", "Yanlış sekmeye yazılmamalı");
     done = new Promise((resolve) => setTimeout(resolve, 100));
     tick();
@@ -45,6 +51,7 @@ try {
     activeChanged();
     await done;
     assert.equal(terminal.name, "omp - Yeni konu", "focus changes during disk reads must not rename another terminal");
+    assert.equal(visibleTitles.length, 2, "a stale rename must not refresh consumers with another terminal's topic");
     console.log("ok: saved OMP topic appears in tab title, follows changes and does not rename after focus changes");
 } finally {
     for (const disposable of context.subscriptions) disposable.dispose();

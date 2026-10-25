@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Refresh the shared Open Terminals model after a conversation-topic rename so native and card layouts update without another focus change. Add saved-shell resume regressions for pending integration, timeout fallback and late integration events.
 - Set resumed terminal titles from the selected saved conversation at creation in both direct and shell modes, avoiding a delayed process-name-to-topic change in Open Terminals.
 - Ignore Oh My Pi breadcrumbs older than the current Linux terminal launch/process, so reused PTY numbers cannot override a resumed conversation with a previous terminal's session. Preserve current-process conversation switches and cover stale/current breadcrumbs with a real PTY regression.
 - Coalesce concurrent resume requests for the same provider/session into one launch, preventing duplicate terminal processes while preserving independent sessions, fresh launches and retries after failure. Cover all eight saved-history providers with resume lifecycle regressions.

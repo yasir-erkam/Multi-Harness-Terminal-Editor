@@ -14,7 +14,6 @@ import { registerTerminalTitles } from "./terminalTitles";
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
     const sessionContext = registerSessionContext(context);
-    registerTerminalTitles(context);
     for (const harness of HARNESSES) {
         context.subscriptions.push(
             vscode.commands.registerCommand(harness.commandId, async () => {
@@ -38,6 +37,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const favorites = registerAgentsView(context, sessionContext);
     const sessions = registerSessionsView(context);
+    registerTerminalTitles(context, sessions.refresh);
     const savedSessions = registerSavedSessionsView(context, status, sessionContext);
     registerCardsView(context, favorites, sessions, savedSessions);
 
