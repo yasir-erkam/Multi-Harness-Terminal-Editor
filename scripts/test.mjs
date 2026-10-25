@@ -2841,6 +2841,46 @@ try {
     console.log("ok: macOS OMP identity resolves fresh-session breadcrumbs");
 
     if (process.platform === "linux") {
+        const ownerFile = join(activationDir, "owned-omp.jsonl");
+        const otherFile = join(activationDir, "other-omp.jsonl");
+        writeFileSync(ownerFile, "{}\n");
+        writeFileSync(otherFile, "{}\n");
+        const owner = spawn(process.execPath, ["-e", `
+            const fs = require("node:fs");
+            process.title = "omp";
+            const fd = fs.openSync(process.argv[1], "a");
+            fs.openSync(process.argv[2], "r");
+            console.log("ready");
+            process.stdin.on("data", () => { fs.closeSync(fd); console.log("released"); });
+        `, ownerFile, otherFile], { stdio: ["pipe", "pipe", "inherit"] });
+        const ownerLines = createInterface({ input: owner.stdout });
+        try {
+            await once(ownerLines, "line");
+            vscodeStub.window.terminals = [];
+            const before = vscodeStub.__calls.created.length;
+            const request = { sessionId: "external-omp", sessionFile: ownerFile,
+                terminalName: "external conversation", cwd: projectDirectory, args: ["--resume", ownerFile] };
+            await resumeLauncher.openAgentTerminal(context, agents.find((agent) => agent.id === "ohMyPi"), undefined, request);
+            assert.equal(vscodeStub.__calls.created.length, before,
+                "an OMP writer outside this window prevents a duplicate resume process");
+            await resumeLauncher.openAgentTerminal(context, agents.find((agent) => agent.id === "ohMyPi"), undefined,
+                { ...request, sessionId: "other-omp", sessionFile: otherFile, args: ["--resume", otherFile] });
+            assert.equal(vscodeStub.__calls.created.length, before + 1,
+                "a read-only descriptor must not block another conversation");
+            const released = once(ownerLines, "line");
+            owner.stdin.write("release\n");
+            await released;
+            await resumeLauncher.openAgentTerminal(context, agents.find((agent) => agent.id === "ohMyPi"), undefined, request);
+            assert.equal(vscodeStub.__calls.created.length, before + 2,
+                "resume becomes available after the external writer releases its file");
+            passed += 1;
+            console.log("ok: external OMP writers block duplicate resumes without blocking readers or released sessions");
+        } finally {
+            ownerLines.close();
+            owner.kill();
+            await once(owner, "exit");
+            vscodeStub.window.terminals = [];
+        }
         await build({
             entryPoints: [join(projectRoot, "src", "terminalIdentity.ts")],
             outfile: join(activationDir, "identity.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent",

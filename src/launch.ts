@@ -9,6 +9,7 @@ import { extensionStrings } from "./localization";
 import { showEditorTerminal } from "./editorTerminal";
 import { ompTerminalSessionFile, restoreTerminalIdentity, terminalIdentityEnv } from "./terminalIdentity";
 import { codexLaunchArgs } from "./codexLaunch";
+import { ompSessionHasWriter } from "./ompSessionOwner";
 
 /** How long shell mode waits for shell integration before degrading. */
 export const SHELL_INTEGRATION_TIMEOUT_MS = 10_000;
@@ -217,6 +218,10 @@ async function launchAgentTerminal(
         });
         if (existing) {
             await showEditorTerminal(existing);
+            return;
+        }
+        if (harness.id === "ohMyPi" && resume.sessionFile && await ompSessionHasWriter(resume.sessionFile)) {
+            await vscode.window.showWarningMessage(extensionStrings(context)["savedSessions.alreadyRunning"]);
             return;
         }
     }

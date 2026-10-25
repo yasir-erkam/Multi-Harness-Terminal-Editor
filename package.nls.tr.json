@@ -146,6 +146,7 @@
   "savedSessions.outsideStore": "Oturum kaydı yapılandırılmış kayıt dizininin dışında.",
   "savedSessions.sharedFile": "Dosya başka bir konuşma da içeriyor; güvenli şekilde silinemiyor.",
   "savedSessions.changedFile": "Oturum kaydı değişmiş; oturum listesini yenileyin.",
+  "savedSessions.alreadyRunning": "Bu Oh My Pi konuşması başka bir terminalde veya pencerede zaten çalışıyor. O terminale geçin veya burada devam etmeden önce onu kapatın. Konuşmanın kopyalanmasını önlemek için ikinci süreç başlatılmadı.",
   "command.openAntigravity.title": "Antigravity CLI’ı Aç",
   "showAntigravityIcon.description": "Editör başlık çubuğunda Antigravity CLI düğmesini göster.",
   "antigravity.executablePath.description": "Antigravity CLI’ı başlatmak için kullanılan yol veya komut adı. Varsayılan 'agy' komutu standart kurulum dizinlerinde veya PATH üzerinde aranır.",

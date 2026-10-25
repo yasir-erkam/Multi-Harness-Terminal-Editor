@@ -146,6 +146,7 @@
   "savedSessions.outsideStore": "The session record is outside its configured store.",
   "savedSessions.sharedFile": "The file contains another conversation; it cannot be deleted safely.",
   "savedSessions.changedFile": "The session record changed; refresh the session list.",
+  "savedSessions.alreadyRunning": "This Oh My Pi conversation is already running in another terminal or window. Switch to that terminal, or close it before resuming here. A second writer was not started to avoid duplicating the conversation.",
   "command.openAntigravity.title": "Open Antigravity CLI",
   "showAntigravityIcon.description": "Show an Antigravity CLI button in the editor title bar.",
   "antigravity.executablePath.description": "Path or command name used to launch Antigravity CLI. Defaults to 'agy', resolved from standard install directories or PATH.",
