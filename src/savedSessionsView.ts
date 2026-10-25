@@ -30,6 +30,8 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     let pending: Promise<SessionScan> | undefined;
     let pendingKey: string | undefined;
     let scanController: AbortController | undefined;
+    let automaticScan: AbortController | undefined;
+    let disposed = false;
     let selectionMode = false;
     let allLocations = context.workspaceState.get<boolean>("allSessionLocations", false);
     let deleting = false;
@@ -232,6 +234,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     }
     function refresh(): void {
         scanController?.abort();
+        automaticScan?.abort();
         pending = undefined;
         updateHeader();
         changes.fire();
@@ -335,9 +338,49 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         setContext("multiHarness.deletingSessions", deleting);
     }
     updateHeader();
+    // Poll the selected provider only. Recursive filesystem watches are not
+    // portable across supported extension hosts, and SQLite also uses WAL files.
+    async function checkForChanges(): Promise<void> {
+        const request = pending;
+        const key = scopeKey();
+        if (disposed || deleting || !request || getMessage()) return;
+        const previous = await request;
+        if (disposed || deleting || request !== pending || key !== scopeKey()) return;
+        const scope = selection.getScope();
+        const controller = new AbortController();
+        automaticScan = controller;
+        const result = await scanSavedSessions(getRoots().filter((root) => root.harnessId === scope.agent!.id),
+            100, allLocations ? undefined : { harnessId: scope.agent!.id, cwd: scope.cwd! }, { signal: controller.signal });
+        if (disposed || deleting || controller.signal.aborted || request !== pending || key !== scopeKey()) return;
+        const same = previous.unreadable.join("\0") === result.unreadable.join("\0")
+            && previous.sessions.length === result.sessions.length
+            && previous.sessions.every((session, index) => {
+                const next = result.sessions[index]!;
+                return session.harnessId === next.harnessId && session.id === next.id && session.file === next.file
+                    && session.cwd === next.cwd && session.title === next.title && session.modified === next.modified;
+            });
+        if (!same) {
+            pending = Promise.resolve(result);
+            changes.fire();
+        }
+    }
+    let automaticTimer: NodeJS.Timeout;
+    function scheduleCheck(): void {
+        automaticTimer = setTimeout(() => {
+            return checkForChanges().catch(() => {
+                // A transient store/configuration failure is retried next time.
+            }).finally(() => { if (!disposed) scheduleCheck(); });
+        }, 3000);
+    }
+    scheduleCheck();
     context.subscriptions.push(
         changes,
-        { dispose: () => scanController?.abort() },
+        { dispose: () => {
+            disposed = true;
+            clearTimeout(automaticTimer);
+            automaticScan?.abort();
+            scanController?.abort();
+        } },
         view,
         selection.onDidChange(refresh),
         vscode.commands.registerCommand("multiHarness.refreshSessions", refresh),

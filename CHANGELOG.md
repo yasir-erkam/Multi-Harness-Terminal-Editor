@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
 
 - Fix Prime Agent history: exclude recursive subagent records without hiding root forks, honor the legacy `PRIME_AGENT_CODING_AGENT_SESSION_DIR` fallback, and restore the first-message title after a session name is cleared.
+- Automatically update the selected agent's saved history in both sidebar layouts when conversations are created, renamed or removed. Check every three seconds after the previous scan finishes, preserve scope/stale-result guards, and stop background work on disposal.
 
 ## 1.0.0
 

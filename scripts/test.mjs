@@ -996,7 +996,16 @@ try {
         extensionUri: { fsPath: join(projectRoot) },
         extensionPath: join(projectRoot),
     };
-    extension.activate(context);
+    const activationSetTimeout = globalThis.setTimeout;
+    let historyTick;
+    globalThis.setTimeout = (callback, delay, ...args) => {
+        if (delay === 3000) {
+            historyTick = callback;
+            return { unref() {} };
+        }
+        return activationSetTimeout(callback, delay, ...args);
+    };
+    try { extension.activate(context); } finally { globalThis.setTimeout = activationSetTimeout; }
 
     // The configured path must exist to reach createTerminal, so point the
     // fixture at a real temp executable (the stub exposes the live fixture).
@@ -1536,6 +1545,35 @@ try {
 
     vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
     refreshSaved.handler();
+    await savedSessionRows();
+    const automaticFile = join(primeSessions, "automatic-session.jsonl");
+    const writeAutomatic = (title) => writeFileSync(automaticFile, [
+        { type: "session", id: "automatic-session", cwd: projectDirectory },
+        { type: "message", message: { role: "user", content: "New conversation" } },
+        { type: "session_info", name: title },
+    ].map(JSON.stringify).join("\n"));
+    const tickHistory = async () => {
+        const originalTimeout = globalThis.setTimeout;
+        globalThis.setTimeout = (callback, delay, ...args) => {
+            if (delay === 3000) { historyTick = callback; return { unref() {} }; }
+            return originalTimeout(callback, delay, ...args);
+        };
+        try { await historyTick(); } finally { globalThis.setTimeout = originalTimeout; }
+    };
+    writeAutomatic("Automatically named");
+    await tickHistory();
+    assert.equal((await savedSessionRows()).find((session) => session.id === "automatic-session").title, "Automatically named",
+        "new conversations appear without a manual refresh");
+    writeAutomatic("Renamed automatically");
+    await tickHistory();
+    assert.equal((await savedSessionRows()).find((session) => session.id === "automatic-session").title, "Renamed automatically",
+        "session title changes appear without a manual refresh");
+    rmSync(automaticFile);
+    await tickHistory();
+    assert.equal((await savedSessionRows()).some((session) => session.id === "automatic-session"), false,
+        "externally removed sessions disappear without a manual refresh");
+    passed += 1;
+    console.log("ok: automatic history refresh discovers new conversations, title changes and external deletions");
     const staleScan = savedView.provider.getChildren();
     await selectSessionAgent.handler("codex");
     assert.deepEqual(await staleScan, [], "in-flight scans cannot restore the previous agent's sessions");
