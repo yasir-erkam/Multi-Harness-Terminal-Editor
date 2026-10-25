@@ -290,6 +290,12 @@ await build({
 });
 const { validateSessionDeletion, sessionDeletionFiles } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
 await build({
+    entryPoints: [join(projectRoot, "src", "openCodeDeletion.ts")],
+    outfile: join(outdir, "openCodeDeletion.test.mjs"),
+    bundle: true, format: "esm", platform: "node", logLevel: "silent",
+});
+const { validateOpenCodeDeletion, deleteOpenCodeSession } = await import(pathToFileURL(join(outdir, "openCodeDeletion.test.mjs")).href);
+await build({
     entryPoints: [join(projectRoot, "src", "windowsSessionProcesses.ts")],
     outfile: join(outdir, "windowsSessionProcesses.test.mjs"),
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
@@ -340,10 +346,10 @@ const { codexLaunchArgs } = await import(pathToFileURL(join(outdir, "codexLaunch
 const deletionDir = mkdtempSync(join(tmpdir(), "mhte-delete-"));
 try {
     const roots = sessionRoots(deletionDir, {});
-    for (const id of ["", "unknown", "gemini", "goose", "aider", "crush", "qwen", "copilot", "cursorAgent", "openCode", "antigravity"]) {
+    for (const id of ["", "unknown", "gemini", "goose", "aider", "crush", "qwen", "copilot", "cursorAgent", "antigravity"]) {
         assert.equal(supportsSessionDeletion(id), false, `${id} must not expose unsupported deletion actions`);
     }
-    for (const root of roots.filter((root) => supportsSessionDeletion(root.harnessId))) {
+    for (const root of roots.filter((root) => supportsSessionDeletion(root.harnessId) && root.harnessId !== "openCode")) {
         mkdirSync(root.directory, { recursive: true });
         const id = `delete-${root.harnessId}`;
         const header = root.harnessId === "codex" ? { type: "session_meta", payload: { id, cwd: deletionDir } }
@@ -471,7 +477,7 @@ try {
 }
 const savedDir = mkdtempSync(join(tmpdir(), "mhte-saved-"));
 try {
-    const roots = sessionRoots(savedDir, {}).filter((root) => supportsSessionDeletion(root.harnessId));
+    const roots = sessionRoots(savedDir, {}).filter((root) => supportsSessionDeletion(root.harnessId) && root.harnessId !== "openCode");
     const fixture = (harnessId, id, cwd, title, modified) => {
         const root = roots.find((candidate) => candidate.harnessId === harnessId);
         mkdirSync(root.directory, { recursive: true });
@@ -673,8 +679,8 @@ try {
     assert.equal(scoped.sessions[0].modified, 100);
     assert.equal(scoped.sessions[0].file, file);
     assert.deepEqual(resumeArguments(scoped.sessions[0]), ["--session", "ses_main"]);
-    assert.equal(supportsSessionDeletion("openCode"), false);
-    await assert.rejects(validateSessionDeletion(scoped.sessions[0], [root]));
+    assert.equal(supportsSessionDeletion("openCode"), true);
+    await assert.rejects(validateSessionDeletion(scoped.sessions[0], [root]), "generic JSONL deletion must never accept the shared OpenCode database");
     assert.deepEqual(readFileSync(file), before, "OpenCode discovery never modifies its database");
     assert.equal(sessionRoots(openCodeDir, {}).find((candidate) => candidate.harnessId === "openCode").directory, join(openCodeDir, ".local", "share", "opencode"));
     assert.equal(sessionRoots(openCodeDir, { XDG_DATA_HOME: "~/xdg" }).find((candidate) => candidate.harnessId === "openCode").directory, join(openCodeDir, "xdg", "opencode"));
@@ -684,8 +690,199 @@ try {
     mkdirSync(file);
     assert.deepEqual(await scanSavedSessions([root]), { sessions: [], unreadable: ["openCode"] }, "nonregular SQLite paths must not resurrect stale JSON history");
     passed += 1;
-    console.log("ok: OpenCode SQLite and legacy history preserve project scope, resume IDs and read-only deletion protection");
+    console.log("ok: OpenCode SQLite and legacy history preserve project scope, resume IDs and read-only discovery");
 } finally { rmSync(openCodeDir, { recursive: true, force: true }); }
+
+const openCodeDeleteDir = mkdtempSync(join(tmpdir(), "mhte-opencode-delete-"));
+try {
+    const cwd = join(openCodeDeleteDir, "project");
+    mkdirSync(cwd);
+    const root = { harnessId: "openCode", directory: join(openCodeDeleteDir, "data") };
+    mkdirSync(root.directory);
+    const file = join(root.directory, "opencode.db");
+    const db = new DatabaseSync(file);
+    db.exec(`
+        CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, title TEXT, time_updated INTEGER, parent_id TEXT, time_archived INTEGER);
+        CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, data TEXT);
+        CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, data TEXT);
+        CREATE TABLE project (id TEXT PRIMARY KEY, data TEXT);
+        CREATE TABLE todo (session_id TEXT, content TEXT);
+        CREATE TABLE session_share (session_id TEXT, url TEXT);
+        CREATE TABLE event (id TEXT PRIMARY KEY, aggregate_id TEXT, data TEXT);
+        CREATE TABLE event_sequence (aggregate_id TEXT PRIMARY KEY, sequence INTEGER);
+    `);
+    const insert = db.prepare("INSERT INTO session VALUES (?, ?, ?, ?, ?, NULL)");
+    for (const [id, parent] of [["ses_main", null], ["ses_child", "ses_main"], ["ses_grandchild", "ses_child"], ["ses_other", null]]) {
+        insert.run(id, cwd, id, 100, parent);
+        db.prepare("INSERT INTO message VALUES (?, ?, ?)").run(`msg_${id}`, id, `message ${id}`);
+        db.prepare("INSERT INTO part VALUES (?, ?, ?, ?)").run(`part_${id}`, `msg_${id}`, id, `part ${id}`);
+        db.prepare("INSERT INTO todo VALUES (?, ?)").run(id, `todo ${id}`);
+        db.prepare("INSERT INTO session_share VALUES (?, ?)").run(id, `share ${id}`);
+        db.prepare("INSERT INTO event VALUES (?, ?, ?)").run(`event_${id}`, id, `event ${id}`);
+        db.prepare("INSERT INTO event_sequence VALUES (?, ?)").run(id, 1);
+    }
+    db.prepare("INSERT INTO project VALUES (?, ?)").run("project", "shared project data");
+    db.close();
+    const session = (await scanSavedSessions([root])).sessions.find((row) => row.id === "ses_main");
+    assert.ok(session);
+    const before = readFileSync(file);
+    await validateOpenCodeDeletion(session, [root]);
+    assert.deepEqual(readFileSync(file), before, "validation must not modify SQLite history");
+    for (const stale of [{ ...session, id: "ses_missing" }, { ...session, cwd: root.directory }]) {
+        await assert.rejects(validateOpenCodeDeletion(stale, [root]));
+        await assert.rejects(deleteOpenCodeSession(stale, [root]));
+        assert.deepEqual(readFileSync(file), before, "mismatched IDs and directories must leave SQLite untouched");
+    }
+    const outside = join(openCodeDeleteDir, "opencode.db");
+    copyFileSync(file, outside);
+    await assert.rejects(validateOpenCodeDeletion({ ...session, file: outside }, [root]));
+    await assert.rejects(deleteOpenCodeSession({ ...session, file: outside }, [root]));
+    assert.deepEqual(readFileSync(outside), before, "outside-store databases must never be modified");
+    rmSync(file);
+    if (fileSymlink(outside, file)) {
+        await assert.rejects(validateOpenCodeDeletion(session, [root]));
+        await assert.rejects(deleteOpenCodeSession(session, [root]));
+        assert.deepEqual(readFileSync(outside), before, "a database symlink must not permit deletion of its target");
+        rmSync(file);
+    }
+    copyFileSync(outside, file);
+    const changed = new DatabaseSync(file);
+    changed.prepare("UPDATE session SET directory = ? WHERE id = ?").run(root.directory, session.id);
+    changed.close();
+    await assert.rejects(validateOpenCodeDeletion(session, [root]));
+    await assert.rejects(deleteOpenCodeSession(session, [root]));
+    const restored = new DatabaseSync(file);
+    restored.prepare("UPDATE session SET directory = ? WHERE id = ?").run(cwd, session.id);
+    restored.close();
+    const snapshot = () => {
+        const connection = new DatabaseSync(file);
+        try {
+            return ["session", "message", "part", "todo", "session_share", "event", "event_sequence", "project"].map((table) => connection.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all().map((row) => ({ ...row })));
+        } finally { connection.close(); }
+    };
+    const allRowsBeforeFailure = snapshot();
+    const guarded = new DatabaseSync(file);
+    guarded.exec("CREATE TRIGGER prevent_session_delete BEFORE DELETE ON session BEGIN SELECT RAISE(ABORT, 'deletion blocked'); END");
+    guarded.close();
+    await assert.rejects(deleteOpenCodeSession(session, [root]));
+    assert.deepEqual(snapshot(), allRowsBeforeFailure, "a trigger-blocked deletion must leave every session, descendant and related row intact");
+    const unguarded = new DatabaseSync(file);
+    unguarded.exec("DROP TRIGGER prevent_session_delete");
+    unguarded.close();
+    for (const suffix of ["-wal", "-shm"]) {
+        const target = join(openCodeDeleteDir, `outside${suffix}`);
+        const content = Buffer.from(`unrelated ${suffix} content`);
+        writeFileSync(target, content);
+        if (fileSymlink(target, `${file}${suffix}`)) {
+            await assert.rejects(validateOpenCodeDeletion(session, [root]));
+            await assert.rejects(deleteOpenCodeSession(session, [root]));
+            assert.deepEqual(readFileSync(target), content, `${suffix} symlink targets must remain untouched`);
+            rmSync(`${file}${suffix}`);
+            assert.deepEqual(snapshot(), allRowsBeforeFailure, `${suffix} symlink rejection must preserve all database rows`);
+        }
+    }
+    await deleteOpenCodeSession(session, [root]);
+    assert.ok(existsSync(file), "deleting a conversation must never delete the shared database");
+    const remaining = new DatabaseSync(file);
+    try {
+        assert.deepEqual(remaining.prepare("SELECT id FROM session ORDER BY id").all().map((row) => row.id), ["ses_other"], "selected sessions and recursive descendants must be removed");
+        assert.deepEqual(remaining.prepare("SELECT id, data FROM message ORDER BY id").all().map((row) => ({ ...row })), [{ id: "msg_ses_other", data: "message ses_other" }]);
+        assert.deepEqual(remaining.prepare("SELECT id, data FROM part ORDER BY id").all().map((row) => ({ ...row })), [{ id: "part_ses_other", data: "part ses_other" }]);
+        for (const [table, column] of [["todo", "session_id"], ["session_share", "session_id"], ["event", "aggregate_id"], ["event_sequence", "aggregate_id"]]) {
+            assert.deepEqual(remaining.prepare(`SELECT ${column} AS session FROM ${table}`).all().map((row) => row.session), ["ses_other"], `${table} must retain only unrelated conversation data`);
+        }
+        assert.deepEqual(remaining.prepare("SELECT id, data FROM project").all().map((row) => ({ ...row })), [{ id: "project", data: "shared project data" }], "shared non-conversation data must survive");
+    } finally { remaining.close(); }
+    passed += 1;
+    console.log("ok: OpenCode SQLite deletion removes descendants, messages and parts while protecting shared history and rejecting unsafe targets");
+} finally { rmSync(openCodeDeleteDir, { recursive: true, force: true }); }
+
+const openCodeLegacyDeleteDir = mkdtempSync(join(tmpdir(), "mhte-opencode-legacy-delete-"));
+try {
+    const cwd = join(openCodeLegacyDeleteDir, "project");
+    mkdirSync(cwd);
+    const root = { harnessId: "openCode", directory: join(openCodeLegacyDeleteDir, "data") };
+    const storage = join(root.directory, "storage");
+    const files = new Map();
+    const metadata = new Map();
+    for (const [id, parentID] of [["ses_main", undefined], ["ses_child", "ses_main"], ["ses_grandchild", "ses_child"], ["ses_other", undefined]]) {
+        const file = join(storage, "session", "project-id", `${id}.json`);
+        const messageID = `msg_${id.slice(4)}`;
+        const partID = `prt_${id.slice(4)}`;
+        const message = join(storage, "message", id, `${messageID}.json`);
+        const part = join(storage, "part", messageID, `${partID}.json`);
+        const row = { id, projectID: "project-id", directory: cwd, title: id, parentID, time: { updated: 100 } };
+        for (const [path, value] of [[file, row], [message, { id: messageID, sessionID: id }], [part, { id: partID, sessionID: id, messageID, type: "text", text: id }]]) {
+            mkdirSync(dirname(path), { recursive: true });
+            writeFileSync(path, JSON.stringify(value));
+        }
+        files.set(id, [file, message, part]);
+        for (const kind of ["session_diff", "todo", "session_share", "share"]) {
+            const artifact = join(storage, kind, `${id}.json`);
+            mkdirSync(dirname(artifact), { recursive: true });
+            writeFileSync(artifact, JSON.stringify({ sessionID: id }));
+            files.get(id).push(artifact);
+        }
+        metadata.set(id, row);
+    }
+    const shared = join(storage, "project", "project-id.json");
+    mkdirSync(dirname(shared), { recursive: true });
+    writeFileSync(shared, JSON.stringify({ id: "project-id", worktree: cwd }));
+    const session = (await scanSavedSessions([root])).sessions.find((row) => row.id === "ses_main");
+    assert.ok(session);
+    const file = session.file;
+    const before = readFileSync(file);
+    await validateOpenCodeDeletion(session, [root]);
+    assert.deepEqual(readFileSync(file), before, "legacy validation must be read-only");
+    const authoritativeFile = join(root.directory, "opencode.db");
+    const authoritative = new DatabaseSync(authoritativeFile);
+    authoritative.exec("CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, parent_id TEXT)");
+    authoritative.prepare("INSERT INTO session VALUES (?, ?, NULL)").run("ses_main", cwd);
+    authoritative.close();
+    const authoritativeBefore = readFileSync(authoritativeFile);
+    await assert.rejects(validateOpenCodeDeletion(session, [root]));
+    await assert.rejects(deleteOpenCodeSession(session, [root]));
+    assert.deepEqual(readFileSync(authoritativeFile), authoritativeBefore, "an authoritative database appearing after discovery must not be touched through a legacy target");
+    for (const paths of files.values()) {
+        for (const path of paths) assert.ok(existsSync(path), "an authoritative database must prevent deletion of all legacy records");
+    }
+    assert.deepEqual(readFileSync(file), before);
+    rmSync(authoritativeFile);
+    for (const stale of [{ ...session, id: "ses_missing" }, { ...session, cwd: root.directory }]) {
+        await assert.rejects(validateOpenCodeDeletion(stale, [root]));
+        await assert.rejects(deleteOpenCodeSession(stale, [root]));
+        assert.deepEqual(readFileSync(file), before);
+    }
+    const outside = join(openCodeLegacyDeleteDir, "ses_main.json");
+    copyFileSync(file, outside);
+    await assert.rejects(validateOpenCodeDeletion({ ...session, file: outside }, [root]));
+    await assert.rejects(deleteOpenCodeSession({ ...session, file: outside }, [root]));
+    rmSync(file);
+    if (fileSymlink(outside, file)) {
+        await assert.rejects(validateOpenCodeDeletion(session, [root]));
+        await assert.rejects(deleteOpenCodeSession(session, [root]));
+        assert.deepEqual(readFileSync(outside), before);
+        rmSync(file);
+    }
+    copyFileSync(outside, file);
+    for (const changed of [{ ...metadata.get("ses_main"), id: "ses_replaced" }, { ...metadata.get("ses_main"), directory: root.directory }]) {
+        writeFileSync(file, JSON.stringify(changed));
+        await assert.rejects(validateOpenCodeDeletion(session, [root]));
+        await assert.rejects(deleteOpenCodeSession(session, [root]));
+        assert.ok(existsSync(files.get("ses_child")[0]), "a stale parent must not remove descendants");
+    }
+    writeFileSync(file, before);
+    const unrelated = files.get("ses_other").map((path) => readFileSync(path));
+    await deleteOpenCodeSession(session, [root]);
+    for (const id of ["ses_main", "ses_child", "ses_grandchild"]) {
+        for (const path of files.get(id)) assert.equal(existsSync(path), false, `legacy deletion must remove ${path}`);
+    }
+    for (const [index, path] of files.get("ses_other").entries()) assert.deepEqual(readFileSync(path), unrelated[index], "unrelated legacy conversations must survive unchanged");
+    assert.equal(JSON.parse(readFileSync(shared, "utf8")).id, "project-id", "shared legacy project data must survive");
+    assert.deepEqual(readFileSync(outside), before, "outside-store records must survive unchanged");
+    passed += 1;
+    console.log("ok: OpenCode legacy deletion removes descendant metadata, messages and parts while rejecting stale and unsafe targets");
+} finally { rmSync(openCodeLegacyDeleteDir, { recursive: true, force: true }); }
 
 function antigravityFixture(directory, cwd) {
     mkdirSync(join(directory, "conversations"), { recursive: true });
@@ -1398,6 +1595,50 @@ try {
     assert.ok(savedItem.description.includes("Prime Agent"));
     assert.ok(savedItem.description.includes("recorded-project"));
     const resume = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.resumeSession");
+    const originalCreateTerminalForResume = vscodeStub.window.createTerminal;
+    try {
+        vscodeStub.window.createTerminal = (options) => {
+            const terminal = originalCreateTerminalForResume(options);
+            vscodeStub.window.terminals = [...vscodeStub.window.terminals, terminal];
+            return terminal;
+        };
+        for (const harnessId of ["ohMyPi", "pi", "primeAgent", "codex", "claudeCode", "openCode", "deepseek", "antigravity"]) {
+            const harness = agents.find((agent) => agent.id === harnessId);
+            const previousConfig = vscodeStub.__fixture.multiHarness[harnessId];
+            vscodeStub.__fixture.multiHarness[harnessId] = { executablePath: fakeCli, arguments: [] };
+            try {
+                vscodeStub.window.terminals = [];
+                const before = vscodeStub.__calls.created.length;
+                const saved = { sessionId: "concurrent-session", sessionFile: savedFile, terminalName: "Shared title", cwd: projectDirectory, args: ["--resume", savedFile] };
+                const launch = (request = saved) => resumeLauncher.openAgentTerminal(context, harness, undefined, request);
+                await Promise.all([launch(), launch()]);
+                assert.equal(vscodeStub.__calls.created.length, before + 1, `${harnessId}: concurrent resumes create one terminal`);
+                const terminal = vscodeStub.window.terminals[0];
+                await launch();
+                assert.equal(vscodeStub.__calls.created.length, before + 1, `${harnessId}: subsequent resume focuses the existing terminal`);
+                await launch({ ...saved, sessionId: "different-session", sessionFile: `${savedFile}.other` });
+                assert.equal(vscodeStub.__calls.created.length, before + 2, `${harnessId}: different sessions with the same title remain independent`);
+                terminal.exitStatus = { code: 0 };
+                await launch();
+                assert.equal(vscodeStub.__calls.created.length, before + 3, `${harnessId}: closed sessions can reopen`);
+                vscodeStub.window.terminals = [];
+                const create = vscodeStub.window.createTerminal;
+                vscodeStub.window.createTerminal = () => { throw new Error("terminal unavailable"); };
+                try {
+                    await Promise.all([launch(), launch()]);
+                } finally {
+                    vscodeStub.window.createTerminal = create;
+                }
+                await launch();
+                assert.equal(vscodeStub.__calls.created.length, before + 4, `${harnessId}: failed concurrent resumes allow retry`);
+            } finally {
+                vscodeStub.__fixture.multiHarness[harnessId] = previousConfig;
+            }
+        }
+    } finally {
+        vscodeStub.window.createTerminal = originalCreateTerminalForResume;
+        vscodeStub.window.terminals = [];
+    }
     vscodeStub.__fixture.multiHarness.primeAgent.arguments = ["--model", "test-model"];
     vscodeStub.window.terminals = [firstPrime];
     vscodeStub.window.tabGroups.all = [{ tabs: [] }, { tabs: [] }];
@@ -1409,6 +1650,8 @@ try {
     assert.deepEqual(resumed.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "saved conversations open without creating a split");
     assert.deepEqual(resumed.options.shellArgs, ["--resume", savedFile, "--model", "test-model"]);
     vscodeStub.window.terminals = [resumed.terminal];
+    assert.equal(sessionsView.provider.getTreeItem(sessionsView.provider.getChildren().find((session) => session.terminal === resumed.terminal)).label,
+        "prime-agent - A saved conversation", "Open Terminals shows the saved topic before any title refresh");
     const countBeforeReuse = vscodeStub.__calls.created.length;
     vscodeStub.window.tabGroups.all = [{ tabs: [] }, { tabs: [] }];
     await resume.handler(...savedItem.command.arguments);
@@ -1495,18 +1738,38 @@ try {
     mkdirSync(openCodeStore, { recursive: true });
     const openCodeDb = new DatabaseSync(join(openCodeStore, "opencode.db"));
     openCodeDb.exec("CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, title TEXT, time_updated INTEGER, parent_id TEXT, time_archived INTEGER)");
+    openCodeDb.exec("CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT); CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT)");
     openCodeDb.prepare("INSERT INTO session VALUES (?, ?, ?, ?, NULL, NULL)").run("ses_recorded", projectDirectory, "OpenCode saved session", Date.now());
     openCodeDb.close();
     await selectSessionAgent.handler("openCode");
     assert.equal(savedView.message, undefined, "OpenCode is a supported saved-session provider");
     const openCodeSaved = (await savedSessionRows())[0];
     assert.equal(openCodeSaved.id, "ses_recorded");
-    assert.equal(savedView.provider.getTreeItem(openCodeSaved).contextValue, "savedSessionReadOnly");
+    assert.equal(savedView.provider.getTreeItem(openCodeSaved).contextValue, "savedSession");
     const beforeOpenCodeResume = vscodeStub.__calls.created.length;
     await resume.handler({ harnessId: "openCode", id: "ses_recorded" });
     assert.equal(vscodeStub.__calls.created.length, beforeOpenCodeResume + 1);
     assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--session", "ses_recorded", "--model", "test-model"]);
     assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
+    const openCodeDelete = vscodeStub.__calls.commands.find((entry) => entry.id === "multiHarness.deleteSession").handler;
+    const openCodeTerminal = {
+        name: "OpenCode deletion target",
+        creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "openCode", launchMode: "direct", sessionId: "ses_recorded" }) } },
+        disposed: 0,
+        dispose() { this.disposed += 1; },
+    };
+    vscodeStub.window.terminals = [openCodeTerminal];
+    const openCodeDeletesBefore = vscodeStub.__calls.fsDeletes.length;
+    await openCodeDelete({ harnessId: "openCode", id: "ses_recorded" });
+    assert.equal(openCodeTerminal.disposed, 0, "canceling permanent deletion preserves the OpenCode terminal");
+    assert.equal((await savedSessionRows()).some((row) => row.id === "ses_recorded"), true, "canceling preserves the SQLite session");
+    assert.equal(vscodeStub.__calls.warnings.at(-1).options.modal, true);
+    vscodeStub.__calls.warningResults.push("Delete Permanently");
+    await openCodeDelete({ harnessId: "openCode", id: "ses_recorded" });
+    assert.equal(vscodeStub.__calls.fsDeletes.length, openCodeDeletesBefore, "OpenCode deletion must never trash or unlink the shared database");
+    assert.ok(existsSync(join(openCodeStore, "opencode.db")));
+    assert.equal((await savedSessionRows()).some((row) => row.id === "ses_recorded"), false, "explicit approval deletes the SQLite session");
+    assert.equal(openCodeTerminal.disposed, 1, "successful permanent deletion closes its linked terminal");
     assert.equal(vscodeStub.__calls.created.at(-1).options.shellPath, fakeCli);
     rmSync(openCodeStore, { recursive: true, force: true });
     refreshSaved.handler();
@@ -2474,6 +2737,42 @@ try {
             outfile: join(activationDir, "identity.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent",
         });
         const identities = requireFrom(join(activationDir, "identity.cjs"));
+        const ptyProbe = spawn("script", ["-q", "-c", `${process.execPath} -e 'console.log(JSON.stringify({pid:process.pid,tty:require("node:fs").readlinkSync("/proc/self/fd/0")}));setInterval(()=>{},1000)'`, "/dev/null"], { stdio: ["pipe", "pipe", "inherit"] });
+        const ptyLines = createInterface({ input: ptyProbe.stdout });
+        try {
+            const [line] = await once(ptyLines, "line");
+            const probe = JSON.parse(line);
+            const breadcrumb = join(crumbs, probe.tty.slice(5).replaceAll("/", "-"));
+            writeFileSync(breadcrumb, `${projectDirectory}\n${switchedFile}\n`);
+            const startedAt = Date.now();
+            utimesSync(breadcrumb, (startedAt - 60000) / 1000, (startedAt - 60000) / 1000);
+            const terminal = { processId: Promise.resolve(probe.pid), creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "ohMyPi", launchMode: "direct", sessionId: "fresh-omp", startedAt }) } }, show() {} };
+            assert.equal(await identities.ompTerminalSessionFile(terminal, ompRoot), undefined,
+                "a reused Linux PTY must not inherit its previous process's session breadcrumb");
+            vscodeStub.window.terminals = [terminal];
+            const beforeStaleBreadcrumb = vscodeStub.__calls.created.length;
+            await resumeLauncher.openAgentTerminal(context, agents.find((agent) => agent.id === "ohMyPi"), undefined, {
+                sessionId: "fresh-omp", sessionFile: freshFile, sessionsRoot: ompRoot,
+                terminalName: "saved conversation", cwd: projectDirectory, args: ["--resume", freshFile],
+            });
+            assert.equal(vscodeStub.__calls.created.length, beforeStaleBreadcrumb,
+                "a stale PTY breadcrumb must not open a second terminal for the resumed identity");
+            utimesSync(breadcrumb, (startedAt + 1000) / 1000, (startedAt + 1000) / 1000);
+            assert.equal(await identities.ompTerminalSessionFile(terminal, ompRoot), switchedFile,
+                "a breadcrumb written by the current process still follows in-process session switches");
+            await resumeLauncher.openAgentTerminal(context, agents.find((agent) => agent.id === "ohMyPi"), undefined, {
+                sessionId: "switched-omp", sessionFile: switchedFile, sessionsRoot: ompRoot,
+                terminalName: "switched conversation", cwd: projectDirectory, args: ["--resume", switchedFile],
+            });
+            assert.equal(vscodeStub.__calls.created.length, beforeStaleBreadcrumb,
+                "a current breadcrumb continues to reuse the terminal after switching conversations");
+            vscodeStub.window.terminals = [];
+            rmSync(breadcrumb);
+        } finally {
+            ptyLines.close();
+            ptyProbe.stdin.end();
+            ptyProbe.kill("SIGTERM");
+        }
         const codexRoot = vscodeStub.__fixture.multiHarness.codex.sessionDirectory;
         mkdirSync(codexRoot, { recursive: true });
         const codexFiles = ["fresh-codex", "switched-codex"].map((id) => join(codexRoot, `${id}.jsonl`));

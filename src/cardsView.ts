@@ -6,6 +6,7 @@ import { type FavoriteAgents } from "./agentsView";
 import { HARNESSES, iconFile } from "./harnesses";
 import { type AgentSessions, sessionLabel } from "./sessionsView";
 import { type SavedSessions } from "./savedSessionsView";
+import { supportsSessionDeletion } from "./savedSessions";
 import { basename } from "node:path";
 
 export function registerCardsView(
@@ -64,7 +65,7 @@ export function registerCardsView(
                 project: basename(session.cwd),
                 cwd: session.cwd,
                 modified: session.modified,
-                deletable: session.harnessId !== "antigravity",
+                deletable: supportsSessionDeletion(session.harnessId),
             })),
             savedUnreadable: saved.unreadable.length > 0,
             savedSelection: savedSessions.getSelection(),

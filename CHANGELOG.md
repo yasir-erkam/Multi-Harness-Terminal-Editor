@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Set resumed terminal titles from the selected saved conversation at creation in both direct and shell modes, avoiding a delayed process-name-to-topic change in Open Terminals.
+- Ignore Oh My Pi breadcrumbs older than the current Linux terminal launch/process, so reused PTY numbers cannot override a resumed conversation with a previous terminal's session. Preserve current-process conversation switches and cover stale/current breadcrumbs with a real PTY regression.
+- Coalesce concurrent resume requests for the same provider/session into one launch, preventing duplicate terminal processes while preserving independent sessions, fresh launches and retries after failure. Cover all eight saved-history providers with resume lifecycle regressions.
+- Add explicitly confirmed permanent deletion for OpenCode SQLite and legacy JSON history. Delete the selected session family and related messages/parts while preserving the shared database and unrelated conversations; validate live identity, store boundaries and supported schemas before mutation. Share deletion support checks between native and card layouts.
+
 ## 1.0.1
 
 - Fix Prime Agent history: exclude recursive subagent records without hiding root forks, honor the legacy `PRIME_AGENT_CODING_AGENT_SESSION_DIR` fallback, and restore the first-message title after a session name is cleared.

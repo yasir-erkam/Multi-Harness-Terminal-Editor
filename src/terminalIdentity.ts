@@ -1,4 +1,4 @@
-import { readFile, readdir, readlink, realpath } from "node:fs/promises";
+import { readFile, readdir, readlink, realpath, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -16,6 +16,7 @@ export interface TerminalIdentity {
     readonly launchMode: "direct" | "shell";
     readonly sessionId?: string;
     readonly terminalSessionId?: string;
+    readonly startedAt?: number;
 }
 
 export function terminalIdentityEnv(
@@ -25,7 +26,7 @@ export function terminalIdentityEnv(
 ): Record<string, string> {
     const terminalSessionId = harness.id === "ohMyPi" && (process.platform === "win32" || process.platform === "darwin") ? randomUUID() : undefined;
     return {
-        [TERMINAL_IDENTITY_ENV]: JSON.stringify({ version: 1, harnessId: harness.id, launchMode, sessionId, terminalSessionId }),
+        [TERMINAL_IDENTITY_ENV]: JSON.stringify({ version: 1, harnessId: harness.id, launchMode, sessionId, terminalSessionId, startedAt: Date.now() }),
         ...(terminalSessionId ? { TERM_SESSION_ID: terminalSessionId } : {}),
     };
 }
@@ -58,6 +59,7 @@ function parseIdentity(value: string | null | undefined): TerminalIdentity | und
             || !("harnessId" in identity) || !HARNESSES.some((harness) => harness.id === identity.harnessId)
             || !("launchMode" in identity) || (identity.launchMode !== "direct" && identity.launchMode !== "shell")
             || ("terminalSessionId" in identity && (typeof identity.terminalSessionId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(identity.terminalSessionId)))
+            || ("startedAt" in identity && (typeof identity.startedAt !== "number" || !Number.isFinite(identity.startedAt) || identity.startedAt <= 0))
             || ("sessionId" in identity && (typeof identity.sessionId !== "string" || !identity.sessionId))) {
             return undefined;
         }
@@ -97,10 +99,12 @@ export async function ompTerminalSessionFile(terminal: vscode.Terminal, sessions
     const identity = await restoreTerminalIdentity(terminal);
     if (identity?.harnessId !== "ohMyPi" || terminal.exitStatus) return undefined;
     let terminalId: string | undefined;
+    let startedAt = identity.startedAt;
     if (process.platform === "linux") {
         try {
             const pid = await terminal.processId;
             if (!pid || !Number.isSafeInteger(pid) || pid <= 0) return undefined;
+            startedAt ??= (await stat(`/proc/${pid}`)).mtimeMs;
             const tty = await readlink(`/proc/${pid}/fd/0`);
             if (tty.startsWith("/dev/")) terminalId = tty.slice(5).replace(/\//g, "-");
         } catch { return undefined; }
@@ -109,7 +113,10 @@ export async function ompTerminalSessionFile(terminal: vscode.Terminal, sessions
     }
     if (!terminalId || !/^[a-zA-Z0-9_-]+$/.test(terminalId)) return undefined;
     try {
-        const breadcrumb = await readFile(path.join(sessionsRoot, "..", "terminal-sessions", terminalId), "utf8");
+        const breadcrumbPath = path.join(sessionsRoot, "..", "terminal-sessions", terminalId);
+        const [breadcrumb, metadata] = await Promise.all([readFile(breadcrumbPath, "utf8"), stat(breadcrumbPath)]);
+        // PTY numbers are reused; an old process's breadcrumb is not live identity.
+        if (process.platform === "linux" && startedAt !== undefined && metadata.mtimeMs < startedAt) return undefined;
         const file = breadcrumb.split("\n")[1]?.trim();
         return file && path.isAbsolute(file) ? file : undefined;
     } catch { return undefined; }

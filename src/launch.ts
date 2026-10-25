@@ -139,7 +139,7 @@ async function openShellMode(
     // No shellPath override: the user's default profile is the shell that runs
     // the agent, which is what makes shell integration reporting possible.
     const terminal = vscode.window.createTerminal({
-        // Leave the title unpinned so CLI OSC updates also work after resuming.
+        name: resume?.terminalName,
         cwd: launch.cwd,
         location: { viewColumn: vscode.ViewColumn.Active },
         isTransient: false,
@@ -162,6 +162,8 @@ async function openShellMode(
     );
 }
 
+const pendingResumes = new Map<string, Promise<void>>();
+
 /** Start a fresh terminal, or reveal an explicitly resumed conversation. */
 export async function openAgentTerminal(
     context: vscode.ExtensionContext,
@@ -169,11 +171,23 @@ export async function openAgentTerminal(
     status?: AgentStatus,
     resume?: ResumeLaunch
 ): Promise<void> {
-    try {
-        await launchAgentTerminal(context, harness, status, resume);
-    } catch {
+    const resumeKey = resume ? JSON.stringify([harness.id, resume.sessionId ?? resume.sessionFile ?? resume.terminalName]) : undefined;
+    if (resumeKey) {
+        const pending = pendingResumes.get(resumeKey);
+        if (pending) {
+            await pending;
+            return;
+        }
+    }
+    const launch = launchAgentTerminal(context, harness, status, resume).catch(async () => {
         const strings = extensionStrings(context);
         await vscode.window.showErrorMessage(`${strings["terminal.openFailed"]} (${harness.displayName})`);
+    });
+    if (resumeKey) pendingResumes.set(resumeKey, launch);
+    try {
+        await launch;
+    } finally {
+        if (resumeKey) pendingResumes.delete(resumeKey);
     }
 }
 
@@ -237,6 +251,7 @@ async function launchAgentTerminal(
     }
 
     const terminal = vscode.window.createTerminal({
+        name: resume?.terminalName,
         shellPath: executable,
         shellArgs: launch.args,
         cwd: launch.cwd,

@@ -9,6 +9,7 @@ import { supportsSessionDeletion, resumeArguments, scanSavedSessions, sessionRoo
 import { type AgentStatus } from "./status";
 import { type SessionContext, type SessionScope } from "./sessionContext";
 import { SessionDeletionError, sessionDeletionFiles } from "./deleteSession";
+import { deleteOpenCodeSession, validateOpenCodeDeletion } from "./openCodeDeletion";
 import { codexTerminalSessionFiles, ompTerminalSessionFile, restoreTerminalIdentity, windowsCodexSessionMatches } from "./terminalIdentity";
 
 export interface SavedSessions {
@@ -154,8 +155,10 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             if (!targets.length || originalScope !== scopeKey()) return;
             const detail = targets.map((session) => session.title).join("\n");
             const confirm = strings["savedSessions.deleteConfirm"].replace("{count}", String(targets.length));
-            const trashAction = strings["savedSessions.moveToTrash"];
-            if (await vscode.window.showWarningMessage(confirm, { modal: true, detail: `${detail}\n\n${strings["savedSessions.deleteHelp"]}` }, trashAction) !== trashAction) return;
+            const providerDeletion = targets.every((session) => session.harnessId === "openCode");
+            const action = strings[providerDeletion ? "savedSessions.deletePermanently" : "savedSessions.moveToTrash"];
+            const help = strings[providerDeletion ? "savedSessions.openCodeDeleteHelp" : "savedSessions.deleteHelp"];
+            if (await vscode.window.showWarningMessage(confirm, { modal: true, detail: `${detail}\n\n${help}` }, action) !== action) return;
             const roots = getRoots();
             const trashFailed: SavedSession[] = [];
             const fail = (session: SavedSession, error: unknown): void => {
@@ -173,6 +176,15 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                 }
             };
             for (const session of targets) {
+                if (session.harnessId === "openCode") {
+                    try {
+                        await validateOpenCodeDeletion(session, roots);
+                        const terminals = await sessionTerminals(session);
+                        await deleteOpenCodeSession(session, roots);
+                        finishDeletion(session, terminals);
+                    } catch (error) { fail(session, error); }
+                    continue;
+                }
                 let files: SavedSession[];
                 let terminals: vscode.Terminal[];
                 try {
@@ -437,7 +449,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                 sessionId: session.id,
                 sessionFile: session.file,
                 sessionsRoot: getRoots().find((root) => root.harnessId === session.harnessId)?.directory,
-                terminalName: `${harness.displayName} — ${session.title}`,
+                terminalName: `${harness.defaultExecutable} - ${session.title}`,
                 cwd: session.cwd,
                 args: resumeArguments(session),
             });

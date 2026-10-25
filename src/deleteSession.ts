@@ -30,8 +30,8 @@ export async function sessionDeletionFiles(session: SavedSession, roots: readonl
 
 /** Validate the live file, never a path supplied by a view or webview. */
 export async function validateSessionDeletion(session: SavedSession, roots: readonly SessionRoot[]): Promise<void> {
-    if (!supportsSessionDeletion(session.harnessId)) {
-        throw new SessionDeletionError("invalidFile", "SQLite session deletion is not supported.");
+    if (!supportsSessionDeletion(session.harnessId) || session.harnessId === "openCode") {
+        throw new SessionDeletionError("invalidFile", "This provider requires its native deletion workflow.");
     }
     const stat = await fs.lstat(session.file);
     const isZstd = session.harnessId === "deepseek" && session.file.endsWith(".jsonl.zstd");
