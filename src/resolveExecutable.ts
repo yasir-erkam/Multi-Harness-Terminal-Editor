@@ -57,7 +57,7 @@ function suffixCandidates(name: string, platform: NodeJS.Platform): string[] {
 
 function userDirectories(options: LookupOptions, platform: NodeJS.Platform): string[] {
     const home = options.user?.home ?? os.homedir();
-    const dirs: string[] = [];
+    const dirs: string[] = [path.join(home, ".grok", "bin")];
     if (platform === "win32") {
         const appData = options.user?.appData ?? process.env.APPDATA;
         const localAppData = options.user?.localAppData ?? process.env.LOCALAPPDATA;

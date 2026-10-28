@@ -19,6 +19,7 @@ const harnessIds = [
     "ohMyPi",
     "crush",
     "qwen",
+    "grokBuild",
     "primeAgent",
     "copilot",
     "antigravity",

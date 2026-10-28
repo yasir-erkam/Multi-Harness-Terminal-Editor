@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add Grok Build (`grok`) terminal launch support, including the agent picker, favorites, terminal profiles, an optional editor title-bar icon and localized executable/argument settings. Saved-session integration is not included.
+
 - Prevent Oh My Pi saved-session resumes on Linux/code-server from starting a second writer when another OMP process already holds the transcript open for writing, including other editor windows. Show a localized warning instead of triggering OMP's protective fork; preserve read-only access and resume after the writer closes.
 - Refresh the shared Open Terminals model after a conversation-topic rename so native and card layouts update without another focus change. Add saved-shell resume regressions for pending integration, timeout fallback and late integration events.
 - Set resumed terminal titles from the selected saved conversation at creation in both direct and shell modes, avoiding a delayed process-name-to-topic change in Open Terminals.

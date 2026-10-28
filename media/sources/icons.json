@@ -90,5 +90,12 @@
     "themeColors": [
       "white"
     ]
+  },
+  "grokBuild": {
+    "file": "grokBuild.svg",
+    "url": "https://unpkg.com/@lobehub/icons-static-svg@1.95.1/icons/grok.svg",
+    "themeColors": [
+      "currentColor"
+    ]
   }
 }

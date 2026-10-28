@@ -24,6 +24,7 @@ export const HARNESSES: readonly Harness[] = [
     { id: "ohMyPi", displayName: "Oh My Pi", defaultExecutable: "omp", commandId: "multiHarness.openOhMyPi" },
     { id: "crush", displayName: "Crush", defaultExecutable: "crush", commandId: "multiHarness.openCrush" },
     { id: "qwen", displayName: "Qwen Code", defaultExecutable: "qwen", commandId: "multiHarness.openQwen" },
+    { id: "grokBuild", displayName: "Grok Build", defaultExecutable: "grok", commandId: "multiHarness.openGrokBuild" },
     { id: "primeAgent", displayName: "Prime Agent", defaultExecutable: "prime-agent", commandId: "multiHarness.openPrimeAgent" },
     { id: "copilot", displayName: "Copilot CLI", defaultExecutable: "copilot", commandId: "multiHarness.openCopilot" },
     { id: "antigravity", displayName: "Antigravity CLI", defaultExecutable: "agy", commandId: "multiHarness.openAntigravity" },

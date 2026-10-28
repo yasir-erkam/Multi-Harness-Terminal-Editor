@@ -29,6 +29,18 @@ GitHub API endpoint used to fetch it.
 | 14 | Antigravity CLI | [google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli) | [2,604](https://api.github.com/repos/google-antigravity/antigravity-cli) |
 | Unranked tail | Cursor Agent | No verified CLI-specific upstream repository | Unknown |
 
+## Grok Build addition
+
+Grok Build was added on **2026-10-28** using the GitHub REST API
+[`xai-org/grok-build`](https://api.github.com/repos/xai-org/grok-build):
+**27,586** stars (response Date: `Wed, 28 Oct 2026 10:12:43 GMT`).
+The other counts above retain their original snapshot; they were not refreshed.
+Grok Build is inserted between Qwen Code and Prime Agent, making it the 12th
+ranked agent and shifting later agents down one position. Its upstream is
+[xai-org/grok-build](https://github.com/xai-org/grok-build).
+This mixed-date insertion is a fixed ordering aid, not a current comparison
+of all repositories.
+
 ## Repository mapping and limitations
 
 - [Pi's official site](https://pi.dev) links to `earendil-works/pi`. Its stars

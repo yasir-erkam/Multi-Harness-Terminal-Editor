@@ -9,7 +9,7 @@ sources are embedded unchanged in SVG wrappers.
 
 ## LobeHub brand marks (MIT)
 
-Four icons use `@lobehub/icons-static-svg` version 1.95.1:
+Five icons use `@lobehub/icons-static-svg` version 1.95.1:
 
 | Harness | Source | Mark |
 | --- | --- | --- |
@@ -17,6 +17,7 @@ Four icons use `@lobehub/icons-static-svg` version 1.95.1:
 | Codex | `openai.svg` | OpenAI blossom, as used in the official Codex IDE extension |
 | Copilot CLI | `githubcopilot.svg` | GitHub Copilot robot |
 | DeepSeek Harness | `deepseek.svg` | DeepSeek whale |
+| Grok Build | `grok.svg` (vendored as `grokBuild.svg`) | Grok mark; retrieved on 2026-10-28 |
 
 These are LobeHub's redrawn marks, not exact vendor SVG exports. Copyright (c)
 2023 LobeHub. The full MIT license is in `media/sources/LobeHub-LICENSE.txt`.

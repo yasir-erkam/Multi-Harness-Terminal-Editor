@@ -1,7 +1,7 @@
 {
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
-  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Goose, Prime Agent, Antigravity CLI, DeepSeek Harness) in native editor-area terminal tabs.",
+  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Grok Build, Goose, Prime Agent, Antigravity CLI, DeepSeek Harness) in native editor-area terminal tabs.",
   "version": "1.0.1",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
@@ -38,7 +38,9 @@
     "agy",
     "deepseek harness",
     "deepseek",
-    "dsh"
+    "dsh",
+    "grok build",
+    "grok"
   ],
   "extensionKind": [
     "workspace"
@@ -72,6 +74,7 @@
     "onCommand:multiHarness.openAider",
     "onCommand:multiHarness.openCrush",
     "onCommand:multiHarness.openQwen",
+    "onCommand:multiHarness.openGrokBuild",
     "onCommand:multiHarness.openGoose",
     "onCommand:multiHarness.openAgentPicker",
     "onTerminalProfile:multiHarness.claudeCode",
@@ -85,6 +88,7 @@
     "onTerminalProfile:multiHarness.aider",
     "onTerminalProfile:multiHarness.crush",
     "onTerminalProfile:multiHarness.qwen",
+    "onTerminalProfile:multiHarness.grokBuild",
     "onTerminalProfile:multiHarness.goose",
     "onCommand:multiHarness.openPrimeAgent",
     "onTerminalProfile:multiHarness.primeAgent",
@@ -285,6 +289,15 @@
         "icon": {
           "light": "media/qwen-light.svg",
           "dark": "media/qwen-dark.svg"
+        }
+      },
+      {
+        "command": "multiHarness.openGrokBuild",
+        "title": "%command.openGrokBuild.title%",
+        "category": "%category%",
+        "icon": {
+          "light": "media/grokBuild-light.svg",
+          "dark": "media/grokBuild-dark.svg"
         }
       },
       {
@@ -584,23 +597,28 @@
           "when": "config.multiHarness.showQwenIcon"
         },
         {
-          "command": "multiHarness.openPrimeAgent",
+          "command": "multiHarness.openGrokBuild",
           "group": "navigation@112",
+          "when": "config.multiHarness.showGrokBuildIcon"
+        },
+        {
+          "command": "multiHarness.openPrimeAgent",
+          "group": "navigation@113",
           "when": "config.multiHarness.showPrimeAgentIcon"
         },
         {
           "command": "multiHarness.openCopilot",
-          "group": "navigation@113",
+          "group": "navigation@114",
           "when": "config.multiHarness.showCopilotIcon"
         },
         {
           "command": "multiHarness.openAntigravity",
-          "group": "navigation@114",
+          "group": "navigation@115",
           "when": "config.multiHarness.showAntigravityIcon"
         },
         {
           "command": "multiHarness.openCursorAgent",
-          "group": "navigation@115",
+          "group": "navigation@116",
           "when": "config.multiHarness.showCursorAgentIcon"
         }
       ]
@@ -674,6 +692,12 @@
           "description": "%showQwenIcon.description%",
           "scope": "window"
         },
+        "multiHarness.showGrokBuildIcon": {
+          "type": "boolean",
+          "default": false,
+          "description": "%showGrokBuildIcon.description%",
+          "scope": "window"
+        },
         "multiHarness.showPrimeAgentIcon": {
           "type": "boolean",
           "default": false,
@@ -744,6 +768,12 @@
           "type": "string",
           "default": "qwen",
           "description": "%qwen.executablePath.description%",
+          "scope": "machine-overridable"
+        },
+        "multiHarness.grokBuild.executablePath": {
+          "type": "string",
+          "default": "grok",
+          "description": "%grokBuild.executablePath.description%",
           "scope": "machine-overridable"
         },
         "multiHarness.primeAgent.executablePath": {
@@ -852,6 +882,15 @@
             "type": "string"
           },
           "description": "%qwen.arguments.description%",
+          "scope": "resource"
+        },
+        "multiHarness.grokBuild.arguments": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "%grokBuild.arguments.description%",
           "scope": "resource"
         },
         "multiHarness.primeAgent.arguments": {
@@ -1060,6 +1099,10 @@
       {
         "id": "multiHarness.qwen",
         "title": "%terminal.profile.qwen.title%"
+      },
+      {
+        "id": "multiHarness.grokBuild",
+        "title": "%terminal.profile.grokBuild.title%"
       },
       {
         "id": "multiHarness.primeAgent",

@@ -93,6 +93,26 @@ test("Prime Agent resolves from its default local-bin install directory without 
     assert.equal(resolveExecutable("prime-agent", { platform: "linux", user: { home: dir } }), executable);
 });
 
+test("Grok Build resolves its default installer directory without PATH on Linux, macOS and Windows", (dir) => {
+    const bin = join(dir, ".grok", "bin");
+    mkdirSync(bin, { recursive: true });
+    const executable = join(bin, "grok");
+    writeFileSync(executable, "#!/bin/sh\n");
+    chmodSync(executable, 0o755);
+    const originalPath = process.env.PATH;
+    try {
+        process.env.PATH = "";
+        for (const platform of ["linux", "darwin"]) {
+            assert.equal(resolveExecutable("grok", { platform, user: { home: dir } }), executable);
+        }
+        writeFileSync(join(bin, "grok.exe"), "binary");
+        assert.equal(resolveWindowsExecutable("grok", { user: { home: dir } }), join(bin, "grok.exe"));
+    } finally {
+        if (originalPath === undefined) delete process.env.PATH;
+        else process.env.PATH = originalPath;
+    }
+});
+
 test("Antigravity CLI resolves from its Linux/macOS local-bin install without PATH", (dir) => {
     const bin = join(dir, ".local", "bin");
     mkdirSync(bin, { recursive: true });
@@ -1375,6 +1395,29 @@ try {
     assert.equal(agentsView.provider.getTreeItem(antigravity).contextValue, "agent");
     passed += 1;
     console.log("ok: Antigravity CLI command, profile and favorites use the configured executable and arguments");
+
+    const grokBuild = agents.find((agent) => agent.id === "grokBuild");
+    assert.equal(grokBuild.defaultExecutable, "grok");
+    assert.equal(grokBuild.commandId, "multiHarness.openGrokBuild");
+    vscodeStub.__fixture.multiHarness.grokBuild = { executablePath: fakeCli };
+    await vscodeStub.__calls.commands.find((command) => command.id === grokBuild.commandId).handler();
+    assert.equal(vscodeStub.__calls.created.at(-1).options.shellPath, fakeCli);
+    assert.equal(vscodeStub.__calls.created.at(-1).options.shellArgs, undefined);
+    vscodeStub.__fixture.multiHarness.grokBuild = { executablePath: fakeCli, arguments: ["--model", "test-model"] };
+    await vscodeStub.__calls.commands.find((command) => command.id === grokBuild.commandId).handler();
+    const grokBuildTerminal = vscodeStub.__calls.created.at(-1).options;
+    assert.equal(grokBuildTerminal.shellPath, fakeCli);
+    assert.deepEqual(grokBuildTerminal.shellArgs, ["--model", "test-model"]);
+    const grokBuildProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.grokBuild");
+    const grokBuildOptions = (await grokBuildProfile.provider.provideTerminalProfile({})).options;
+    assert.equal(grokBuildOptions.shellPath, fakeCli);
+    assert.deepEqual(grokBuildOptions.shellArgs, ["--model", "test-model"]);
+    await addFavorite.handler(grokBuild);
+    assert.equal(agentsView.provider.getTreeItem(grokBuild).contextValue, "favoriteAgent");
+    await removeFavorite.handler(grokBuild);
+    assert.equal(agentsView.provider.getTreeItem(grokBuild).contextValue, "agent");
+    passed += 1;
+    console.log("ok: Grok Build command, profile and favorites use the configured executable and arguments");
 
     const deepseek = agents.find((agent) => agent.id === "deepseek");
     assert.equal(deepseek.displayName, "DeepSeek Harness");
