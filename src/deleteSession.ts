@@ -28,10 +28,100 @@ export async function sessionDeletionFiles(session: SavedSession, roots: readonl
     return files;
 }
 
+/** Return the validated deletion path; Grok requires recursive directory deletion. */
+export async function sessionDeletionTarget(session: SavedSession, roots: readonly SessionRoot[]): Promise<string> {
+    await validateSessionDeletion(session, roots);
+    return session.harnessId === "grokBuild" ? path.dirname(path.resolve(session.file)) : session.file;
+}
+
+async function validateGrokDeletion(session: SavedSession, roots: readonly SessionRoot[]): Promise<void> {
+    const file = path.resolve(session.file);
+    const directory = path.dirname(file);
+    if (!path.isAbsolute(session.file) || path.basename(file) !== "summary.json"
+        || !/^[a-zA-Z0-9_-]{1,160}$/.test(session.id) || path.basename(directory) !== session.id) {
+        throw new SessionDeletionError("invalidFile", "The Grok session path is invalid.");
+    }
+    // Check every ancestor, including ancestors above the configured store.
+    let ancestor = directory;
+    while (true) {
+        const stat = await fs.lstat(ancestor);
+        if (stat.isSymbolicLink() || !stat.isDirectory()) {
+            throw new SessionDeletionError("invalidFile", "The Grok session has a linked or invalid ancestor.");
+        }
+        const parent = path.dirname(ancestor);
+        if (parent === ancestor) break;
+        ancestor = parent;
+    }
+    const canonicalDirectory = await fs.realpath(directory);
+    let contained = false;
+    for (const root of roots.filter((candidate) => candidate.harnessId === "grokBuild")) {
+        if (!path.isAbsolute(root.directory)) continue;
+        const canonicalRoot = await fs.realpath(root.directory).catch(() => undefined);
+        if (!canonicalRoot) continue;
+        const relative = path.relative(canonicalRoot, canonicalDirectory);
+        const parts = relative.split(path.sep);
+        contained ||= !path.isAbsolute(relative) && parts.length === 2
+            && parts.every((part) => part !== "" && part !== "." && part !== "..") && parts[1] === session.id;
+    }
+    if (!contained) {
+        throw new SessionDeletionError("outsideStore", "The Grok session is outside its configured store layout.");
+    }
+    const nativeFiles = new Set([
+        "summary.json", "updates.jsonl", "chat_history.jsonl", "events.jsonl", "system_prompt.txt",
+        "prompt_context.json", "tool_definitions.json", "plan.json", "plan_mode.json", "signals.json",
+        "resources_state.json", "rewind_points.jsonl", "usage.json", "title_refresh_idx",
+        "last_recap_main_turn", "last_recap", "feedback_drafts.json",
+    ]);
+    const entries = await fs.readdir(directory);
+    if (!entries.includes("summary.json") || !entries.includes("updates.jsonl")) {
+        throw new SessionDeletionError("changedFile", "The Grok session records are missing.");
+    }
+    for (const name of entries) {
+        const content = path.join(directory, name);
+        const stat = await fs.lstat(content);
+        if (stat.isSymbolicLink()) throw new SessionDeletionError("invalidFile", "The Grok session contains linked files.");
+        if (stat.isDirectory() && ["terminal", "recap_requests", "subagents"].includes(name)) {
+            // Nested agent records may represent other conversations; require them to be empty.
+            if ((await fs.readdir(content)).length === 0) continue;
+            throw new SessionDeletionError("sharedFile", "The Grok session contains nested data; use native deletion.");
+        }
+        const base = name.endsWith(".lock") ? name.slice(0, -5) : name;
+        if (!nativeFiles.has(base)) throw new SessionDeletionError("sharedFile", "The Grok session contains unrecognized data.");
+        if (!stat.isFile() || stat.nlink !== 1) throw new SessionDeletionError("invalidFile", "The Grok session contains linked or non-regular files.");
+        if (path.dirname(await fs.realpath(content)) !== canonicalDirectory) {
+            throw new SessionDeletionError("outsideStore", "The Grok session content is outside its directory.");
+        }
+    }
+    let row: any;
+    try {
+        row = JSON.parse(await fs.readFile(file, "utf8"));
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code) throw error;
+        throw new SessionDeletionError("changedFile", "The Grok session summary is invalid; refresh the session list.");
+    }
+    if (typeof row?.info?.id !== "string" || row.info.id !== session.id
+        || typeof row.info.cwd !== "string" || !path.isAbsolute(row.info.cwd) || row.info.cwd.includes("\u0000")
+        || !path.isAbsolute(session.cwd) || session.cwd.includes("\u0000")
+        || row.session_kind === "subagent" || row.session_kind === "chat") {
+        throw new SessionDeletionError("changedFile", "The Grok session identity changed; refresh the session list.");
+    }
+    const normalize = async (value: string): Promise<string> => {
+        const resolved = await fs.realpath(value).catch(() => path.resolve(value));
+        return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+    };
+    if (await normalize(row.info.cwd) !== await normalize(session.cwd)) {
+        throw new SessionDeletionError("changedFile", "The Grok session project changed; refresh the session list.");
+    }
+}
+
 /** Validate the live file, never a path supplied by a view or webview. */
 export async function validateSessionDeletion(session: SavedSession, roots: readonly SessionRoot[]): Promise<void> {
     if (!supportsSessionDeletion(session.harnessId) || session.harnessId === "openCode") {
         throw new SessionDeletionError("invalidFile", "This provider requires its native deletion workflow.");
+    }
+    if (session.harnessId === "grokBuild") {
+        await validateGrokDeletion(session, roots);
+        return;
     }
     const stat = await fs.lstat(session.file);
     const isZstd = session.harnessId === "deepseek" && session.file.endsWith(".jsonl.zstd");

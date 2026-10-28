@@ -135,7 +135,7 @@ export function scanZstdFrames(buffer: Buffer): ZstdFrameScan {
 
 /** Providers with identity-validated JSONL or provider-native deletion. */
 export function supportsSessionDeletion(harnessId: string): boolean {
-    return ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "deepseek", "openCode"].includes(harnessId);
+    return ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "deepseek", "grokBuild", "openCode"].includes(harnessId);
 }
 
 /** Native session stores only; unsupported agents are deliberately not inferred. */
@@ -151,6 +151,7 @@ export function sessionRoots(home = os.homedir(), env: NodeJS.ProcessEnv = proce
         { harnessId: "primeAgent", directory: primeSessionDirectory ? expand(primeSessionDirectory) : path.join(base("PRIME_AGENT_CODING_AGENT_DIR", ".prime/agent"), "sessions") },
         { harnessId: "antigravity", directory: path.join(home, ".gemini", "antigravity-cli") },
         { harnessId: "deepseek", directory: path.join(base("DSH_HOME", ".dsh"), "sessions") },
+        { harnessId: "grokBuild", directory: path.join(base("GROK_HOME", ".grok"), "sessions") },
         { harnessId: "openCode", directory: path.join(base("XDG_DATA_HOME", ".local/share"), "opencode") },
     ];
 }
@@ -256,6 +257,57 @@ async function scanAntigravity(root: SessionRoot, matches: (directory: string) =
         }
         sessions.push({ harnessId: root.harnessId, id, cwd, file, modified, title: clean(row.title) || clean(row.preview) || id });
     }
+    return sessions;
+}
+
+/** Grok indexes conversations by encoded workspace and session ID; logs stay unread. */
+async function scanGrokBuild(root: SessionRoot, matches: (directory: string) => Promise<boolean>, options: SessionScanOptions): Promise<SavedSession[]> {
+    const sessions: SavedSession[] = [];
+    let visited = 0;
+    async function walk(directory: string, depth: number): Promise<void> {
+        try {
+            const entries = await fs.opendir(directory);
+            for await (const entry of entries) {
+                if (options.signal?.aborted) return;
+                if (++visited > (options.maxEntries ?? 20_000)) throw new Error("Grok metadata scan limit exceeded");
+                const file = path.join(directory, entry.name);
+                if (entry.isDirectory() && depth < 2) {
+                    await walk(file, depth + 1);
+                } else if (depth === 2 && entry.isFile() && entry.name === "summary.json") {
+                    try {
+                        const handle = await fs.open(file, "r");
+                        let row: Record<string, any>;
+                        try {
+                            const buffer = Buffer.alloc(WINDOW_BYTES + 1);
+                            const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+                            if (bytesRead > WINDOW_BYTES) continue;
+                            row = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+                        } finally {
+                            await handle.close();
+                        }
+                        const id = row?.info?.id;
+                        const cwd = row?.info?.cwd;
+                        if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(id)
+                            || id !== path.basename(directory) || typeof cwd !== "string" || !path.isAbsolute(cwd) || cwd.includes("\0")
+                            || row.session_kind === "subagent" || row.session_kind === "chat"
+                            || !(typeof row.num_messages === "number" && row.num_messages > 0)
+                            || !await matches(cwd)) continue;
+                        const log = await fs.lstat(path.join(directory, "updates.jsonl"));
+                        if (!log.isFile() || log.size === 0) continue;
+                        const modified = parseTimestamp(row.updated_at) || parseTimestamp(row.created_at);
+                        if (!modified) continue;
+                        sessions.push({ harnessId: root.harnessId, id, cwd, file, modified,
+                            title: clean(row.generated_title) || clean(row.session_summary) || id });
+                    } catch (error) {
+                        if (!(error instanceof SyntaxError) && !["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+                    }
+                }
+            }
+        } catch (error) {
+            if (!["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+        }
+    }
+    await walk(root.directory, 0);
     return sessions;
 }
 
@@ -576,6 +628,14 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
             unreadable.add(root.harnessId);
             return Promise.resolve();
         }
+        if (root.harnessId === "grokBuild") {
+            try {
+                indexedSessions.push(...await scanGrokBuild(root, matches, options));
+            } catch {
+                unreadable.add(root.harnessId);
+            }
+            return;
+        }
         if (root.harnessId === "openCode") {
             try {
                 indexedSessions.push(...await scanOpenCode(root, matches, options));
@@ -646,6 +706,7 @@ export function resumeArguments(session: SavedSession): string[] {
         case "antigravity": return ["--conversation", session.id];
         case "codex": return ["resume", session.id];
         case "claudeCode":
+        case "grokBuild":
         case "deepseek": return ["--resume", session.id];
         case "pi": return ["--session", session.file];
         case "ohMyPi":

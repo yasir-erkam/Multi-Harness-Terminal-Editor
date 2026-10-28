@@ -979,6 +979,12 @@
           "description": "%ohMyPi.sessionDirectory.description%",
           "scope": "machine-overridable"
         },
+        "multiHarness.grokBuild.sessionDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%grokBuild.sessionDirectory.description%",
+          "scope": "machine-overridable"
+        },
         "multiHarness.primeAgent.sessionDirectory": {
           "type": "string",
           "default": "",

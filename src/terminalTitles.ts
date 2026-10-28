@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { HARNESSES } from "./harnesses";
 import { scanSavedSessions, sessionRoots } from "./savedSessions";
-import { ompTerminalSessionFile, restoreTerminalIdentity } from "./terminalIdentity";
+import { grokTerminalSessionId, ompTerminalSessionFile, restoreTerminalIdentity } from "./terminalIdentity";
 
 /** Rename only the active terminal: VS Code's rename command has no target argument. */
 export function registerTerminalTitles(context: vscode.ExtensionContext, onDidRename: () => void): void {
@@ -27,11 +27,13 @@ export function registerTerminalTitles(context: vscode.ExtensionContext, onDidRe
             }
             const file = identity.harnessId === "ohMyPi"
                 ? await ompTerminalSessionFile(terminal, root.directory) : undefined;
-            if (!file && !identity.sessionId) return;
+            const grokId = identity.harnessId === "grokBuild" ? await grokTerminalSessionId(terminal, root.directory) : undefined;
+            const sessionId = grokId === undefined ? identity.sessionId : grokId;
+            if (!file && !sessionId) return;
             const scan = await scanSavedSessions([root], Number.MAX_SAFE_INTEGER);
             const session = scan.sessions.find((candidate) => file
                 ? path.relative(candidate.file, file) === ""
-                : candidate.id === identity.sessionId);
+                : candidate.id === sessionId);
             if (!session || !session.title || session.title === session.id) return;
             const title = `${harness.defaultExecutable} - ${session.title}`;
             // Async disk reads must not rename a newly focused or closed terminal.

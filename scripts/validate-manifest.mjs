@@ -194,6 +194,8 @@ const dshSessions = properties["multiHarness.deepseek.sessionDirectory"];
 check(dshSessions?.type === "string" && dshSessions.default === "" && dshSessions.scope === "machine-overridable", "DeepSeek Harness session directory override is declared");
 const openCodeSessions = properties["multiHarness.openCode.sessionDirectory"];
 check(openCodeSessions?.type === "string" && openCodeSessions.default === "" && openCodeSessions.scope === "machine-overridable", "OpenCode session directory override is declared");
+const grokSessions = properties["multiHarness.grokBuild.sessionDirectory"];
+check(grokSessions?.type === "string" && grokSessions.default === "" && grokSessions.scope === "machine-overridable", "Grok Build session directory override is declared");
 const fullEditorArea = properties["multiHarness.useFullEditorArea"];
 check(fullEditorArea?.type === "boolean" && fullEditorArea.default === true && fullEditorArea.scope === "window", "full editor area defaults to enabled with window scope");
 const launchMode = properties["multiHarness.launchMode"];

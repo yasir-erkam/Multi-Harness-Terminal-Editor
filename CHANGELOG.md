@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Add Grok Build (`grok`) terminal launch support, including the agent picker, favorites, terminal profiles, an optional editor title-bar icon and localized executable/argument settings. Saved-session integration is not included.
+- Add Grok Build (`grok`) terminal launch support, including the agent picker, favorites, terminal profiles, an optional editor title-bar icon and localized executable/argument settings.
+- Add Grok Build saved-history listing and resume, with a session-directory override and discovery from `~/.grok/sessions` or `$GROK_HOME/sessions`. Custom-store resumes use the parent Grok home for both direct and shell terminals, including its authentication/configuration; unsupported layouts show a localized error. Add confirmed single/bulk Grok session-directory deletion with live identity, canonical boundary, link and content validation. Linux registry/process-start verification tracks unambiguous fresh/switched conversations and guards cross-window resumes/deletions; other platforms retain saved resume identity.
 
 - Prevent Oh My Pi saved-session resumes on Linux/code-server from starting a second writer when another OMP process already holds the transcript open for writing, including other editor windows. Show a localized warning instead of triggering OMP's protective fork; preserve read-only access and resume after the writer closes.
 - Refresh the shared Open Terminals model after a conversation-topic rename so native and card layouts update without another focus change. Add saved-shell resume regressions for pending integration, timeout fallback and late integration events.

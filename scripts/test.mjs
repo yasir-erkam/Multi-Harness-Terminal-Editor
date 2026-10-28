@@ -303,12 +303,108 @@ await build({
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
 });
 const { scanSavedSessions, resumeArguments, sessionRoots, supportsSessionDeletion } = await import(pathToFileURL(join(outdir, "savedSessions.test.mjs")).href);
+
+
+await build({ entryPoints: [join(projectRoot, "src", "grokSessions.ts")], outfile: join(outdir, "grokSessions.test.mjs"), bundle: true, format: "esm", platform: "node", logLevel: "silent" });
+const { grokOwners, grokSessionForProcess } = await import(pathToFileURL(join(outdir, "grokSessions.test.mjs")).href);
+const grokOwnerDir = mkdtempSync(join(tmpdir(), "mhte-grok-owner-"));
+try {
+    const proc = join(grokOwnerDir, "proc");
+    const store = join(grokOwnerDir, "sessions");
+    mkdirSync(store);
+    const registry = join(grokOwnerDir, "active_sessions.json");
+    for (const pid of [100, 101, 102]) {
+        mkdirSync(join(proc, String(pid), "task", String(pid)), { recursive: true });
+        const fields = Array(20).fill("0"); fields[19] = String(pid * 10);
+        writeFileSync(join(proc, String(pid), "stat"), pid + " (grok with spaces) " + fields.join(" "));
+        writeFileSync(join(proc, String(pid), "task", String(pid), "children"), pid === 100 ? "101" : "102");
+    }
+    const writeOwners = (rows) => writeFileSync(registry, JSON.stringify(rows));
+    writeOwners([{ session_id: "first", pid: 101, pid_start: 1010 }]);
+    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc), proc), "first");
+    writeOwners([{ session_id: "switched", pid: 101, pid_start: 1010 }, { session_id: "nested", pid: 102, pid_start: 1020 }]);
+    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc), proc), "switched", "nested tool agents do not claim the terminal");
+    writeOwners([{ session_id: "stale", pid: 101, pid_start: 1 }]);
+    assert.deepEqual(await grokOwners(store, proc), []);
+    writeOwners([{ session_id: "one", pid: 101, pid_start: 1010 }, { session_id: "two", pid: 101, pid_start: 1010 }]);
+    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc), proc), undefined, "shared daemon sessions remain ambiguous");
+    writeFileSync(registry, "{");
+    await assert.rejects(grokOwners(store, proc));
+    assert.deepEqual(await grokOwners(store, proc, "win32"), []);
+    writeOwners([{ session_id: "invalid", pid: 101 }]);
+    await assert.rejects(grokOwners(store, proc), /identity/);
+    writeFileSync(registry + ".corrupt", "preserved backup");
+    await assert.rejects(grokOwners(store, proc), /corrupt backup/);
+    rmSync(registry + ".corrupt");
+    rmSync(registry);
+    assert.deepEqual(await grokOwners(store, proc), []);
+    passed += 1;
+    console.log("ok: Grok registry verifies PID reuse, fresh/switched sessions, nested processes, shared-daemon ambiguity and corrupt stores");
+} finally { rmSync(grokOwnerDir, { recursive: true, force: true }); }
+
+const grokDir = mkdtempSync(join(tmpdir(), "mhte-grok-"));
+try {
+    const root = sessionRoots(grokDir, {}).find((entry) => entry.harnessId === "grokBuild");
+    assert.equal(root.directory, join(grokDir, ".grok", "sessions"));
+    assert.equal(sessionRoots(grokDir, { GROK_HOME: "~/custom-grok" }).find((entry) => entry.harnessId === "grokBuild").directory, join(grokDir, "custom-grok", "sessions"));
+    const project = join(grokDir, "project");
+    mkdirSync(project);
+    function grokSession(id, extra = {}, group = encodeURIComponent(project)) {
+        const directory = join(root.directory, group, id);
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, "updates.jsonl"), "conversation log is deliberately not parsed\n");
+        writeFileSync(join(directory, "summary.json"), JSON.stringify({ info: { id, cwd: project }, generated_title: "Grok conversation", session_summary: "Fallback title",
+            created_at: "2026-10-20T10:00:00Z", updated_at: "2026-10-21T10:00:00.123456789Z", num_messages: 2, ...extra }));
+        return directory;
+    }
+    const main = grokSession("main");
+    grokSession("fork", { parent_session_id: "main", generated_title: "", updated_at: "2026-10-22T10:00:00Z" });
+    grokSession("hashed", {}, "project-hash");
+    grokSession("child", { session_kind: "subagent" });
+    grokSession("chat", { session_kind: "chat" });
+    grokSession("empty", { num_messages: 0 });
+    grokSession("foreign", { info: { id: "foreign", cwd: grokDir } });
+    grokSession("mismatch", { info: { id: "different", cwd: project } });
+    grokSession("relative", { info: { id: "relative", cwd: "relative/path" } });
+    grokSession("bad-date", { updated_at: "invalid", created_at: "invalid" });
+    rmSync(join(grokSession("missing-log"), "updates.jsonl"));
+    writeFileSync(join(grokSession("partial"), "summary.json"), '{"info":');
+    writeFileSync(join(grokSession("null-metadata"), "summary.json"), "null");
+    const linkedLog = grokSession("linked-log");
+    rmSync(join(linkedLog, "updates.jsonl"));
+    fileSymlink(join(main, "updates.jsonl"), join(linkedLog, "updates.jsonl"));
+    writeFileSync(join(grokSession("oversized"), "summary.json"), " ".repeat(256 * 1024 + 1));
+    let scan = await scanSavedSessions([root], 100, { harnessId: "grokBuild", cwd: project });
+    assert.deepEqual(scan.unreadable, []);
+    assert.deepEqual(new Set(scan.sessions.map((entry) => entry.id)), new Set(["main", "fork", "hashed"]));
+    assert.equal(scan.sessions[0].id, "fork", "metadata timestamps order Grok sessions independently of file mtime");
+    assert.equal(scan.sessions[0].title, "Fallback title");
+    const saved = scan.sessions.find((entry) => entry.id === "main");
+    assert.equal(saved.file, join(main, "summary.json"));
+    assert.equal(saved.modified, Date.parse("2026-10-21T10:00:00.123Z"));
+    assert.deepEqual(resumeArguments(saved), ["--resume", "main"]);
+    assert.equal(supportsSessionDeletion("grokBuild"), true);
+    assert.equal((await scanSavedSessions([root])).sessions.length, 4);
+    assert.equal((await scanSavedSessions([root], 1)).sessions.length, 1);
+    const controller = new AbortController(); controller.abort();
+    assert.deepEqual(await scanSavedSessions([root], 100, undefined, { signal: controller.signal }), { sessions: [], unreadable: [] });
+    assert.deepEqual((await scanSavedSessions([root], 100, undefined, { maxEntries: 1 })).unreadable, ["grokBuild"]);
+    writeFileSync(join(main, "summary.json"), JSON.stringify({ info: { id: "main", cwd: project }, generated_title: "Renamed conversation", num_messages: 3, updated_at: "2026-10-25T10:00:00Z" }));
+    scan = await scanSavedSessions([root], 100, { harnessId: "grokBuild", cwd: project });
+    assert.equal(scan.sessions[0].title, "Renamed conversation");
+    rmSync(main, { recursive: true });
+    assert.equal((await scanSavedSessions([root])).sessions.some((entry) => entry.id === "main"), false);
+    passed += 1;
+    console.log("ok: Grok Build metadata discovery scopes projects, resumes IDs, hides child/empty/invalid stores and refreshes titles with bounded reads");
+} finally {
+    rmSync(grokDir, { recursive: true, force: true });
+}
 await build({
     entryPoints: [join(projectRoot, "src", "deleteSession.ts")],
     outfile: join(outdir, "deleteSession.test.mjs"),
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
 });
-const { validateSessionDeletion, sessionDeletionFiles } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
+const { validateSessionDeletion, sessionDeletionFiles, sessionDeletionTarget } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
 await build({
     entryPoints: [join(projectRoot, "src", "openCodeDeletion.ts")],
     outfile: join(outdir, "openCodeDeletion.test.mjs"),
@@ -363,13 +459,43 @@ const { codexLaunchArgs } = await import(pathToFileURL(join(outdir, "codexLaunch
     passed += 1;
     console.log("ok: Windows Codex process matching follows wrappers and rejects other sessions, nested agents and reused PIDs");
 }
+const grokDeleteDir = mkdtempSync(join(tmpdir(), "mhte-grok-delete-"));
+try {
+    const root = { harnessId: "grokBuild", directory: join(grokDeleteDir, "sessions") };
+    const directory = join(root.directory, "project", "delete-grok");
+    mkdirSync(directory, { recursive: true });
+    const session = { harnessId: "grokBuild", id: "delete-grok", cwd: grokDeleteDir, file: join(directory, "summary.json"), title: "Delete", modified: 0 };
+    const summary = { info: { id: session.id, cwd: session.cwd } };
+    writeFileSync(session.file, JSON.stringify(summary));
+    writeFileSync(join(directory, "updates.jsonl"), "{}\n");
+    writeFileSync(join(directory, "chat_history.jsonl"), "{}\n");
+    writeFileSync(join(directory, "summary.json.lock"), "");
+    assert.equal(await sessionDeletionTarget(session, [root]), directory);
+    writeFileSync(session.file, JSON.stringify({ info: { id: "other", cwd: session.cwd } }));
+    await assert.rejects(sessionDeletionTarget(session, [root]), /identity changed/);
+    writeFileSync(session.file, JSON.stringify(summary));
+    await assert.rejects(sessionDeletionTarget(session, [{ ...root, directory: join(grokDeleteDir, "elsewhere") }]), /outside/);
+    writeFileSync(join(directory, "unknown.txt"), "preserve");
+    await assert.rejects(sessionDeletionTarget(session, [root]), /unrecognized/);
+    rmSync(join(directory, "unknown.txt"));
+    const nested = join(directory, "subagents"); mkdirSync(nested); writeFileSync(join(nested, "child"), "preserve");
+    await assert.rejects(sessionDeletionTarget(session, [root]), /nested/);
+    rmSync(nested, { recursive: true });
+    if (fileSymlink(session.file, join(directory, "usage.json"))) {
+        await assert.rejects(sessionDeletionTarget(session, [root]), /linked/);
+        rmSync(join(directory, "usage.json"));
+    }
+    passed += 1;
+    console.log("ok: Grok recursive deletion validates identity, native metadata, boundaries, unknown data and symlinks");
+} finally { rmSync(grokDeleteDir, { recursive: true, force: true }); }
+
 const deletionDir = mkdtempSync(join(tmpdir(), "mhte-delete-"));
 try {
     const roots = sessionRoots(deletionDir, {});
     for (const id of ["", "unknown", "gemini", "goose", "aider", "crush", "qwen", "copilot", "cursorAgent", "antigravity"]) {
         assert.equal(supportsSessionDeletion(id), false, `${id} must not expose unsupported deletion actions`);
     }
-    for (const root of roots.filter((root) => supportsSessionDeletion(root.harnessId) && root.harnessId !== "openCode")) {
+    for (const root of roots.filter((root) => supportsSessionDeletion(root.harnessId) && !["openCode", "grokBuild"].includes(root.harnessId))) {
         mkdirSync(root.directory, { recursive: true });
         const id = `delete-${root.harnessId}`;
         const header = root.harnessId === "codex" ? { type: "session_meta", payload: { id, cwd: deletionDir } }
@@ -497,7 +623,7 @@ try {
 }
 const savedDir = mkdtempSync(join(tmpdir(), "mhte-saved-"));
 try {
-    const roots = sessionRoots(savedDir, {}).filter((root) => supportsSessionDeletion(root.harnessId) && root.harnessId !== "openCode");
+    const roots = sessionRoots(savedDir, {}).filter((root) => supportsSessionDeletion(root.harnessId) && !["openCode", "grokBuild"].includes(root.harnessId));
     const fixture = (harnessId, id, cwd, title, modified) => {
         const root = roots.find((candidate) => candidate.harnessId === harnessId);
         mkdirSync(root.directory, { recursive: true });
@@ -1162,7 +1288,7 @@ module.exports = {
         onDidEndTerminalShellExecution(handler) { calls.executionEndHandlers.push(handler); return { dispose() {} }; },
     },
     workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration,
-        fs: { async delete(uri, options) { calls.fsDeletes.push({ file: uri.fsPath, options }); await require("node:fs/promises").unlink(uri.fsPath); } },
+        fs: { async delete(uri, options) { calls.fsDeletes.push({ file: uri.fsPath, options }); await require("node:fs/promises").rm(uri.fsPath, { recursive: options.recursive }); } },
         onDidChangeWorkspaceFolders(handler) { return subscribeTerminalEvent(calls.workspaceFolderHandlers, handler); },
         onDidChangeConfiguration() { return { dispose() {} }; } },
     Uri: { file: (fsPath) => ({ fsPath }), joinPath: (base, ...parts) => ({ fsPath: require("node:path").join(base.fsPath, ...parts), path: parts.join("/") }) },
@@ -1579,9 +1705,9 @@ try {
     const savedSessionRows = async () => (await Promise.all((await savedView.provider.getChildren()).map((item) =>
         "day" in item ? savedView.provider.getChildren(item) : []))).flat();
     const savedRoot = join(activationDir, "saved-conversations");
-    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity", "deepseek", "openCode"]) {
+    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity", "deepseek", "openCode", "grokBuild"]) {
         vscodeStub.__fixture.multiHarness[id] ??= {};
-        vscodeStub.__fixture.multiHarness[id].sessionDirectory = join(savedRoot, id);
+        vscodeStub.__fixture.multiHarness[id].sessionDirectory = id === "grokBuild" ? join(savedRoot, id, "sessions") : join(savedRoot, id);
     }
     const projectDirectory = join(activationDir, "recorded-project");
     mkdirSync(projectDirectory);
@@ -1638,6 +1764,84 @@ try {
     assert.ok(savedItem.description.includes("Prime Agent"));
     assert.ok(savedItem.description.includes("recorded-project"));
     const resume = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.resumeSession");
+    const grokHistory = join(vscodeStub.__fixture.multiHarness.grokBuild.sessionDirectory, encodeURIComponent(projectDirectory), "saved-grok");
+    mkdirSync(grokHistory, { recursive: true });
+    writeFileSync(join(grokHistory, "summary.json"), JSON.stringify({ info: { id: "saved-grok", cwd: projectDirectory }, generated_title: "Saved Grok topic", num_messages: 2, updated_at: "2026-10-28T10:00:00Z" }));
+    writeFileSync(join(grokHistory, "updates.jsonl"), "{}\n");
+    await selectSessionAgent.handler("grokBuild");
+    const grokRows = await savedSessionRows();
+    assert.equal(grokRows.length, 1);
+    assert.equal(savedView.provider.getTreeItem(grokRows[0]).label, "Saved Grok topic");
+    assert.equal(savedView.provider.getTreeItem(grokRows[0]).contextValue.includes("deletable"), false);
+    await resume.handler(grokRows[0]);
+    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--resume", "saved-grok", "--model", "test-model"]);
+    assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
+    assert.equal(vscodeStub.__calls.created.at(-1).options.env.GROK_HOME, join(savedRoot, "grokBuild"));
+    const grokHarness = agents.find((agent) => agent.id === "grokBuild");
+    const customResume = { sessionId: "custom-grok", sessionsRoot: join(savedRoot, "other-grok", "sessions"), terminalName: "Custom Grok", cwd: projectDirectory, args: ["--resume", "custom-grok"] };
+    const beforeInvalidGrok = vscodeStub.__calls.created.length;
+    await resumeLauncher.openAgentTerminal(context, grokHarness, undefined, { ...customResume, sessionsRoot: join(savedRoot, "invalid-store") });
+    assert.equal(vscodeStub.__calls.created.length, beforeInvalidGrok);
+    assert.ok(vscodeStub.__calls.errors.at(-1).includes("<GROK_HOME>/sessions"));
+    const previousGrokMode = vscodeStub.__fixture.multiHarness.launchMode;
+    try {
+        vscodeStub.__fixture.multiHarness.launchMode = "shell";
+        const grokCreatedBefore = vscodeStub.__calls.created.length;
+        const pendingGrok = resumeLauncher.openAgentTerminal(context, grokHarness, undefined, customResume);
+        for (let attempt = 0; attempt < 100 && vscodeStub.__calls.created.length === grokCreatedBefore; attempt++) await new Promise((resolve) => setTimeout(resolve, 5));
+        const createdGrok = vscodeStub.__calls.created.at(-1);
+        assert.equal(createdGrok.options.shellPath, undefined);
+        assert.equal(createdGrok.options.env.GROK_HOME, join(savedRoot, "other-grok"));
+        const executedGrok = [];
+        vscodeStub.__calls.shellIntegrationHandlers.forEach((handler) => handler({ terminal: createdGrok.terminal,
+            shellIntegration: { executeCommand(executable, args) { executedGrok.push({ executable, args }); return {}; } } }));
+        await pendingGrok;
+        assert.deepEqual(executedGrok, [{ executable: fakeCli, args: ["--resume", "custom-grok", "--model", "test-model"] }]);
+    } finally {
+        vscodeStub.__fixture.multiHarness.launchMode = previousGrokMode;
+    }
+    await resumeLauncher.openAgentTerminal(context, grokHarness, undefined, { ...customResume, sessionId: "default-grok", sessionsRoot: sessionRoots().find((entry) => entry.harnessId === "grokBuild").directory });
+    assert.equal(vscodeStub.__calls.created.at(-1).options.env.GROK_HOME, undefined, "default resumes inherit the existing Grok home");
+    const deleteGrok = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.deleteSession");
+    const deleteGrokBefore = vscodeStub.__calls.fsDeletes.length;
+    vscodeStub.__calls.warningResults.push(undefined);
+    await deleteGrok.handler(grokRows[0]);
+    assert.equal(vscodeStub.__calls.fsDeletes.length, deleteGrokBefore);
+    let grokClosed = 0;
+    const grokLiveTerminal = { name: "Renamed Grok", processId: Promise.resolve(process.pid), creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "grokBuild", launchMode: "direct", sessionId: "old-session" }) } }, dispose() { grokClosed++; } };
+    const grokRegistry = join(savedRoot, "grokBuild", "active_sessions.json");
+    if (process.platform === "linux") {
+        const procStat = readFileSync("/proc/" + process.pid + "/stat", "utf8");
+        writeFileSync(grokRegistry, JSON.stringify([{ session_id: "saved-grok", pid: process.pid, pid_start: Number(procStat.slice(procStat.lastIndexOf(")") + 2).trim().split(/\s+/)[19]) }]));
+        const createdBeforeOwner = vscodeStub.__calls.created.length;
+        await resume.handler(grokRows[0]);
+        assert.equal(vscodeStub.__calls.created.length, createdBeforeOwner, "another window's live Grok owner prevents a second writer");
+        vscodeStub.window.terminals = [grokLiveTerminal];
+    }
+    vscodeStub.__calls.warningResults.push("Move to Trash");
+    await deleteGrok.handler(grokRows[0]);
+    if (process.platform === "linux") {
+        assert.equal(grokClosed, 1, "live switched identity closes its terminal after successful deletion");
+        rmSync(grokRegistry);
+        vscodeStub.window.terminals = [];
+    }
+    assert.equal(existsSync(grokHistory), false);
+    assert.deepEqual(vscodeStub.__calls.fsDeletes.at(-1), { file: grokHistory, options: { recursive: true, useTrash: true } });
+    for (const id of ["bulk-one", "bulk-two"]) {
+        const directory = join(vscodeStub.__fixture.multiHarness.grokBuild.sessionDirectory, "project", id);
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, "summary.json"), JSON.stringify({ info: { id, cwd: projectDirectory }, num_messages: 2, updated_at: "2026-10-28T10:00:00Z" }));
+        writeFileSync(join(directory, "updates.jsonl"), "{}\n");
+    }
+    await vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.refreshSessions").handler();
+    await vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.toggleSessionSelectionMode").handler();
+    await vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.selectAllSessions").handler();
+    vscodeStub.__calls.warningResults.push("Move to Trash");
+    await vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.deleteSelectedSessions").handler();
+    assert.equal((await savedSessionRows()).length, 0, "bulk Grok deletion removes both directories");
+    await selectSessionAgent.handler("primeAgent");
+    passed += 1;
+    console.log("ok: Grok Build native history rows resume the selected ID in its project without deletion actions");
     const originalCreateTerminalForResume = vscodeStub.window.createTerminal;
     try {
         vscodeStub.window.createTerminal = (options) => {

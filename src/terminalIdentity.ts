@@ -1,4 +1,5 @@
 import { readFile, readdir, readlink, realpath, stat } from "node:fs/promises";
+import { grokOwners, grokSessionForProcess } from "./grokSessions";
 import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -192,4 +193,18 @@ export async function windowsCodexSessionMatches(terminals: readonly vscode.Term
         if (result !== undefined) matches.set(candidate.terminal, result);
     }
     return matches;
+}
+
+/** Null means live identity could not be proven; callers must avoid stale resume IDs. */
+export async function grokTerminalSessionId(terminal: vscode.Terminal, sessionsRoot: string): Promise<string | null | undefined> {
+    if ((await restoreTerminalIdentity(terminal))?.harnessId !== "grokBuild") return undefined;
+    if (process.platform !== "linux") return undefined;
+    if (terminal.exitStatus) return null;
+    try {
+        const owners = await grokOwners(sessionsRoot);
+        const pid = await terminal.processId;
+        return pid ? await grokSessionForProcess(pid, owners) ?? null : null;
+    } catch {
+        return null;
+    }
 }
