@@ -43,6 +43,7 @@ Her yetenek için **destekli**, **kısıtlı**, **uygulanmamış** veya **sağla
 | BASE-10 | Native ve cards MUST aynı yetenek, seçim, kapsam ve komut doğrulamasını paylaşmalı. Webview'den dosya yolu veya süreç kimliği otorite olarak kabul edilmemeli. |
 | BASE-11 | Yeni kullanıcı mesajları MUST İngilizce/Türkçe eşleşen yerelleştirme anahtarlarıyla sunulmalı. Trusted, non-virtual workspace sınırı korunmalı. |
 | BASE-12 | Çalışıyor/bitti göstergesi MUST yalnızca gözlemlenen süreç/shell olaylarını anlatmalı; modelin düşündüğü, yanıtladığı veya tamamladığı iddia edilmemeli. |
+| BASE-13 | Yeni direct/profile terminalleri MUST varsayılan olarak yalnızca başarılı CLI çıkışında otomatik kapanmalı. Hatalı, sinyalli ve bilinmeyen çıkışlar açık tutulmalı; `never`/`always` ayarı başlatmada uygulanmalı. Shell komutunun bitmesi açık shell'i kapatmamalı; hiçbir çıkış politikası kayıtlı geçmişi silmemeli. Çıktısı tutulan ama CLI'ı bitmiş terminal resume için çalışan oturum sayılmamalı. |
 
 ## 4. Geçmiş listeleme ve devam etme
 
@@ -164,6 +165,7 @@ Her destek iddiası şu davranışlarla doğrulanmalı. Kalıcı testler kullan�
 
 - `src/harnesses.ts`: sabit 16 harness registry'si, ayar ve ikon kimlikleri.
 - `src/launch.ts`, `src/profiles.ts`, `src/workspaceContext.ts`: ortak başlatma, resume tekilleştirme ve proje/host bağlamı.
+- `src/terminalExit.ts`, `media/terminal-launcher.cjs`: direct/profile çıkış politikası, gerçek TTY aktarımı ve hata çıktısının korunması.
 - `src/savedSessions.ts`: native store keşfi, tarama, resume argümanları ve silme destek listesi.
 - `src/savedSessionsView.ts`: kapsamlı seçim, onay, silme, terminal eşleme ve silmeden sonra kapatma.
 - `src/deleteSession.ts`, `src/openCodeDeletion.ts`: dosya/klasör ve OpenCode native silme güvenliği.

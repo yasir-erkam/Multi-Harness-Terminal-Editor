@@ -10,6 +10,7 @@ import { registerSessionContext } from "./sessionContext";
 import { registerSavedSessionsView } from "./savedSessionsView";
 import { harnessForTerminal } from "./terminalIdentity";
 import { registerTerminalTitles } from "./terminalTitles";
+import { cleanupTerminalExit } from "./terminalExit";
 
 export function activate(context: vscode.ExtensionContext): void {
     const status = registerAgentStatus(context);
@@ -57,6 +58,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         vscode.window.onDidCloseTerminal((terminal) => {
+            void cleanupTerminalExit(terminal);
             const config = vscode.workspace.getConfiguration("multiHarness");
             if (!config.get<boolean>("notifyOnExit", false)) {
                 return;

@@ -57,9 +57,12 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
 - **Terminal profile dropdown.** Every agent is also contributed as a VS Code terminal profile (`multiHarness.<id>`), so you can start one from the terminal panel's `+` dropdown; a profile cannot launch if its executable cannot be resolved.
 - **Per-agent editor title-bar icons.** Every agent has its own toggle, `multiHarness.show<Id>Icon` (boolean, default `false`). Enable only the agents you want in the editor title bar.
 - **Exit notifications.** With `multiHarness.notifyOnExit` enabled (default `false`), the extension shows a notification containing the exit code when an agent terminal closes, so a crashed or non-zero CLI does not pass unnoticed.
+- **Automatic exit cleanup.** New direct-mode terminals (including resumes and terminal profiles) close automatically only when the CLI exits successfully (`0`). Failed, signaled and unknown exits keep their output open until you press a key or close the tab. Set `multiHarness.autoCloseOnExit` to `never` to retain every exit, or `always` to close every exit, including errors. The policy is captured at launch; existing terminals are unchanged. Shell-mode terminals keep their shell open when the agent command finishes. Saved conversations are never deleted by this policy. Direct terminals use a small inherited-stdio Node launcher so the real terminal/TTY stays available to the CLI; closing a retained tab reports the original CLI exit code where available.
+  A retained output tab is not a running conversation: resume starts a new CLI rather than reusing that tab, and saved-history deletion does not close its retained error output. Exit markers survive window reloads and are removed when the terminal tab closes.
+  Linux/code-server also recovers the validated exit-marker path from the wrapper process when restored launch options are missing, so a reconnected retained tab is not mistaken for a running CLI.
 - **Multi-root workspaces.** Agent terminals use a workspace folder as their working directory; the extension does not assume a single-folder workspace.
 - **Configurable launch.** For each agent you can override the executable with `multiHarness.<id>.executablePath` and add extra CLI flags with `multiHarness.<id>.arguments`.
-- **No runtime dependencies.** The extension is pure VS Code API code.
+- **No production npm dependencies.** Terminal launch uses the extension-host Node runtime; agent CLIs remain separately installed.
 
 ## Other ways to open an agent
 
@@ -267,11 +270,12 @@ groups. Terminal profile launches always use the active group.
 | `multiHarness.antigravity.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.cursorAgent.arguments` | `array` of `string` | `[]` | `resource` |
 
-**Notifications**
+**Exit policy and notifications**
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
 | `multiHarness.notifyOnExit` | `boolean` | `false` | `window` |
+| `multiHarness.autoCloseOnExit` | `success` / `never` / `always` | `success` | `window` |
 
 ### Example `settings.json`
 

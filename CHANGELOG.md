@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Automatically close new direct-mode agent terminals and profiles after successful CLI exits; retain failures and unknown exits for inspection. Add the localized `multiHarness.autoCloseOnExit` setting (`success`, `never`, `always`), using an inherited-terminal launcher without changing shell-mode command completion or saved history.
+- Recover validated exit-marker paths from the Linux wrapper process after code-server reconnects omit launch options, preventing resume from focusing a retained tab whose CLI already exited. Cache recovered paths so terminal-close cleanup still works after the process ends.
+
 - Fix Grok Build session deletion when native terminal logs, recap requests or session-local subagent metadata are present. Validate recognized auxiliary files without following links or deleting separately stored child conversations; continue rejecting unknown nested content.
 
 - Document the harness feature and session-lifecycle standard, separating target requirements from current provider capabilities, deletion/terminal-closure limits and acceptance scenarios.

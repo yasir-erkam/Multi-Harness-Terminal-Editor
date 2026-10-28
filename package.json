@@ -908,6 +908,18 @@
           "description": "%notifyOnExit.description%",
           "scope": "window"
         },
+        "multiHarness.autoCloseOnExit": {
+          "type": "string",
+          "enum": ["success", "never", "always"],
+          "enumDescriptions": [
+            "%autoCloseOnExit.success.description%",
+            "%autoCloseOnExit.never.description%",
+            "%autoCloseOnExit.always.description%"
+          ],
+          "default": "success",
+          "description": "%autoCloseOnExit.description%",
+          "scope": "window"
+        },
         "multiHarness.useFullEditorArea": {
           "type": "boolean",
           "default": true,

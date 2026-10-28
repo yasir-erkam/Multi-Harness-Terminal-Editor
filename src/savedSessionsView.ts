@@ -12,6 +12,7 @@ import { type SessionContext, type SessionScope } from "./sessionContext";
 import { SessionDeletionError, sessionDeletionFiles, sessionDeletionTarget } from "./deleteSession";
 import { deleteOpenCodeSession, validateOpenCodeDeletion } from "./openCodeDeletion";
 import { grokTerminalSessionId, codexTerminalSessionFiles, ompTerminalSessionFile, restoreTerminalIdentity, windowsCodexSessionMatches } from "./terminalIdentity";
+import { terminalHasExited } from "./terminalExit";
 
 export interface SavedSessions {
     readonly onDidChange: vscode.Event<void>;
@@ -118,6 +119,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     async function sessionTerminals(session: SavedSession): Promise<vscode.Terminal[]> {
         const terminals = [...vscode.window.terminals];
         const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
+        const exited = await Promise.all(terminals.map((terminal) => terminalHasExited(terminal)));
         const root = session.harnessId === "ohMyPi" ? getRoots().find((candidate) => candidate.harnessId === "ohMyPi") : undefined;
         const activeFiles = root ? await Promise.all(terminals.map((terminal) => ompTerminalSessionFile(terminal, root.directory))) : [];
         const codexRoot = session.harnessId === "codex" ? getRoots().find((candidate) => candidate.harnessId === "codex") : undefined;
@@ -127,6 +129,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         const sessionFile = codexRoot ? await fs.realpath(session.file) : session.file;
         const windowsMatches = codexRoot ? await windowsCodexSessionMatches(terminals, sessionFile) : new Map<vscode.Terminal, boolean>();
         return terminals.filter((_terminal, index) => {
+            if (exited[index] || _terminal.exitStatus) return false;
             const identity = identities[index];
             const activeFile = activeFiles[index];
             const files = codexFiles[index];

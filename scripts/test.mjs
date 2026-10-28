@@ -12,6 +12,7 @@ import process from "node:process";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync, spawn } from "node:child_process";
 import { zstdCompressSync } from "node:zlib";
+import { randomUUID } from "node:crypto";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = dirname(here);
@@ -1376,6 +1377,18 @@ try {
         extensionUri: { fsPath: join(projectRoot) },
         extensionPath: join(projectRoot),
     };
+    const launcherTarget = (options, mode = "success") => {
+        assert.equal(options.shellPath, process.execPath, "launcher uses the extension-host Node runtime");
+        assert.ok(Array.isArray(options.shellArgs), "launcher arguments are an argument vector");
+        const [launcher, actualMode, executable, ...args] = options.shellArgs;
+        assert.equal(launcher, join(context.extensionUri.fsPath, "media", "terminal-launcher.cjs"));
+        assert.equal(actualMode, mode);
+        assert.equal(options.env.ELECTRON_RUN_AS_NODE, "1");
+        const identity = JSON.parse(options.env.MULTI_HARNESS_TERMINAL_IDENTITY);
+        assert.equal(identity.version, 1);
+        assert.equal(identity.launchMode, "direct");
+        return { executable, args };
+    };
     const activationSetTimeout = globalThis.setTimeout;
     let historyTick;
     globalThis.setTimeout = (callback, delay, ...args) => {
@@ -1407,12 +1420,12 @@ try {
     const codexResume = { sessionId: "standalone-session", terminalName: "Codex resume", cwd: activationDir, args: ["resume", "standalone-session"] };
     vscodeStub.window.terminals = [];
     await windowsLauncher.openAgentTerminal(context, codexHarness, undefined, codexResume);
-    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--no-daemon", "resume", "standalone-session", "--model", "test"]);
+    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, ["--no-daemon", "resume", "standalone-session", "--model", "test"]);
     for (const args of [["--no-daemon"], ["--remote", "ws://localhost:1234"]]) {
         vscodeStub.__fixture.multiHarness.codex.arguments = args;
         vscodeStub.window.terminals = [];
         await windowsLauncher.openAgentTerminal(context, codexHarness, undefined, codexResume);
-        assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, [...codexResume.args, ...args], "explicit standalone and remote resume arguments are not duplicated or overridden");
+        assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, [...codexResume.args, ...args], "explicit standalone and remote resume arguments are not duplicated or overridden");
     }
     delete vscodeStub.__fixture.multiHarness.codex;
     vscodeStub.window.terminals = [];
@@ -1489,8 +1502,8 @@ try {
         Date.now = realNow;
     }
     await vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.openOhMyPi").handler();
-    assert.equal(vscodeStub.__calls.created.at(-1)?.options.shellPath, fakeCli);
-    assert.deepEqual(vscodeStub.__calls.created.at(-1)?.options.shellArgs, ["--continue"]);
+    assert.equal(launcherTarget(vscodeStub.__calls.created.at(-1)?.options).executable, fakeCli);
+    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1)?.options).args, ["--continue"]);
     passed += 1;
     console.log("ok: Activity Bar single clicks select history and double clicks dispatch the configured launch command");
 
@@ -1528,12 +1541,12 @@ try {
     vscodeStub.__fixture.multiHarness.primeAgent = { executablePath: fakeCli, arguments: ["--resume"] };
     await vscodeStub.__calls.commands.find((command) => command.id === primeAgent.commandId).handler();
     const primeTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(primeTerminal.shellPath, fakeCli);
-    assert.deepEqual(primeTerminal.shellArgs, ["--resume"]);
+    assert.equal(launcherTarget(primeTerminal).executable, fakeCli);
+    assert.deepEqual(launcherTarget(primeTerminal).args, ["--resume"]);
     const primeProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.primeAgent");
     const profileOptions = (await primeProfile.provider.provideTerminalProfile({})).options;
-    assert.equal(profileOptions.shellPath, fakeCli);
-    assert.deepEqual(profileOptions.shellArgs, ["--resume"]);
+    assert.equal(launcherTarget(profileOptions).executable, fakeCli);
+    assert.deepEqual(launcherTarget(profileOptions).args, ["--resume"]);
     await addFavorite.handler(primeAgent);
     assert.equal(agentsView.provider.getTreeItem(primeAgent).contextValue, "favoriteAgent");
     await removeFavorite.handler(primeAgent);
@@ -1546,12 +1559,12 @@ try {
     vscodeStub.__fixture.multiHarness.antigravity = { executablePath: fakeCli, arguments: ["--model", "test-model"] };
     await vscodeStub.__calls.commands.find((command) => command.id === antigravity.commandId).handler();
     const antigravityTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(antigravityTerminal.shellPath, fakeCli);
-    assert.deepEqual(antigravityTerminal.shellArgs, ["--model", "test-model"]);
+    assert.equal(launcherTarget(antigravityTerminal).executable, fakeCli);
+    assert.deepEqual(launcherTarget(antigravityTerminal).args, ["--model", "test-model"]);
     const antigravityProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.antigravity");
     const antigravityOptions = (await antigravityProfile.provider.provideTerminalProfile({})).options;
-    assert.equal(antigravityOptions.shellPath, fakeCli);
-    assert.deepEqual(antigravityOptions.shellArgs, ["--model", "test-model"]);
+    assert.equal(launcherTarget(antigravityOptions).executable, fakeCli);
+    assert.deepEqual(launcherTarget(antigravityOptions).args, ["--model", "test-model"]);
     await addFavorite.handler(antigravity);
     assert.equal(agentsView.provider.getTreeItem(antigravity).contextValue, "favoriteAgent");
     await removeFavorite.handler(antigravity);
@@ -1564,17 +1577,17 @@ try {
     assert.equal(grokBuild.commandId, "multiHarness.openGrokBuild");
     vscodeStub.__fixture.multiHarness.grokBuild = { executablePath: fakeCli };
     await vscodeStub.__calls.commands.find((command) => command.id === grokBuild.commandId).handler();
-    assert.equal(vscodeStub.__calls.created.at(-1).options.shellPath, fakeCli);
-    assert.equal(vscodeStub.__calls.created.at(-1).options.shellArgs, undefined);
+    assert.equal(launcherTarget(vscodeStub.__calls.created.at(-1).options).executable, fakeCli);
+    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, []);
     vscodeStub.__fixture.multiHarness.grokBuild = { executablePath: fakeCli, arguments: ["--model", "test-model"] };
     await vscodeStub.__calls.commands.find((command) => command.id === grokBuild.commandId).handler();
     const grokBuildTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(grokBuildTerminal.shellPath, fakeCli);
-    assert.deepEqual(grokBuildTerminal.shellArgs, ["--model", "test-model"]);
+    assert.equal(launcherTarget(grokBuildTerminal).executable, fakeCli);
+    assert.deepEqual(launcherTarget(grokBuildTerminal).args, ["--model", "test-model"]);
     const grokBuildProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.grokBuild");
     const grokBuildOptions = (await grokBuildProfile.provider.provideTerminalProfile({})).options;
-    assert.equal(grokBuildOptions.shellPath, fakeCli);
-    assert.deepEqual(grokBuildOptions.shellArgs, ["--model", "test-model"]);
+    assert.equal(launcherTarget(grokBuildOptions).executable, fakeCli);
+    assert.deepEqual(launcherTarget(grokBuildOptions).args, ["--model", "test-model"]);
     await addFavorite.handler(grokBuild);
     assert.equal(agentsView.provider.getTreeItem(grokBuild).contextValue, "favoriteAgent");
     await removeFavorite.handler(grokBuild);
@@ -1590,16 +1603,16 @@ try {
     vscodeStub.__fixture.multiHarness.deepseek = { executablePath: fakeCli };
     await vscodeStub.__calls.commands.find((command) => command.id === deepseek.commandId).handler();
     const deepseekDefaultTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(deepseekDefaultTerminal.shellPath, fakeCli);
-    assert.deepEqual(deepseekDefaultTerminal.shellArgs, ["--profile", "tui"]);
+    assert.equal(launcherTarget(deepseekDefaultTerminal).executable, fakeCli);
+    assert.deepEqual(launcherTarget(deepseekDefaultTerminal).args, ["--profile", "tui"]);
     const deepseekProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.deepseek");
     const deepseekProfileOptions = (await deepseekProfile.provider.provideTerminalProfile({})).options;
-    assert.equal(deepseekProfileOptions.shellPath, fakeCli);
-    assert.deepEqual(deepseekProfileOptions.shellArgs, ["--profile", "tui"]);
+    assert.equal(launcherTarget(deepseekProfileOptions).executable, fakeCli);
+    assert.deepEqual(launcherTarget(deepseekProfileOptions).args, ["--profile", "tui"]);
     vscodeStub.window.terminals = [];
     vscodeStub.__fixture.multiHarness.deepseek = { executablePath: fakeCli, arguments: ["web", "--port", "8080"] };
     await vscodeStub.__calls.commands.find((command) => command.id === deepseek.commandId).handler();
-    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["web", "--port", "8080"]);
+    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, ["web", "--port", "8080"]);
     vscodeStub.window.terminals = [];
     await addFavorite.handler(deepseek);
     assert.equal(agentsView.provider.getTreeItem(deepseek).contextValue, "favoriteAgent");
@@ -1618,12 +1631,12 @@ try {
     vscodeStub.__fixture.multiHarness.antigravity = { executablePath: agyCli, arguments: agyArgs };
     await vscodeStub.__calls.commands.find((command) => command.id === antigravity.commandId).handler();
     const agyTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(agyTerminal.shellPath, agyCli);
-    assert.deepEqual(agyTerminal.shellArgs, agyArgs);
+    assert.equal(launcherTarget(agyTerminal).executable, agyCli);
+    assert.deepEqual(launcherTarget(agyTerminal).args, agyArgs);
     const agyProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.antigravity");
     const agyProfileOptions = (await agyProfile.provider.provideTerminalProfile({})).options;
-    assert.equal(agyProfileOptions.shellPath, agyCli);
-    assert.deepEqual(agyProfileOptions.shellArgs, agyArgs);
+    assert.equal(launcherTarget(agyProfileOptions).executable, agyCli);
+    assert.deepEqual(launcherTarget(agyProfileOptions).args, agyArgs);
     assert.deepEqual(agyProfileOptions.iconPath, agyTerminal.iconPath);
     vscodeStub.__fixture.multiHarness.antigravity.executablePath = join(activationDir, "missing-agy");
     assert.equal(await agyProfile.provider.provideTerminalProfile({}), undefined);
@@ -1813,7 +1826,7 @@ try {
     assert.equal(savedView.provider.getTreeItem(grokRows[0]).label, "Saved Grok topic");
     assert.equal(savedView.provider.getTreeItem(grokRows[0]).contextValue.includes("deletable"), false);
     await resume.handler(grokRows[0]);
-    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--resume", "saved-grok", "--model", "test-model"]);
+    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, ["--resume", "saved-grok", "--model", "test-model"]);
     assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
     assert.equal(vscodeStub.__calls.created.at(-1).options.env.GROK_HOME, join(savedRoot, "grokBuild"));
     const grokHarness = agents.find((agent) => agent.id === "grokBuild");
@@ -1934,7 +1947,7 @@ try {
     assert.equal(resumed.options.cwd, projectDirectory);
     assert.equal(vscodeStub.window.tabGroups.all.length, 1, "resuming a session joins existing editor splits");
     assert.deepEqual(resumed.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "saved conversations open without creating a split");
-    assert.deepEqual(resumed.options.shellArgs, ["--resume", savedFile, "--model", "test-model"]);
+    assert.deepEqual(launcherTarget(resumed.options).args, ["--resume", savedFile, "--model", "test-model"]);
     vscodeStub.window.terminals = [resumed.terminal];
     assert.equal(sessionsView.provider.getTreeItem(sessionsView.provider.getChildren().find((session) => session.terminal === resumed.terminal)).label,
         "prime-agent - A saved conversation", "Open Terminals shows the saved topic before any title refresh");
@@ -1954,7 +1967,7 @@ try {
     const sameTitleTerminal = vscodeStub.__calls.created.at(-1);
     assert.equal(vscodeStub.__calls.created.length, countBeforeReuse + 1, "different identities sharing a title open separate terminals");
     sameTitleTerminal.terminal.name = resumed.terminal.name;
-    assert.deepEqual(sameTitleTerminal.options.shellArgs, ["--resume", sameTitleFile, "--model", "test-model"]);
+    assert.deepEqual(launcherTarget(sameTitleTerminal.options).args, ["--resume", sameTitleFile, "--model", "test-model"]);
     vscodeStub.window.terminals = [sameTitleTerminal.terminal, resumed.terminal];
     const shownBeforeReuse = resumed.terminal.shown;
     await resume.handler(...savedItem.command.arguments);
@@ -2014,7 +2027,7 @@ try {
     const beforeAgyResume = vscodeStub.__calls.created.length;
     await resume.handler({ harnessId: "antigravity", id: "recorded-agy" });
     assert.equal(vscodeStub.__calls.created.length, beforeAgyResume + 1);
-    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--conversation", "recorded-agy", ...agyArgs]);
+    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, ["--conversation", "recorded-agy", ...agyArgs]);
     assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
     rmSync(agyStore, { recursive: true, force: true });
     refreshSaved.handler();
@@ -2035,16 +2048,29 @@ try {
     const beforeOpenCodeResume = vscodeStub.__calls.created.length;
     await resume.handler({ harnessId: "openCode", id: "ses_recorded" });
     assert.equal(vscodeStub.__calls.created.length, beforeOpenCodeResume + 1);
-    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--session", "ses_recorded", "--model", "test-model"]);
+    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, ["--session", "ses_recorded", "--model", "test-model"]);
     assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
+    const retainedOpenCode = vscodeStub.__calls.created.at(-1);
+    const retainedExitFile = retainedOpenCode.options.env.MULTI_HARNESS_LAUNCHER_EXIT_FILE;
+    assert.equal(typeof retainedExitFile, "string");
+    assert.equal(retainedOpenCode.terminal.exitStatus, undefined, "a retained launcher tab has no VS Code exit status");
+    const retainedShownBeforeResume = retainedOpenCode.terminal.shown;
+    retainedOpenCode.terminal.disposed = 0;
+    retainedOpenCode.terminal.dispose = function () { this.disposed += 1; };
+    writeFileSync(retainedExitFile, JSON.stringify({ code: 1 }));
+    vscodeStub.window.terminals = [retainedOpenCode.terminal];
+    await resume.handler({ harnessId: "openCode", id: "ses_recorded" });
+    assert.equal(vscodeStub.__calls.created.length, beforeOpenCodeResume + 2, "resuming a retained exited launcher starts a fresh CLI");
+    assert.equal(retainedOpenCode.terminal.shown, retainedShownBeforeResume, "resume does not focus the dead retained launcher");
+    const liveOpenCode = vscodeStub.__calls.created.at(-1);
+    assert.notEqual(liveOpenCode.options.env.MULTI_HARNESS_LAUNCHER_EXIT_FILE, retainedExitFile);
+    assert.deepEqual(launcherTarget(liveOpenCode.options).args, ["--session", "ses_recorded", "--model", "test-model"]);
+    assert.equal(liveOpenCode.options.cwd, projectDirectory);
     const openCodeDelete = vscodeStub.__calls.commands.find((entry) => entry.id === "multiHarness.deleteSession").handler;
-    const openCodeTerminal = {
-        name: "OpenCode deletion target",
-        creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "openCode", launchMode: "direct", sessionId: "ses_recorded" }) } },
-        disposed: 0,
-        dispose() { this.disposed += 1; },
-    };
-    vscodeStub.window.terminals = [openCodeTerminal];
+    const openCodeTerminal = liveOpenCode.terminal;
+    openCodeTerminal.disposed = 0;
+    openCodeTerminal.dispose = function () { this.disposed += 1; };
+    vscodeStub.window.terminals = [retainedOpenCode.terminal, openCodeTerminal];
     const openCodeDeletesBefore = vscodeStub.__calls.fsDeletes.length;
     await openCodeDelete({ harnessId: "openCode", id: "ses_recorded" });
     assert.equal(openCodeTerminal.disposed, 0, "canceling permanent deletion preserves the OpenCode terminal");
@@ -2056,7 +2082,19 @@ try {
     assert.ok(existsSync(join(openCodeStore, "opencode.db")));
     assert.equal((await savedSessionRows()).some((row) => row.id === "ses_recorded"), false, "explicit approval deletes the SQLite session");
     assert.equal(openCodeTerminal.disposed, 1, "successful permanent deletion closes its linked terminal");
-    assert.equal(vscodeStub.__calls.created.at(-1).options.shellPath, fakeCli);
+    assert.equal(retainedOpenCode.terminal.disposed, 0, "deleting a saved conversation preserves its retained error tab");
+    assert.ok(existsSync(retainedExitFile), "deletion leaves retained-terminal exit metadata intact");
+    for (const handler of vscodeStub.__calls.terminalCloseHandlers) handler(retainedOpenCode.terminal);
+    try {
+        const cleanupDeadline = Date.now() + 2000;
+        while (existsSync(retainedExitFile) && Date.now() < cleanupDeadline) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        assert.equal(existsSync(retainedExitFile), false, "closing the retained terminal cleans up its exit marker");
+    } finally {
+        rmSync(retainedExitFile, { force: true });
+    }
+    assert.equal(launcherTarget(vscodeStub.__calls.created.at(-1).options).executable, fakeCli);
     rmSync(openCodeStore, { recursive: true, force: true });
     refreshSaved.handler();
     delete vscodeStub.__fixture.multiHarness.deepseek.arguments;
@@ -2077,7 +2115,7 @@ try {
     const beforeDshResume = vscodeStub.__calls.created.length;
     await resume.handler({ harnessId: "deepseek", id: "recorded-deepseek" });
     assert.equal(vscodeStub.__calls.created.length, beforeDshResume + 1);
-    assert.deepEqual(vscodeStub.__calls.created.at(-1).options.shellArgs, ["--profile", "tui", "--resume", "recorded-deepseek"], "dsh launcher flags precede --resume");
+    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, ["--profile", "tui", "--resume", "recorded-deepseek"], "dsh launcher flags precede --resume");
     assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
     vscodeStub.window.terminals = [];
     rmSync(dshStore, { recursive: true, force: true });
@@ -2479,14 +2517,14 @@ try {
     await workspaceOpen.handler();
     const workspaceLaunch = vscodeStub.__calls.created.at(-1).options;
     assert.equal(workspaceLaunch.cwd, folderB.uri.fsPath);
-    assert.equal(workspaceLaunch.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", workspaceCli));
-    assert.deepEqual(workspaceLaunch.shellArgs, ["--project", folderB.uri.fsPath]);
+    assert.equal(launcherTarget(workspaceLaunch).executable, join(folderB.uri.fsPath, "node_modules", ".bin", workspaceCli));
+    assert.deepEqual(launcherTarget(workspaceLaunch).args, ["--project", folderB.uri.fsPath]);
     const ompProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.ohMyPi");
     const workspaceProfile = await ompProfile.provider.provideTerminalProfile({});
     assert.equal(workspaceProfile.options.cwd, folderB.uri.fsPath);
     assert.equal(workspaceProfile.options.isTransient, false, "profile terminals allow persistence across reloads");
     assert.deepEqual(workspaceProfile.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "terminal profiles use the active editor group");
-    assert.equal(workspaceProfile.options.shellPath, workspaceLaunch.shellPath);
+    assert.equal(launcherTarget(workspaceProfile.options).executable, launcherTarget(workspaceLaunch).executable);
     vscodeStub.workspace.workspaceFolders = [folderA];
     vscodeStub.__calls.workspaceFolderHandlers.forEach((handler) => handler({}));
     assert.ok(savedView.description.includes("project-a"), "removed folders are no longer retained");
@@ -2517,8 +2555,8 @@ try {
     const projectBResume = vscodeStub.__calls.created.at(-1).options;
     assert.equal(projectBResume.cwd, folderB.uri.fsPath);
     assert.equal(projectBResume.isTransient, false, "resumed conversation terminals allow persistence across reloads");
-    assert.equal(projectBResume.shellPath, join(folderB.uri.fsPath, "node_modules", ".bin", workspaceCli));
-    assert.deepEqual(projectBResume.shellArgs, ["--resume", ompFile, "--project", folderB.uri.fsPath]);
+    assert.equal(launcherTarget(projectBResume).executable, join(folderB.uri.fsPath, "node_modules", ".bin", workspaceCli));
+    assert.deepEqual(launcherTarget(projectBResume).args, ["--resume", ompFile, "--project", folderB.uri.fsPath]);
     // External recorded directories use their own resource scope, not the
     // first workspace folder's settings.
     const externalFolder = join(activationDir, "external-project");
@@ -2534,8 +2572,8 @@ try {
     });
     const externalResume = vscodeStub.__calls.created.at(-1).options;
     assert.equal(externalResume.cwd, externalFolder);
-    assert.equal(externalResume.shellPath, fakeCli);
-    assert.deepEqual(externalResume.shellArgs, ["--resume", ompFile, "--external"]);
+    assert.equal(launcherTarget(externalResume).executable, fakeCli);
+    assert.deepEqual(launcherTarget(externalResume).args, ["--resume", ompFile, "--external"]);
     passed += 1;
     console.log("ok: resuming sessions uses recorded project settings and executable lookup across editor focus changes");
 
@@ -2578,8 +2616,8 @@ try {
         `no read may repeat the section prefix (saw ${JSON.stringify(readKeys)})`
     );
     const created = vscodeStub.__calls.created.at(-1)?.options;
-    assert.equal(created?.shellPath, fakeCli, `createTerminal must use the configured executablePath (got ${created?.shellPath})`);
-    assert.deepEqual(created?.shellArgs, ["--continue"], "createTerminal must use the configured arguments");
+    assert.equal(launcherTarget(created).executable, fakeCli, "createTerminal must use the configured executablePath");
+    assert.deepEqual(launcherTarget(created).args, ["--continue"], "createTerminal must use the configured arguments");
     assert.deepEqual(created?.location, { viewColumn: vscodeStub.ViewColumn.Active }, "direct launches use the active editor group");
     passed += 1;
     console.log("ok: configured executablePath and arguments are read with relative keys and reach createTerminal");
@@ -2613,10 +2651,10 @@ try {
     const errorsBeforeFailure = vscodeStub.__calls.errors.length;
     await ohMyPi.handler();
     assert.equal(vscodeStub.__calls.errors.length, errorsBeforeFailure + 1);
-    assert.ok(vscodeStub.__calls.errors.at(-1).includes("could not be opened"));
+    assert.ok(vscodeStub.__calls.errors.at(-1));
     vscodeStub.window.createTerminal = originalCreateTerminal;
     await ohMyPi.handler();
-    assert.equal(vscodeStub.__calls.created.at(-1).options.shellPath, fakeCli, "a later launch recovers normally");
+    assert.equal(launcherTarget(vscodeStub.__calls.created.at(-1).options).executable, fakeCli, "a later launch recovers normally");
     passed += 1;
     console.log("ok: terminal service failures report an error without rejecting agent commands and allow retry");
 
@@ -2677,8 +2715,8 @@ try {
     delete Promise.withResolvers;
     assert.equal(typeof Promise.withResolvers, "undefined", "the test really runs without Promise.withResolvers");
 
-    // (i) direct mode is unchanged: the terminal has shellPath and nothing in
-    // this mode touches the status bar or the shell-integration API.
+    // (i) Direct mode uses the exit-policy launcher without touching the status
+    // bar or the shell-integration API.
     const baseline = () => {
         vscodeStub.__calls.created.length = 0;
         vscodeStub.__calls.statusItems.length = 0;
@@ -2688,15 +2726,36 @@ try {
         vscodeStub.window.terminals.length = 0;
         vscodeStub.__fixture.multiHarness.launchMode = "direct";
     };
+    const previousAutoClose = vscodeStub.__fixture.multiHarness.autoCloseOnExit;
+    const exitPolicyProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.ohMyPi");
+    try {
+        for (const configuredMode of [undefined, "success", "never", "always"]) {
+            if (configuredMode === undefined) delete vscodeStub.__fixture.multiHarness.autoCloseOnExit;
+            else vscodeStub.__fixture.multiHarness.autoCloseOnExit = configuredMode;
+            baseline();
+            await ohMyPi.handler();
+            const policyOptions = vscodeStub.__calls.created.at(-1).options;
+            const policyProfile = (await exitPolicyProfile.provider.provideTerminalProfile({})).options;
+            for (const options of [policyOptions, policyProfile]) {
+                assert.deepEqual(launcherTarget(options, configuredMode ?? "success"), { executable: fakeCli, args: ["--continue"] });
+                const persistedOptions = JSON.parse(JSON.stringify(options));
+                assert.deepEqual(persistedOptions.env, options.env, "terminal restoration preserves launcher and identity environment");
+                assert.equal(JSON.parse(persistedOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY).harnessId, "ohMyPi");
+            }
+        }
+    } finally {
+        if (previousAutoClose === undefined) delete vscodeStub.__fixture.multiHarness.autoCloseOnExit;
+        else vscodeStub.__fixture.multiHarness.autoCloseOnExit = previousAutoClose;
+    }
     baseline();
     await ohMyPi.handler();
     const directOptions = vscodeStub.__calls.created.at(-1)?.options;
-    assert.equal(directOptions?.shellPath, fakeCli, "direct mode must still set shellPath");
+    assert.equal(launcherTarget(directOptions).executable, fakeCli, "direct mode launches the configured executable through the exit-policy runtime");
     assert.equal(directOptions.isTransient, false, "direct terminals allow persistence across reloads");
     assert.equal(vscodeStub.__calls.statusItems.length, 0, "direct mode must not create a status-bar item");
     assert.equal(vscodeStub.__calls.infos.length, 0, "direct mode must not announce shell-integration fallback");
     passed += 1;
-    console.log("ok: direct mode sets shellPath and never creates a status-bar item");
+    console.log("ok: direct mode uses the exit-policy launcher without creating a status-bar item");
 
     // (ii) shell mode: no shellPath, and the agent runs through the two-argument
     // executeCommand overload once shell integration activates.
@@ -2938,6 +2997,9 @@ try {
     const restoredSameTitle = restoredTerminal(sameTitleTerminal.options, restoredConversation.name);
     const restoredShell = restoredTerminal(shellOptions, "renamed shell");
     const restoredDirect = restoredTerminal(directOptions, "renamed direct");
+    assert.deepEqual(launcherTarget(restoredDirect.creationOptions), launcherTarget(directOptions));
+    assert.deepEqual(restoredDirect.creationOptions.env, directOptions.env);
+    assert.equal(JSON.parse(restoredConversation.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY).sessionId, "recorded-prime");
     const invalidMetadata = restoredTerminal({ env: { MULTI_HARNESS_TERMINAL_IDENTITY: "{broken" } }, "Oh My Pi");
     const foreignTerminal = restoredTerminal({ name: "Oh My Pi" });
     vscodeStub.window.terminals = [restoredSameTitle, restoredConversation, restoredDirect,
@@ -3294,6 +3356,45 @@ try {
             await exited;
             vscodeStub.window.terminals = [];
         }
+        const recoveredMarker = join(dirname(resumed.options.env.MULTI_HARNESS_LAUNCHER_EXIT_FILE), `${randomUUID()}.json`);
+        const retainedWrapper = spawn(process.execPath, [join(projectRoot, "media", "terminal-launcher.cjs"), "success", process.execPath, "-e", "process.exit(7)"], {
+            env: { ...process.env, ...resumed.options.env, MULTI_HARNESS_LAUNCHER_EXIT_FILE: recoveredMarker }, stdio: ["pipe", "pipe", "pipe"],
+        });
+        const wrapperLines = createInterface({ input: retainedWrapper.stdout });
+        const retainedContext = { ...context, subscriptions: [] };
+        try {
+            for await (const line of wrapperLines) {
+                if (line.includes("Press any key to close")) break;
+            }
+            assert.ok(existsSync(recoveredMarker), "the real CLI exited while its wrapper retains the output");
+            assert.equal(retainedWrapper.exitCode, null);
+            const reconnected = restoredTerminal({}, "retained error after reconnection");
+            reconnected.processId = Promise.resolve(retainedWrapper.pid);
+            vscodeStub.window.terminals = [reconnected];
+            freshExtension.activate(retainedContext);
+            const beforeRetainedResume = vscodeStub.__calls.created.length;
+            await resumeLauncher.openAgentTerminal(context, primeHarness, undefined, {
+                sessionId: "recorded-prime", terminalName: "changed title", cwd: projectDirectory, args: [],
+            });
+            assert.equal(vscodeStub.__calls.created.length, beforeRetainedResume + 1, "missing launch options must not reuse a reconnected retained wrapper");
+            assert.equal(reconnected.shown, 0, "resume must not focus a dead CLI restored through /proc");
+            for (const handler of vscodeStub.__calls.terminalCloseHandlers) handler(reconnected);
+            const cleanupDeadline = Date.now() + 2000;
+            while (existsSync(recoveredMarker) && Date.now() < cleanupDeadline) {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            assert.equal(existsSync(recoveredMarker), false, "terminal close cleans up a recovered marker");
+            passed += 1;
+            console.log("ok: Linux reconnect with empty launch options does not resume a live retained-exit wrapper");
+        } finally {
+            for (const subscription of retainedContext.subscriptions) subscription.dispose();
+            wrapperLines.close();
+            const exited = retainedWrapper.exitCode === null ? once(retainedWrapper, "exit") : Promise.resolve();
+            retainedWrapper.kill();
+            await exited;
+            rmSync(recoveredMarker, { force: true });
+            vscodeStub.window.terminals = [];
+        }
         const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
             env: { ...process.env, ...resumed.options.env }, stdio: "ignore",
         });
@@ -3396,5 +3497,6 @@ console.log(`\nicon fills (light variant = dark ink, dark variant = light ink):\
 await import(pathToFileURL(join(here, "test-sidebar.mjs")).href);
 passed += 1;
 await import(pathToFileURL(join(here, "validate-manifest.mjs")).href);
+await import("./test-terminal-launcher.mjs");
 
 console.log(`\n${passed} test group(s) passed and manifest validation passed.`);

@@ -4,6 +4,7 @@ import { resolveAgentLaunch } from "./launch";
 import { resolveExecutable } from "./resolveExecutable";
 import { terminalIdentityEnv } from "./terminalIdentity";
 import { codexLaunchArgs } from "./codexLaunch";
+import { terminalExitOptions } from "./terminalExit";
 
 /**
  * Terminal profile provider for one harness: resolves the configured
@@ -22,12 +23,12 @@ export function registerAgentProfile(
                 return undefined;
             }
             return new vscode.TerminalProfile({
-                shellPath: executable,
-                shellArgs: harness.id === "codex" ? await codexLaunchArgs(executable, launch.args) : launch.args,
+                ...terminalExitOptions(context, executable,
+                    harness.id === "codex" ? await codexLaunchArgs(executable, launch.args) : launch.args,
+                    terminalIdentityEnv(harness, "direct")),
                 cwd: launch.cwd,
                 location: { viewColumn: vscode.ViewColumn.Active },
                 isTransient: false,
-                env: terminalIdentityEnv(harness, "direct"),
                 iconPath: launch.iconPath,
             });
         },

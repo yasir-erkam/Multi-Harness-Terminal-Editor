@@ -12,6 +12,7 @@ import { codexLaunchArgs } from "./codexLaunch";
 import { ompSessionHasWriter } from "./ompSessionOwner";
 import { grokOwners } from "./grokSessions";
 import { sessionRoots } from "./savedSessions";
+import { terminalExitOptions, terminalHasExited } from "./terminalExit";
 
 /** How long shell mode waits for shell integration before degrading. */
 export const SHELL_INTEGRATION_TIMEOUT_MS = 10_000;
@@ -222,12 +223,13 @@ async function launchAgentTerminal(
         // Restored terminals are new API objects; their launch metadata is durable.
         const terminals = [...vscode.window.terminals];
         const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
+        const exited = await Promise.all(terminals.map((terminal) => terminalHasExited(terminal)));
         const activeFiles = harness.id === "ohMyPi" && resume.sessionsRoot
             ? await Promise.all(terminals.map((terminal) => ompTerminalSessionFile(terminal, resume.sessionsRoot!))) : [];
         const grokIds = harness.id === "grokBuild" && resume.sessionsRoot
             ? await Promise.all(terminals.map((terminal) => grokTerminalSessionId(terminal, resume.sessionsRoot!))) : [];
         const existing = terminals.find((terminal, index) => {
-            if (terminal.exitStatus || !vscode.window.terminals.includes(terminal)) {
+            if (exited[index] || terminal.exitStatus || !vscode.window.terminals.includes(terminal)) {
                 return false;
             }
             const identity = identities[index];
@@ -293,12 +295,10 @@ async function launchAgentTerminal(
 
     const terminal = vscode.window.createTerminal({
         name: resume?.terminalName,
-        shellPath: executable,
-        shellArgs: launch.args,
+        ...terminalExitOptions(context, executable, launch.args, launchEnvironment(harness, "direct", resume)),
         cwd: launch.cwd,
         location: { viewColumn: vscode.ViewColumn.Active },
         isTransient: false,
-        env: launchEnvironment(harness, "direct", resume),
         iconPath: launch.iconPath,
     });
     await showEditorTerminal(terminal);
