@@ -2,6 +2,8 @@
 
 İnceleme tarihi: 2026-10-21. Taban: uzak depodan doğrulanan `v0.8.18` (`85772d4`); hedef paket: `0.8.20`. Kapsam: kayıtlı geçmişi keşfetme/okuma, proje ve agent filtresi, devam etme, terminal kimliği, sekme kapatma, tekli/toplu silme, seçim ve kart/liste komutları. Bulgular bu depodaki uygulamaya aittir; kurulu bütün CLI sürümleriyle canlı entegrasyon testi yapılmadı.
 
+> Bu belge tarihsel inceleme kaydıdır; aşağıdaki destek tablosu güncel değildir. Güncel kaynak kod desteği, hedef gereksinimler ve kabul senaryoları için [harness standardına](harness-standard.md) bakın. Özellikle OpenCode silme ve Grok Build entegrasyonu bu incelemeden sonra eklenmiştir.
+
 ## Agent bazında sonuç
 
 | Agent | Geçmiş / devam et | Kayıt silme | Silince açık sekme |
