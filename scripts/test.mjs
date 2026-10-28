@@ -1183,7 +1183,7 @@ try {
 // ---------------------------------------------------------------------------
 
 const VSCODE_STUB = `
-const calls = { commands: [], profiles: [], views: [], webviews: [], configUpdates: [], created: [], errors: [], infos: [], executed: [], configGets: [], warnings: [], warningResults: [], fsDeletes: [],
+const calls = { commands: [], profiles: [], views: [], configUpdates: [], created: [], errors: [], infos: [], executed: [], configGets: [], warnings: [], warningResults: [], fsDeletes: [],
     terminals: [], sendTexts: [], statusItems: [], statusShown: [], statusHidden: [], statusDisposed: 0,
     shellIntegrationHandlers: [], executionStartHandlers: [], executionEndHandlers: [],
     terminalOpenHandlers: [], terminalCloseHandlers: [], activeTerminalHandlers: [], activeEditorHandlers: [], workspaceFolderHandlers: [] };
@@ -1279,7 +1279,6 @@ module.exports = {
             calls.views.push(view);
             return view;
         },
-        registerWebviewViewProvider(id, provider) { calls.webviews.push({ id, provider }); return { dispose() {} }; },
         registerTerminalProfileProvider(id, provider) { calls.profiles.push({ id, provider }); return { dispose() {} }; },
         registerTreeDataProvider(id, provider) {
             const view = { id, provider, disposed: false };
@@ -2207,101 +2206,31 @@ try {
 
     vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: projectDirectory } }];
     vscodeStub.__calls.activeEditorHandlers.forEach((handler) => handler(undefined));
-    const layoutCommand = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.toggleSidebarLayout");
-    vscodeStub.__fixture.multiHarness.sidebarLayout = "native";
-    await layoutCommand.handler();
-    assert.equal(vscodeStub.__fixture.multiHarness.sidebarLayout, "cards");
-    await layoutCommand.handler();
-    assert.equal(vscodeStub.__fixture.multiHarness.sidebarLayout, "native");
-    assert.equal(vscodeStub.__calls.configUpdates.at(-1).target, vscodeStub.ConfigurationTarget.Global);
-
-    const cardMessages = [];
-    let receiveCardMessage;
-    const cardsWebview = {
-        cspSource: "https://local-webview.invalid",
-        asWebviewUri(uri) { return { toString() { return `https://local-webview.invalid${uri.fsPath}`; } }; },
-        postMessage(message) { cardMessages.push(message); return Promise.resolve(true); },
-        onDidReceiveMessage(handler) { receiveCardMessage = handler; return { dispose() {} }; },
-    };
-    const cardsProvider = vscodeStub.__calls.webviews.find((view) => view.id === "multiHarness.cards").provider;
-    cardsProvider.resolveWebviewView({
-        webview: cardsWebview,
-        onDidChangeVisibility() { return { dispose() {} }; },
-        onDidDispose() { return { dispose() {} }; },
-    });
-    assert.ok(cardsWebview.options.enableScripts);
-    assert.equal(cardsWebview.options.localResourceRoots[0].fsPath, join(projectRoot, "media"));
-    assert.ok(cardsWebview.html.includes("default-src 'none'"));
-    assert.ok(cardsWebview.html.includes("script-src 'nonce-"));
-    await receiveCardMessage({ action: "ready" });
-    assert.equal(cardMessages.at(-1).agents.length, agents.length);
-    assert.deepEqual(cardMessages.at(-1).agents.map((agent) => agent.id), agentsView.provider.getChildren().map((agent) => agent.id), "cards and native views share the default order with favorites first");
-    assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "antigravity").name, "Antigravity CLI");
-    assert.equal(cardMessages.at(-1).agents[0].id, "codex");
-    assert.equal(cardMessages.at(-1).agents[0].favorite, true);
-    assert.equal(cardMessages.at(-1).sessions.length, 0);
-    assert.equal(cardMessages.at(-1).saved.length, 1, "cards show saved conversations even without terminal tabs");
-    assert.equal(cardMessages.at(-1).saved[0].key, "primeAgent:recorded-prime");
-    assert.equal(cardMessages.at(-1).scope.agentId, "primeAgent");
-    assert.equal(cardMessages.at(-1).scope.project, "recorded-project");
-    assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "primeAgent").selected, true);
+    assert.equal(agentsView.provider.getChildren()[0].id, "codex", "native agent ordering keeps favorites first");
+    assert.equal(agentsView.provider.getTreeItem(codex).contextValue, "favoriteAgent");
+    assert.deepEqual(sessionsView.provider.getChildren(), []);
+    assert.deepEqual((await savedSessionRows()).map((session) => session.id), ["recorded-prime"], "native history shows saved conversations without terminal tabs");
+    assert.ok(savedView.description.includes("Prime Agent"));
     await selectSessionAgent.handler("antigravity");
-    await receiveCardMessage({ action: "ready" });
-    assert.equal(cardMessages.at(-1).scope.agentId, "antigravity");
-    assert.equal(cardMessages.at(-1).scope.message, undefined);
-    assert.deepEqual(cardMessages.at(-1).saved, [], "Antigravity cannot display another agent's saved history");
+    assert.deepEqual(await savedSessionRows(), [], "Antigravity cannot display another agent's saved history");
     await addFavorite.handler(antigravity);
-    await receiveCardMessage({ action: "ready" });
-    assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "antigravity").favorite, true);
+    assert.equal(agentsView.provider.getTreeItem(antigravity).contextValue, "favoriteAgent");
     await removeFavorite.handler(antigravity);
-    vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "open", id: "antigravity" });
-    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openAntigravity"]);
     await selectSessionAgent.handler("codex");
-    await receiveCardMessage({ action: "ready" });
-    assert.deepEqual(cardMessages.at(-1).saved, [], "card sessions follow the selected agent filter");
+    assert.deepEqual(await savedSessionRows(), [], "native history follows the selected agent filter");
     await selectSessionAgent.handler("primeAgent");
-    await receiveCardMessage({ action: "ready" });
-    assert.equal(cardMessages.at(-1).saved.length, 1);
-    vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "resume", id: "primeAgent:recorded-prime" });
-    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.resumeSession", { harnessId: "primeAgent", id: "recorded-prime" }]);
-    const messagesBeforeFavorite = cardMessages.length;
+    const nativeSavedItem = savedView.provider.getTreeItem((await savedSessionRows())[0]);
+    assert.equal(nativeSavedItem.command.command, "multiHarness.resumeSession");
+    const createdBeforeNativeResume = vscodeStub.__calls.created.length;
+    await resume.handler(...nativeSavedItem.command.arguments);
+    assert.equal(vscodeStub.__calls.created.length, createdBeforeNativeResume + 1, "native row actions resume the selected conversation");
+    assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
     await addFavorite.handler(primeAgent);
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(cardMessages.length, messagesBeforeFavorite + 1, "native favorite updates refresh the card model");
-    assert.equal(cardMessages.at(-1).agents.find((agent) => agent.id === "primeAgent").favorite, true);
+    assert.equal(agentsView.provider.getTreeItem(primeAgent).contextValue, "favoriteAgent");
     await removeFavorite.handler(primeAgent);
-    vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "open", id: "primeAgent" });
-    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openPrimeAgent"]);
-    vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "favorite", id: "codex" });
-    assert.equal(vscodeStub.__calls.executed[0], "multiHarness.removeFavorite");
-    vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "settings" });
-    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.openSettings"]);
-    vscodeStub.window.terminals = [firstPrime, secondPrime];
-    vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(firstPrime));
-    vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(secondPrime));
-    await new Promise((resolve) => setImmediate(resolve));
-    const cardSession = cardMessages.at(-1).sessions[1];
-    assert.equal(cardSession.label, "Prime Agent #2");
-    vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "focus", id: cardSession.id });
-    assert.deepEqual(vscodeStub.__calls.executed, ["multiHarness.focusSession", secondPrime]);
-    vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "close", id: cardSession.id });
-    assert.equal(vscodeStub.__calls.executed[0], "multiHarness.closeSession");
-    assert.equal(vscodeStub.__calls.executed[1].terminal, secondPrime, "cards close the exact terminal by session identity");
     vscodeStub.window.terminals = [];
-    vscodeStub.__calls.executed.length = 0;
-    for (const message of [null, {}, {action: "open", id: "unknown"}, {action: "focus", id: cardSession.id}, {action: "close", id: cardSession.id}, {action: "close", id: "unknown"}, {action: "resume", id: "primeAgent:unlisted"}, {action: "executeCommand", id: "workbench.action.closeWindow"}]) {
-        await receiveCardMessage(message);
-    }
-    assert.deepEqual(vscodeStub.__calls.executed, [], "unrecognized messages and stale sessions cannot execute commands");
     passed += 1;
-    console.log("ok: card and native layouts share favorites, validate actions and focus exact sessions");
+    console.log("ok: native agent favorites, scope filtering and saved-session row actions preserve conversation identity");
 
     const command = (id) => vscodeStub.__calls.commands.find((entry) => entry.id === `multiHarness.${id}`).handler;
     const selectionMode = command("toggleSessionSelectionMode");
@@ -2315,6 +2244,12 @@ try {
         JSON.stringify({ type: "session", id, cwd: projectDirectory }) + "\n" + JSON.stringify({ type: "session_info", name: title }) + "\n");
     writeSession(extraFiles[0], "second", "Second conversation");
     writeSession(extraFiles[1], "third", "Third conversation");
+    const outsideProjectFile = join(primeSessions, "outside-project.jsonl");
+    writeFileSync(outsideProjectFile, JSON.stringify({ type: "session", id: "outside-project", cwd: activationDir }) + "\n");
+    const outsideAgentDirectory = vscodeStub.__fixture.multiHarness.codex.sessionDirectory;
+    mkdirSync(outsideAgentDirectory, { recursive: true });
+    const outsideAgentFile = join(outsideAgentDirectory, "outside-agent.jsonl");
+    writeFileSync(outsideAgentFile, JSON.stringify({ type: "session_meta", payload: { id: "second", cwd: projectDirectory } }) + "\n");
     refreshSaved.handler();
     const getRow = async (id) => (await savedSessionRows()).find((row) => row.id === id);
     const deletionTerminal = (id, harnessId = "primeAgent", launchMode = "direct") => ({
@@ -2345,12 +2280,15 @@ try {
     assert.equal(savedView.provider.getTreeItem(secondRow).checkboxState, 1, "selection survives refresh and title changes by identity");
     await cancelSelection();
     await selectionMode();
-    await selectAll(["primeAgent:third", "primeAgent:unknown"]);
-    assert.equal(savedView.provider.getTreeItem(await getRow("third")).checkboxState, 1);
-    assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, 0, "filtered Select All only selects supplied, listed keys");
+    await toggleSession({ harnessId: "primeAgent", id: "outside-project" });
+    await toggleSession({ harnessId: "codex", id: "second" });
+    assert.ok((await savedSessionRows()).every((row) => savedView.provider.getTreeItem(row).checkboxState === 0), "out-of-project and out-of-agent requests cannot select native rows");
+    const warningsBeforeOutsideScopeDelete = vscodeStub.__calls.warnings.length;
+    await deleteOne({ harnessId: "primeAgent", id: "outside-project" });
+    await deleteOne({ harnessId: "codex", id: "second" });
+    assert.equal(vscodeStub.__calls.warnings.length, warningsBeforeOutsideScopeDelete, "out-of-scope identities cannot trigger deletion");
     await selectAll();
-    await receiveCardMessage({ action: "ready" });
-    assert.equal(cardMessages.at(-1).savedSelection.keys.length, 3, "native and card views share selections");
+    assert.equal((await savedSessionRows()).filter((row) => savedView.provider.getTreeItem(row).checkboxState === 1).length, 3, "native Select All checks every listed conversation");
     await selectSessionAgent.handler("codex");
     await selectSessionAgent.handler("primeAgent");
     assert.equal(savedView.provider.getTreeItem(await getRow("second")).checkboxState, undefined, "changing scope exits selection mode");
@@ -2389,6 +2327,9 @@ try {
     assert.ok(!existsSync(extraFiles[0]));
     assert.equal(secondTerminal.disposed, 1, "successful permanent deletion closes the linked terminal");
     assert.equal(vscodeStub.__calls.fsDeletes.at(-1).options.useTrash, false, "permanent deletion requires the separate explicit approval");
+    assert.ok(existsSync(outsideProjectFile) && existsSync(outsideAgentFile), "native Select All and bulk deletion preserve other projects and agents");
+    rmSync(outsideProjectFile);
+    rmSync(outsideAgentFile);
     writeSession(extraFiles[0], "second");
     refreshSaved.handler();
     await selectAll();
@@ -2475,18 +2416,21 @@ try {
     await cancelSelection();
     vscodeStub.window.terminals = [];
     refreshSaved.handler();
-    await receiveCardMessage({ action: "ready" });
-    assert.equal(cardMessages.at(-1).savedSelection.mode, false);
-    for (const [action, expected] of [["delete", "deleteSession"], ["toggleSelection", "toggleSessionSelection"]]) {
-        vscodeStub.__calls.executed.length = 0;
-        await receiveCardMessage({ action, id: "primeAgent:recorded-prime" });
-        assert.deepEqual(vscodeStub.__calls.executed, [`multiHarness.${expected}`, { harnessId: "primeAgent", id: "recorded-prime" }]);
-    }
-    vscodeStub.__calls.executed.length = 0;
-    await receiveCardMessage({ action: "delete", id: "primeAgent:not-listed", file: savedFile });
-    assert.deepEqual(vscodeStub.__calls.executed, []);
+    const restoredRow = await getRow("recorded-prime");
+    assert.equal(savedView.provider.getTreeItem(restoredRow).checkboxState, undefined, "canceling selection restores ordinary native rows");
+    await selectionMode();
+    const restoredItem = savedView.provider.getTreeItem(restoredRow);
+    await toggleSession(...restoredItem.command.arguments);
+    assert.equal(savedView.provider.getTreeItem(await getRow("recorded-prime")).checkboxState, 1, "native row actions select the exact saved conversation");
+    await cancelSelection();
+    const warningsBeforeNativeDelete = vscodeStub.__calls.warnings.length;
+    await deleteOne(restoredRow);
+    assert.equal(vscodeStub.__calls.warnings.length, warningsBeforeNativeDelete + 1, "native delete actions confirm the selected conversation");
+    assert.ok(existsSync(savedFile), "canceling the native delete action preserves the conversation");
+    await deleteOne({ harnessId: "primeAgent", id: "not-listed", file: savedFile });
+    assert.equal(vscodeStub.__calls.warnings.length, warningsBeforeNativeDelete + 1, "unlisted identities cannot delete a supplied path");
     passed += 1;
-    console.log("ok: native/card selection, cancellation, trash fallback, partial failures, identity revalidation and concurrent deletion preserve the correct conversations");
+    console.log("ok: native selection, cancellation, trash fallback, partial failures, identity revalidation and concurrent deletion preserve the correct conversations");
 
     // Editor focus may move to an editor-area terminal. All launch surfaces and
     // the saved-session filter must retain the last focused workspace folder.
@@ -3494,8 +3438,6 @@ passed += 1;
 console.log(`ok: all ${HARNESS_IDS.length * 2} SVGs are standalone 16px assets with brand colors or themed foregrounds`);
 console.log(`\nicon fills (light variant = dark ink, dark variant = light ink):\n  ${fillReport.join("\n  ")}`);
 
-await import(pathToFileURL(join(here, "test-sidebar.mjs")).href);
-passed += 1;
 await import(pathToFileURL(join(here, "validate-manifest.mjs")).href);
 await import("./test-terminal-launcher.mjs");
 

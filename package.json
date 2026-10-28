@@ -97,8 +97,6 @@
     "onCommand:multiHarness.refreshSessions",
     "onCommand:multiHarness.toggleSessionLocationScope",
     "onCommand:multiHarness.selectSessionAgent",
-    "onView:multiHarness.cards",
-    "onCommand:multiHarness.toggleSidebarLayout",
     "onCommand:multiHarness.toggleSessionSelectionMode",
     "onCommand:multiHarness.cancelSessionSelection",
     "onCommand:multiHarness.toggleSessionSelection",
@@ -125,24 +123,15 @@
       "multiHarness": [
         {
           "id": "multiHarness.agents",
-          "name": "%view.agents.name%",
-          "when": "config.multiHarness.sidebarLayout != cards"
+          "name": "%view.agents.name%"
         },
         {
           "id": "multiHarness.savedSessions",
-          "name": "%view.savedSessions.name%",
-          "when": "config.multiHarness.sidebarLayout != cards"
+          "name": "%view.savedSessions.name%"
         },
         {
           "id": "multiHarness.sessions",
-          "name": "%view.sessions.name%",
-          "when": "config.multiHarness.sidebarLayout != cards"
-        },
-        {
-          "id": "multiHarness.cards",
-          "type": "webview",
-          "name": "%view.cards.name%",
-          "when": "config.multiHarness.sidebarLayout == cards"
+          "name": "%view.sessions.name%"
         }
       ]
     },
@@ -348,12 +337,6 @@
         "icon": "$(filter)"
       },
       {
-        "command": "multiHarness.toggleSidebarLayout",
-        "title": "%command.toggleSidebarLayout.title%",
-        "category": "%category%",
-        "icon": "$(layout)"
-      },
-      {
         "command": "multiHarness.toggleSessionSelectionMode",
         "title": "%command.toggleSessionSelectionMode.title%",
         "category": "%category%",
@@ -501,7 +484,7 @@
         },
         {
           "command": "multiHarness.openSettings",
-          "when": "view == multiHarness.agents || view == multiHarness.cards",
+          "when": "view == multiHarness.agents",
           "group": "navigation"
         },
         {
@@ -512,11 +495,6 @@
         {
           "command": "multiHarness.selectSessionAgent",
           "when": "view == multiHarness.savedSessions",
-          "group": "navigation@1"
-        },
-        {
-          "command": "multiHarness.toggleSidebarLayout",
-          "when": "view == multiHarness.agents || view == multiHarness.cards",
           "group": "navigation@1"
         },
         {
@@ -1002,20 +980,6 @@
           "default": "",
           "description": "%primeAgent.sessionDirectory.description%",
           "scope": "machine-overridable"
-        },
-        "multiHarness.sidebarLayout": {
-          "type": "string",
-          "enum": [
-            "native",
-            "cards"
-          ],
-          "default": "native",
-          "enumDescriptions": [
-            "%sidebarLayout.native.description%",
-            "%sidebarLayout.cards.description%"
-          ],
-          "description": "%sidebarLayout.description%",
-          "scope": "window"
         },
         "multiHarness.showAntigravityIcon": {
           "type": "boolean",

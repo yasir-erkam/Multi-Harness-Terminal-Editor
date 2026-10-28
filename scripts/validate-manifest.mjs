@@ -27,7 +27,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.closeSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSidebarLayout", "multiHarness.toggleSessionSelectionMode", "multiHarness.cancelSessionSelection", "multiHarness.toggleSessionSelection", "multiHarness.selectAllSessions", "multiHarness.deleteSession", "multiHarness.deleteSelectedSessions"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.closeSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSessionSelectionMode", "multiHarness.cancelSessionSelection", "multiHarness.toggleSessionSelection", "multiHarness.selectAllSessions", "multiHarness.deleteSession", "multiHarness.deleteSelectedSessions"];
 allCommandIds.push("multiHarness.toggleSessionLocationScope");
 
 // The source table must agree with the manifest.
@@ -70,6 +70,11 @@ const activityContainer = manifest.contributes.viewsContainers?.activitybar?.fin
 check(activityContainer?.title === "%viewContainer.title%" && typeof nls["viewContainer.title"] === "string", "Activity Bar container uses its localized title");
 check(typeof activityContainer?.icon === "string" && existsSync(join(root, activityContainer.icon)), "Activity Bar icon exists");
 const agentsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.agents");
+const nativeViews = manifest.contributes.views?.multiHarness ?? [];
+check(JSON.stringify(nativeViews.map((view) => view.id)) === JSON.stringify(["multiHarness.agents", "multiHarness.savedSessions", "multiHarness.sessions"]), "sidebar contributes exactly the three native views");
+check(nativeViews.every((view) => view.when === undefined && (view.type === undefined || view.type === "tree")), "native sidebar views are unconditional trees");
+check(!activationEvents.includes("onView:multiHarness.cards"), "removed cards view has no activation event");
+check(!commandIdList.includes("multiHarness.toggleSidebarLayout") && !activationEvents.includes("onCommand:multiHarness.toggleSidebarLayout"), "removed sidebar layout command is not contributed or activated");
 check(agentsView?.name === "%view.agents.name%" && typeof nls["view.agents.name"] === "string", "Agents view has a localized name");
 check(activationEvents.includes("onView:multiHarness.agents"), "opening the Agents view activates the extension on VS Code 1.67+");
 const sessionsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.sessions");
@@ -117,10 +122,6 @@ for (const command of commands) {
         check(icon === "$(filter)", "session agent picker uses the filter icon");
         continue;
     }
-    if (command.command === "multiHarness.toggleSidebarLayout") {
-        check(icon === "$(layout)", "sidebar layout command uses the layout icon");
-        continue;
-    }
     if (["multiHarness.addFavorite", "multiHarness.removeFavorite"].includes(command.command)) {
         check(icon === (command.command === "multiHarness.addFavorite" ? "$(star-empty)" : "$(star-full)"), `favorite command ${command.command} uses its star icon`);
         continue;
@@ -152,12 +153,8 @@ check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.c
 for (const id of ["toggleSessionSelectionMode", "cancelSessionSelection", "selectAllSessions", "deleteSelectedSessions"]) {
     check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === `multiHarness.${id}` && entry.when.includes("view == multiHarness.savedSessions")), `Sessions header exposes ${id}`);
 }
-check(settingsButton?.when === "view == multiHarness.agents || view == multiHarness.cards" && settingsButton?.group === "navigation", "settings button appears in the Agents view toolbar");
-const cardsView = manifest.contributes.views?.multiHarness?.find((view) => view.id === "multiHarness.cards");
-check(cardsView?.type === "webview" && cardsView?.when === "config.multiHarness.sidebarLayout == cards", "card layout has a conditional webview");
-check(agentsView?.when === "config.multiHarness.sidebarLayout != cards" && sessionsView?.when === agentsView.when, "native views share the opposite layout condition");
-check(activationEvents.includes("onView:multiHarness.cards"), "card view activates the extension");
-check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === "multiHarness.toggleSidebarLayout" && entry.when === "view == multiHarness.agents || view == multiHarness.cards"), "both sidebar layouts expose the switch button");
+check(settingsButton?.when === "view == multiHarness.agents" && settingsButton?.group === "navigation", "settings button appears in the Agents view toolbar");
+check(Object.values(manifest.contributes.menus ?? {}).every((entries) => entries.every((entry) => entry.command !== "multiHarness.toggleSidebarLayout" && !entry.when?.includes("multiHarness.cards") && !entry.when?.includes("multiHarness.sidebarLayout"))), "menus do not reference the removed cards layout");
 for (const [command, contextValue] of [["multiHarness.addFavorite", "agent"], ["multiHarness.removeFavorite", "favoriteAgent"]]) {
     const button = manifest.contributes.menus?.["view/item/context"]?.find((entry) => entry.command === command);
     check(button?.when === `view == multiHarness.agents && viewItem == ${contextValue}` && button?.group === "inline", `${command} appears on the matching agent row`);
@@ -179,6 +176,7 @@ agentCommandIds.forEach((id, index) => {
 const properties = manifest.contributes.configuration?.properties ?? {};
 const settingIds = Object.keys(properties);
 check(new Set(settingIds).size === settingIds.length, "no duplicate setting ids");
+check(!("multiHarness.sidebarLayout" in properties), "removed sidebar layout setting is not contributed");
 for (const id of harnessIds) {
     const showId = `multiHarness.show${id.charAt(0).toUpperCase()}${id.slice(1)}Icon`;
     check(properties[showId]?.type === "boolean" && properties[showId]?.default === false && properties[showId]?.scope === "window", `setting ${showId} is boolean/false/window`);

@@ -8,26 +8,17 @@ import { openAgentTerminal } from "./launch";
 import { extensionStrings } from "./localization";
 import { supportsSessionDeletion, resumeArguments, scanSavedSessions, sessionRoots, type SavedSession, type SessionScan } from "./savedSessions";
 import { type AgentStatus } from "./status";
-import { type SessionContext, type SessionScope } from "./sessionContext";
+import { type SessionContext } from "./sessionContext";
 import { SessionDeletionError, sessionDeletionFiles, sessionDeletionTarget } from "./deleteSession";
 import { deleteOpenCodeSession, validateOpenCodeDeletion } from "./openCodeDeletion";
 import { grokTerminalSessionId, codexTerminalSessionFiles, ompTerminalSessionFile, restoreTerminalIdentity, windowsCodexSessionMatches } from "./terminalIdentity";
 import { terminalHasExited } from "./terminalExit";
 
-export interface SavedSessions {
-    readonly onDidChange: vscode.Event<void>;
-    getSessions(): Promise<SessionScan>;
-    getScope(): SessionScope;
-    getMessage(): string | undefined;
-    getAllLocations(): boolean;
-    getSelection(): { mode: boolean; busy: boolean; supported: boolean; keys: string[] };
-}
-
 interface ScanNotice { readonly notice: true; }
 interface SessionDay { readonly day: string; readonly modified: number; readonly sessions: SavedSession[]; }
 type SavedSessionItem = SavedSession | SessionDay | ScanNotice;
 
-export function registerSavedSessionsView(context: vscode.ExtensionContext, status: AgentStatus, selection: SessionContext): SavedSessions {
+export function registerSavedSessionsView(context: vscode.ExtensionContext, status: AgentStatus, selection: SessionContext): void {
     const strings = extensionStrings(context);
     const changes = new vscode.EventEmitter<void>();
     let pending: Promise<SessionScan> | undefined;
@@ -434,12 +425,11 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             notifySelection();
         }),
         vscode.commands.registerCommand("multiHarness.toggleSessionSelection", toggleSelection),
-        vscode.commands.registerCommand("multiHarness.selectAllSessions", async (keys?: unknown) => {
+        vscode.commands.registerCommand("multiHarness.selectAllSessions", async () => {
             if (deleting || !selectionMode) return;
             const sessions = (await getSessions()).sessions;
             if (deleting || !selectionMode) return;
-            const requested = Array.isArray(keys) ? new Set(keys.filter((key): key is string => typeof key === "string")) : undefined;
-            for (const session of sessions) if (!requested || requested.has(sessionKey(session))) selected.add(sessionKey(session));
+            for (const session of sessions) selected.add(sessionKey(session));
             notifySelection();
         }),
         vscode.commands.registerCommand("multiHarness.deleteSession", deleteSessions),
@@ -480,6 +470,4 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             }
         })
     );
-    return { onDidChange: changes.event, getSessions, getScope: selection.getScope, getMessage, getAllLocations: () => allLocations,
-        getSelection: () => ({ mode: selectionMode, busy: deleting, supported: supportsSessionDeletion(selection.getScope().agent?.id ?? ""), keys: [...selected] }) };
 }

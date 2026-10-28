@@ -40,7 +40,7 @@ Her yetenek için **destekli**, **kısıtlı**, **uygulanmamış** veya **sağla
 | BASE-07 | Sekme kapatma MUST geçmiş kaydını korumalı. CLI normal çıkışı veya çökmesi de geçmiş silme sayılmamalı. |
 | BASE-08 | Başlık değişikliği MUST kalıcı kimliği bozmamalı. Konuşma konusu bulunduğunda başlık güncellenebilmeli; bulunamazsa başka konuşmanın başlığı kullanılmamalı. |
 | BASE-09 | Reload/deactivation MUST agent'ı yeniden başlatmamalı veya terminali öldürmemeli. Terminal kalıcılığı VS Code ayarları ve host desteğine bağlı olarak belgelenmeli. |
-| BASE-10 | Native ve cards MUST aynı yetenek, seçim, kapsam ve komut doğrulamasını paylaşmalı. Webview'den dosya yolu veya süreç kimliği otorite olarak kabul edilmemeli. |
+| BASE-10 | Yerel VS Code listeleri MUST aynı yetenek, seçim, kapsam ve komut doğrulamasını kullanmalı. Doğrudan komut çağrıları da görünümdeki destek ve hedef kontrollerini uygulamalı. |
 | BASE-11 | Yeni kullanıcı mesajları MUST İngilizce/Türkçe eşleşen yerelleştirme anahtarlarıyla sunulmalı. Trusted, non-virtual workspace sınırı korunmalı. |
 | BASE-12 | Çalışıyor/bitti göstergesi MUST yalnızca gözlemlenen süreç/shell olaylarını anlatmalı; modelin düşündüğü, yanıtladığı veya tamamladığı iddia edilmemeli. |
 | BASE-13 | Yeni direct/profile terminalleri MUST varsayılan olarak yalnızca başarılı CLI çıkışında otomatik kapanmalı. Hatalı, sinyalli ve bilinmeyen çıkışlar açık tutulmalı; `never`/`always` ayarı başlatmada uygulanmalı. Shell komutunun bitmesi açık shell'i kapatmamalı; hiçbir çıkış politikası kayıtlı geçmişi silmemeli. Çıktısı tutulan ama CLI'ı bitmiş terminal resume için çalışan oturum sayılmamalı. |
@@ -87,7 +87,7 @@ Her yetenek için **destekli**, **kısıtlı**, **uygulanmamış** veya **sağla
 - **DEL-09 — İşlem sırası:** Onay → hedef/kimlik doğrulama → yerel kaydı silme → başarılı hedeflerin doğrulanmış sekmelerini kapatma → listeyi yenileme. Onay iptali veya kayıt silme başarısızlığında terminal kapatılmamalı.
 - **DEL-10 — Ayrı sonuçlar:** Kayıt silme ve terminal kapatma MUST ayrı sonuçlar olarak tutulmalı. Bir terminal kapanamasa da diğer doğrulanmış eşleşmeler denenmeli.
 - **DEL-11 — Yarışlar:** Silme süresince aynı modelde yinelenen silme ve resume MUST engellenmeli. Scope değişimi eski seçimi yeni agent/projeye uygulamamalı.
-- **DEL-12 — Toplu seçim:** Select All MUST o anda listelenen kapsamı seçmeli; cards aramasında görünür sonuçları aşmamalı. Yenileme/başlık değişikliği seçimi kimlikle korumalı; agent/proje/location değişimi temizlemeli. Kısmi hatada yalnızca başarısız hedefler seçili kalmalı.
+- **DEL-12 — Toplu seçim:** Select All MUST o anda listelenen agent/location kapsamını seçmeli. Yenileme/başlık değişikliği seçimi kimlikle korumalı; agent/proje/location değişimi temizlemeli. Kısmi hatada yalnızca başarısız hedefler seçili kalmalı.
 - **DEL-13 — Yerel kapsam:** Silme MUST harici paylaşımın iptali, bulut geçmişi temizliği veya bağımsız daemon sonlandırma olarak sunulmamalı.
 - **DEL-14 — Kapatma anı:** Kimlik keşfi ile kapatma arasında konuşma değişebiliyorsa bağlantı kapatma anında yeniden doğrulanmalı veya sağlayıcı protokolüyle sabitlenmeli. Silinen konuşma ailesindeki alt oturumlar için de aynı kapatma kapsamı uygulanmalı.
 - **DEL-15 — Devam eden işlemler:** Başlamış resume ile silme aynı oturum için koordineli olmalı; silinen kayda bekleyen başlatma devam etmemeli. Modal açıkken scope/store değişirse eski onay geçersiz sayılmalı; yeni hedefler için yeniden onay alınmalı.
@@ -151,7 +151,7 @@ Her destek iddiası şu davranışlarla doğrulanmalı. Kalıcı testler kullan�
 | QA-13 | Tarama/onay sürerken agent/proje/location değiştir; geç eski sonuç döndür | Eski sonuç yeni kapsamı doldurmaz; eski seçim yeni kayıtlara uygulanmaz |
 | QA-14 | Terminal başlığını değiştir; reload/reconnect yap | Kurtarılabilir kimlikle doğru terminal bulunur; agent yeniden çalıştırılmaz |
 | QA-15 | Harici writer, read-only handle, nested agent, reused PID veya ortak daemon kullan | Okuyucu/ilgisiz süreç terminal sahipliği sayılmaz; belirsizlikte yanlış sekme kapanmaz |
-| QA-16 | Native/cards arasında geç; ara, seç, yenile, toplu sil | Aynı model ve destek kuralları; arama/kapsam dışı kayıt silinmez |
+| QA-16 | Yerel Sessions listesinde seç, yenile, kapsam değiştir ve toplu sil | Aynı model ve destek kuralları uygulanır; kapsam dışı kayıt silinmez |
 | QA-17 | Kaydı dışarıdan oluştur/yeniden adlandır/sil; store'u okunamaz yap | Yenileme doğru değişimi gösterir; okunamama boş geçmiş diye sunulmaz |
 | QA-18 | Kimlik keşfi sonrasında, kapatmadan önce konuşmayı değiştir | Başka konuşmaya geçmiş terminal kapanmaz |
 | QA-19 | Resume shell integration beklerken aynı kaydı sil | İşlemler koordine olur; silinmiş kayda gecikmiş CLI başlatılmaz |
@@ -170,7 +170,7 @@ Her destek iddiası şu davranışlarla doğrulanmalı. Kalıcı testler kullan�
 - `src/savedSessionsView.ts`: kapsamlı seçim, onay, silme, terminal eşleme ve silmeden sonra kapatma.
 - `src/deleteSession.ts`, `src/openCodeDeletion.ts`: dosya/klasör ve OpenCode native silme güvenliği.
 - `src/terminalIdentity.ts`, `src/grokSessions.ts`, `src/ompSessionOwner.ts`, `src/windowsSessionProcesses.ts`: kalıcı/canlı kimlik ve writer keşfi.
-- `src/sessionsView.ts`, `src/cardsView.ts`, `media/sidebar.js`: açık terminal ve paylaşılan görünüm işlemleri.
-- `scripts/test.mjs`, `scripts/test-sidebar.mjs`, `scripts/test-terminal-titles.mjs`: mevcut davranış regresyonlarının ana konumları. Burada listelenmeleri bu çalışma sırasında çalıştırıldıkları anlamına gelmez.
+- `src/agentsView.ts`, `src/sessionsView.ts`: yerel ajan ve açık terminal listeleri.
+- `scripts/test.mjs`, `scripts/test-terminal-titles.mjs`: mevcut davranış regresyonlarının ana konumları. Burada listelenmeleri bu çalışma sırasında çalıştırıldıkları anlamına gelmez.
 
 `docs/session-audit.md` geçmiş tarihli inceleme kanıtıdır; güncel destek matrisi yerine kullanılmamalı. Yeni entegrasyonda bu matris ve README birlikte güncellenmeli; geçmiş sürüm notları sonradan güncel davranışmış gibi yeniden yazılmamalı. Bu sözleşme yeni adapter/DI mimarisi gerektirmez; ortak modeller ve mevcut fonksiyon tabanlı kayıt yaklaşımı korunur.

@@ -3,13 +3,8 @@ import { HARNESSES, type Harness, iconFile } from "./harnesses";
 import { type SessionContext } from "./sessionContext";
 import { extensionStrings } from "./localization";
 
-export interface FavoriteAgents {
-    readonly onDidChange: vscode.Event<void>;
-    isFavorite(harness: Harness): boolean;
-}
-
 /** Activity Bar launcher reuses the same commands as the editor buttons. */
-export function registerAgentsView(context: vscode.ExtensionContext, selection: SessionContext): FavoriteAgents {
+export function registerAgentsView(context: vscode.ExtensionContext, selection: SessionContext): void {
     const favoritesKey = "favoriteAgents";
     const strings = extensionStrings(context);
     const favorites = new Set(context.globalState.get<string[]>(favoritesKey, []));
@@ -72,5 +67,4 @@ export function registerAgentsView(context: vscode.ExtensionContext, selection: 
         vscode.commands.registerCommand("multiHarness.addFavorite", (harness?: Harness) => setFavorite(harness, true)),
         vscode.commands.registerCommand("multiHarness.removeFavorite", (harness?: Harness) => setFavorite(harness, false))
     );
-    return { onDidChange: changes.event, isFavorite: (harness) => favorites.has(harness.id) };
 }

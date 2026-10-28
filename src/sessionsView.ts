@@ -3,19 +3,17 @@ import { type Harness, iconFile } from "./harnesses";
 import { showEditorTerminal } from "./editorTerminal";
 import { harnessForTerminal, restoreTerminalIdentity, terminalIdentity } from "./terminalIdentity";
 
-export interface AgentSession {
+interface AgentSession {
     readonly id: string;
     readonly terminal: vscode.Terminal;
     readonly harness: Harness;
 }
 
-export interface AgentSessions {
-    readonly onDidChange: vscode.Event<void>;
-    getSessions(): AgentSession[];
+interface AgentSessions {
     refresh(): void;
 }
 
-export function sessionLabel(session: AgentSession): string {
+function sessionLabel(session: AgentSession): string {
     const matching = vscode.window.terminals.filter((terminal) => terminal.name === session.terminal.name);
     return matching.length > 1
         ? `${session.terminal.name} #${matching.indexOf(session.terminal) + 1}`
@@ -104,5 +102,5 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
         vscode.window.onDidChangeActiveTerminal(() => changes.fire())
     );
     vscode.window.terminals.forEach(restore);
-    return { onDidChange: changes.event, getSessions, refresh: () => changes.fire() };
+    return { refresh: () => changes.fire() };
 }

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the cards sidebar, layout setting and switch command. Agents, saved sessions and open terminals now always use native VS Code trees, including workspaces with a previously saved cards preference. Remove the webview assets and card-only localization/model interfaces while preserving native selection, deletion and session-scope behavior.
+
 - Automatically close new direct-mode agent terminals and profiles after successful CLI exits; retain failures and unknown exits for inspection. Add the localized `multiHarness.autoCloseOnExit` setting (`success`, `never`, `always`), using an inherited-terminal launcher without changing shell-mode command completion or saved history.
 - Recover validated exit-marker paths from the Linux wrapper process after code-server reconnects omit launch options, preventing resume from focusing a retained tab whose CLI already exited. Cache recovered paths so terminal-close cleanup still works after the process ends.
 
