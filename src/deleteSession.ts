@@ -81,9 +81,37 @@ async function validateGrokDeletion(session: SavedSession, roots: readonly Sessi
         const stat = await fs.lstat(content);
         if (stat.isSymbolicLink()) throw new SessionDeletionError("invalidFile", "The Grok session contains linked files.");
         if (stat.isDirectory() && ["terminal", "recap_requests", "subagents"].includes(name)) {
-            // Nested agent records may represent other conversations; require them to be empty.
-            if ((await fs.readdir(content)).length === 0) continue;
-            throw new SessionDeletionError("sharedFile", "The Grok session contains nested data; use native deletion.");
+            const validateContents = async (parent: string, kind: string): Promise<void> => {
+                const canonicalParent = await fs.realpath(parent);
+                if (path.relative(canonicalDirectory, canonicalParent).split(path.sep).includes("..")) {
+                    throw new SessionDeletionError("outsideStore", "The Grok auxiliary data is outside its session.");
+                }
+                for (const child of await fs.readdir(parent)) {
+                    const childFile = path.join(parent, child);
+                    const childStat = await fs.lstat(childFile);
+                    if (childStat.isSymbolicLink()) {
+                        throw new SessionDeletionError("invalidFile", "The Grok session contains linked files.");
+                    }
+                    if (kind === "subagents" && childStat.isDirectory() && /^[a-zA-Z0-9_-]{1,160}$/.test(child)) {
+                        await validateContents(childFile, "subagentMetadata");
+                        continue;
+                    }
+                    const recognized = kind === "terminal" ? /^call_[a-zA-Z0-9_-]+\.log$/.test(child)
+                        : kind === "recap_requests" ? /^[a-zA-Z0-9_-]{1,160}\.json$/.test(child)
+                        : kind === "subagentMetadata" && ["meta.json", "output.json"].includes(child);
+                    if (!recognized) {
+                        throw new SessionDeletionError("sharedFile", "The Grok session contains unrecognized nested data.");
+                    }
+                    if (!childStat.isFile() || childStat.nlink !== 1) {
+                        throw new SessionDeletionError("invalidFile", "The Grok session contains linked or non-regular files.");
+                    }
+                    if (path.dirname(await fs.realpath(childFile)) !== canonicalParent) {
+                        throw new SessionDeletionError("outsideStore", "The Grok auxiliary file is outside its directory.");
+                    }
+                }
+            };
+            await validateContents(content, name);
+            continue;
         }
         const base = name.endsWith(".lock") ? name.slice(0, -5) : name;
         if (!nativeFiles.has(base)) throw new SessionDeletionError("sharedFile", "The Grok session contains unrecognized data.");

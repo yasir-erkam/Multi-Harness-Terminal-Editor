@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fix Grok Build session deletion when native terminal logs, recap requests or session-local subagent metadata are present. Validate recognized auxiliary files without following links or deleting separately stored child conversations; continue rejecting unknown nested content.
+
+- Document the harness feature and session-lifecycle standard, separating target requirements from current provider capabilities, deletion/terminal-closure limits and acceptance scenarios.
+
+- Use Grok user/assistant message timestamps for saved-history dates and sorting, with creation-time fallback when bounded log windows contain no valid message; resume and metadata writes no longer advance activity.
+
 - Add Grok Build (`grok`) terminal launch support, including the agent picker, favorites, terminal profiles, an optional editor title-bar icon and localized executable/argument settings.
 - Add Grok Build saved-history listing and resume, with a session-directory override and discovery from `~/.grok/sessions` or `$GROK_HOME/sessions`. Custom-store resumes use the parent Grok home for both direct and shell terminals, including its authentication/configuration; unsupported layouts show a localized error. Add confirmed single/bulk Grok session-directory deletion with live identity, canonical boundary, link and content validation. Linux registry/process-start verification tracks unambiguous fresh/switched conversations and guards cross-window resumes/deletions; other platforms retain saved resume identity.
 

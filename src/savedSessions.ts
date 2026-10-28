@@ -260,6 +260,38 @@ async function scanAntigravity(root: SessionRoot, matches: (directory: string) =
     return sessions;
 }
 
+/** Metadata writes and resume events do not represent conversation activity. */
+async function grokMessageTime(file: string, id: string, signal?: AbortSignal): Promise<number> {
+    const handle = await fs.open(file, "r");
+    try {
+        const stat = await handle.stat();
+        let latest = 0;
+        const offsets = stat.size > WINDOW_BYTES ? [0, stat.size - WINDOW_BYTES] : [0];
+        for (const offset of offsets) {
+            if (signal?.aborted) return 0;
+            const buffer = Buffer.alloc(Math.min(WINDOW_BYTES, stat.size - offset));
+            const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+            const lines = buffer.subarray(0, bytesRead).toString("utf8").split("\n");
+            if (offset > 0) lines.shift();
+            for (const line of lines) {
+                try {
+                    const row = JSON.parse(line);
+                    const kind = row.params?.update?.sessionUpdate;
+                    if (row.params?.sessionId !== id || !["user_message_chunk", "agent_message_chunk"].includes(kind)) continue;
+                    const ms = row.params?._meta?.agentTimestampMs;
+                    const time = typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? ms
+                        : typeof row.timestamp === "number" && Number.isFinite(row.timestamp) && row.timestamp > 0 ? row.timestamp * 1000
+                        : parseTimestamp(row.timestamp);
+                    latest = Math.max(latest, time);
+                } catch { /* Partial or malformed events do not change conversation time. */ }
+            }
+        }
+        return latest;
+    } finally {
+        await handle.close();
+    }
+}
+
 /** Grok indexes conversations by encoded workspace and session ID; logs stay unread. */
 async function scanGrokBuild(root: SessionRoot, matches: (directory: string) => Promise<boolean>, options: SessionScanOptions): Promise<SavedSession[]> {
     const sessions: SavedSession[] = [];
@@ -294,7 +326,7 @@ async function scanGrokBuild(root: SessionRoot, matches: (directory: string) => 
                             || !await matches(cwd)) continue;
                         const log = await fs.lstat(path.join(directory, "updates.jsonl"));
                         if (!log.isFile() || log.size === 0) continue;
-                        const modified = parseTimestamp(row.updated_at) || parseTimestamp(row.created_at);
+                        const modified = await grokMessageTime(path.join(directory, "updates.jsonl"), id, options.signal) || parseTimestamp(row.created_at);
                         if (!modified) continue;
                         sessions.push({ harnessId: root.harnessId, id, cwd, file, modified,
                             title: clean(row.generated_title) || clean(row.session_summary) || id });

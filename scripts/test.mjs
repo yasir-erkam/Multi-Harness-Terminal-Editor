@@ -1,7 +1,7 @@
 // Unit tests: resolveExecutable (pure node module, esbuild-bundled on the fly)
 // plus the full manifest validation from validate-manifest.mjs.
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync, utimesSync, symlinkSync, copyFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, rmSync, chmodSync, existsSync, utimesSync, symlinkSync, copyFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { once } from "node:events";
 import { tmpdir, homedir } from "node:os";
@@ -352,7 +352,7 @@ try {
     function grokSession(id, extra = {}, group = encodeURIComponent(project)) {
         const directory = join(root.directory, group, id);
         mkdirSync(directory, { recursive: true });
-        writeFileSync(join(directory, "updates.jsonl"), "conversation log is deliberately not parsed\n");
+        writeFileSync(join(directory, "updates.jsonl"), JSON.stringify({ timestamp: Date.parse(extra.updated_at ?? "2026-10-21T10:00:00.123Z") / 1000, params: { sessionId: id, update: { sessionUpdate: "user_message_chunk" } } }) + "\n");
         writeFileSync(join(directory, "summary.json"), JSON.stringify({ info: { id, cwd: project }, generated_title: "Grok conversation", session_summary: "Fallback title",
             created_at: "2026-10-20T10:00:00Z", updated_at: "2026-10-21T10:00:00.123456789Z", num_messages: 2, ...extra }));
         return directory;
@@ -377,7 +377,7 @@ try {
     let scan = await scanSavedSessions([root], 100, { harnessId: "grokBuild", cwd: project });
     assert.deepEqual(scan.unreadable, []);
     assert.deepEqual(new Set(scan.sessions.map((entry) => entry.id)), new Set(["main", "fork", "hashed"]));
-    assert.equal(scan.sessions[0].id, "fork", "metadata timestamps order Grok sessions independently of file mtime");
+    assert.equal(scan.sessions[0].id, "fork", "message timestamps order Grok sessions independently of metadata and file mtime");
     assert.equal(scan.sessions[0].title, "Fallback title");
     const saved = scan.sessions.find((entry) => entry.id === "main");
     assert.equal(saved.file, join(main, "summary.json"));
@@ -391,7 +391,18 @@ try {
     assert.deepEqual((await scanSavedSessions([root], 100, undefined, { maxEntries: 1 })).unreadable, ["grokBuild"]);
     writeFileSync(join(main, "summary.json"), JSON.stringify({ info: { id: "main", cwd: project }, generated_title: "Renamed conversation", num_messages: 3, updated_at: "2026-10-25T10:00:00Z" }));
     scan = await scanSavedSessions([root], 100, { harnessId: "grokBuild", cwd: project });
-    assert.equal(scan.sessions[0].title, "Renamed conversation");
+    assert.equal(scan.sessions.find((entry) => entry.id === "main").title, "Renamed conversation");
+    assert.equal(scan.sessions[0].id, "fork", "renaming and resuming do not reorder message activity");
+    appendFileSync(join(main, "updates.jsonl"), JSON.stringify({ timestamp: 1900000000, params: { sessionId: "main", update: { sessionUpdate: "current_mode_update" } } }) + "\n");
+    assert.equal((await scanSavedSessions([root])).sessions.find((entry) => entry.id === "main").modified, saved.modified);
+    appendFileSync(join(main, "updates.jsonl"), JSON.stringify({ timestamp: 1900000000, params: { sessionId: "main", update: { sessionUpdate: "agent_message_chunk" }, _meta: { agentTimestampMs: 1900000000123 } } }) + "\n");
+    assert.equal((await scanSavedSessions([root])).sessions[0].modified, 1900000000123, "new assistant messages advance conversation activity");
+    const large = grokSession("large-log");
+    const message = JSON.stringify({ timestamp: 1950000000, params: { sessionId: "large-log", update: { sessionUpdate: "user_message_chunk" } } }) + "\n";
+    writeFileSync(join(large, "updates.jsonl"), "x".repeat(300 * 1024) + "\n" + message
+        + JSON.stringify({ timestamp: 1990000000, params: { sessionId: "other", update: { sessionUpdate: "agent_message_chunk" } } }) + "\n{partial");
+    assert.equal((await scanSavedSessions([root])).sessions[0].modified, 1950000000000, "bounded tail reads ignore foreign sessions and partial writes");
+    rmSync(large, { recursive: true });
     rmSync(main, { recursive: true });
     assert.equal((await scanSavedSessions([root])).sessions.some((entry) => entry.id === "main"), false);
     passed += 1;
@@ -471,6 +482,32 @@ try {
     writeFileSync(join(directory, "chat_history.jsonl"), "{}\n");
     writeFileSync(join(directory, "summary.json.lock"), "");
     assert.equal(await sessionDeletionTarget(session, [root]), directory);
+    const terminalLogs = join(directory, "terminal");
+    mkdirSync(terminalLogs);
+    const terminalLog = join(terminalLogs, "call_6e27075732d6494cb65d0d51203a6bcd.log");
+    writeFileSync(terminalLog, "Command output\n");
+    assert.equal(await sessionDeletionTarget(session, [root]), directory, "native terminal output must not block deletion");
+    writeFileSync(join(terminalLogs, "unknown.txt"), "preserve");
+    await assert.rejects(sessionDeletionTarget(session, [root]), /unrecognized/);
+    rmSync(join(terminalLogs, "unknown.txt"));
+    mkdirSync(join(terminalLogs, "call_nested.log"));
+    await assert.rejects(sessionDeletionTarget(session, [root]), /non-regular/);
+    rmSync(join(terminalLogs, "call_nested.log"), { recursive: true });
+    if (fileSymlink(session.file, join(terminalLogs, "call_link.log"))) {
+        await assert.rejects(sessionDeletionTarget(session, [root]), /linked/);
+        rmSync(join(terminalLogs, "call_link.log"));
+    }
+    const recaps = join(directory, "recap_requests");
+    mkdirSync(recaps);
+    writeFileSync(join(recaps, "d2654472-e19a-4603-b786-e8c5f1392c04.json"), "{}");
+    const childMetadata = join(directory, "subagents", "child-session");
+    mkdirSync(childMetadata, { recursive: true });
+    writeFileSync(join(childMetadata, "meta.json"), "{}");
+    writeFileSync(join(childMetadata, "output.json"), "{}");
+    assert.equal(await sessionDeletionTarget(session, [root]), directory, "session-local recap and subagent metadata can be deleted without deleting child conversations");
+    writeFileSync(join(childMetadata, "updates.jsonl"), "preserve child conversation");
+    await assert.rejects(sessionDeletionTarget(session, [root]), /unrecognized nested/);
+    rmSync(join(directory, "subagents"), { recursive: true });
     writeFileSync(session.file, JSON.stringify({ info: { id: "other", cwd: session.cwd } }));
     await assert.rejects(sessionDeletionTarget(session, [root]), /identity changed/);
     writeFileSync(session.file, JSON.stringify(summary));
@@ -1766,8 +1803,10 @@ try {
     const resume = vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.resumeSession");
     const grokHistory = join(vscodeStub.__fixture.multiHarness.grokBuild.sessionDirectory, encodeURIComponent(projectDirectory), "saved-grok");
     mkdirSync(grokHistory, { recursive: true });
-    writeFileSync(join(grokHistory, "summary.json"), JSON.stringify({ info: { id: "saved-grok", cwd: projectDirectory }, generated_title: "Saved Grok topic", num_messages: 2, updated_at: "2026-10-28T10:00:00Z" }));
+    writeFileSync(join(grokHistory, "summary.json"), JSON.stringify({ info: { id: "saved-grok", cwd: projectDirectory }, generated_title: "Saved Grok topic", num_messages: 2, created_at: "2026-10-28T10:00:00Z", updated_at: "2026-10-28T10:00:00Z" }));
     writeFileSync(join(grokHistory, "updates.jsonl"), "{}\n");
+    mkdirSync(join(grokHistory, "terminal"));
+    writeFileSync(join(grokHistory, "terminal", "call_native-output.log"), "Command output\n");
     await selectSessionAgent.handler("grokBuild");
     const grokRows = await savedSessionRows();
     assert.equal(grokRows.length, 1);
@@ -1830,7 +1869,7 @@ try {
     for (const id of ["bulk-one", "bulk-two"]) {
         const directory = join(vscodeStub.__fixture.multiHarness.grokBuild.sessionDirectory, "project", id);
         mkdirSync(directory, { recursive: true });
-        writeFileSync(join(directory, "summary.json"), JSON.stringify({ info: { id, cwd: projectDirectory }, num_messages: 2, updated_at: "2026-10-28T10:00:00Z" }));
+        writeFileSync(join(directory, "summary.json"), JSON.stringify({ info: { id, cwd: projectDirectory }, num_messages: 2, created_at: "2026-10-28T10:00:00Z", updated_at: "2026-10-28T10:00:00Z" }));
         writeFileSync(join(directory, "updates.jsonl"), "{}\n");
     }
     await vscodeStub.__calls.commands.find((command) => command.id === "multiHarness.refreshSessions").handler();
