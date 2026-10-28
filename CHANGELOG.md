@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.1.0
+
 - Remove the cards sidebar, layout setting and switch command. Agents, saved sessions and open terminals now always use native VS Code trees, including workspaces with a previously saved cards preference. Remove the webview assets and card-only localization/model interfaces while preserving native selection, deletion and session-scope behavior.
 
 - Automatically close new direct-mode agent terminals and profiles after successful CLI exits; retain failures and unknown exits for inspection. Add the localized `multiHarness.autoCloseOnExit` setting (`success`, `never`, `always`), using an inherited-terminal launcher without changing shell-mode command completion or saved history.
@@ -17,11 +19,11 @@
 - Add Grok Build saved-history listing and resume, with a session-directory override and discovery from `~/.grok/sessions` or `$GROK_HOME/sessions`. Custom-store resumes use the parent Grok home for both direct and shell terminals, including its authentication/configuration; unsupported layouts show a localized error. Add confirmed single/bulk Grok session-directory deletion with live identity, canonical boundary, link and content validation. Linux registry/process-start verification tracks unambiguous fresh/switched conversations and guards cross-window resumes/deletions; other platforms retain saved resume identity.
 
 - Prevent Oh My Pi saved-session resumes on Linux/code-server from starting a second writer when another OMP process already holds the transcript open for writing, including other editor windows. Show a localized warning instead of triggering OMP's protective fork; preserve read-only access and resume after the writer closes.
-- Refresh the shared Open Terminals model after a conversation-topic rename so native and card layouts update without another focus change. Add saved-shell resume regressions for pending integration, timeout fallback and late integration events.
+- Refresh Open Terminals after a conversation-topic rename without requiring another focus change. Add saved-shell resume regressions for pending integration, timeout fallback and late integration events.
 - Set resumed terminal titles from the selected saved conversation at creation in both direct and shell modes, avoiding a delayed process-name-to-topic change in Open Terminals.
 - Ignore Oh My Pi breadcrumbs older than the current Linux terminal launch/process, so reused PTY numbers cannot override a resumed conversation with a previous terminal's session. Preserve current-process conversation switches and cover stale/current breadcrumbs with a real PTY regression.
 - Coalesce concurrent resume requests for the same provider/session into one launch, preventing duplicate terminal processes while preserving independent sessions, fresh launches and retries after failure. Cover all eight saved-history providers with resume lifecycle regressions.
-- Add explicitly confirmed permanent deletion for OpenCode SQLite and legacy JSON history. Delete the selected session family and related messages/parts while preserving the shared database and unrelated conversations; validate live identity, store boundaries and supported schemas before mutation. Share deletion support checks between native and card layouts.
+- Add explicitly confirmed permanent deletion for OpenCode SQLite and legacy JSON history. Delete the selected session family and related messages/parts while preserving the shared database and unrelated conversations; validate live identity, store boundaries and supported schemas before mutation.
 
 ## 1.0.1
 
