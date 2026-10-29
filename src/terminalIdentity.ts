@@ -16,6 +16,7 @@ export interface TerminalIdentity {
     readonly harnessId: string;
     readonly launchMode: "direct" | "shell";
     readonly sessionId?: string;
+    readonly projectPath?: string;
     readonly terminalSessionId?: string;
     readonly startedAt?: number;
 }
@@ -23,11 +24,15 @@ export interface TerminalIdentity {
 export function terminalIdentityEnv(
     harness: Harness,
     launchMode: TerminalIdentity["launchMode"],
-    sessionId?: string
+    sessionId?: string,
+    projectPath?: string
 ): Record<string, string> {
+    if (projectPath !== undefined && !validProjectPath(projectPath)) {
+        throw new TypeError("Terminal projectPath must be an absolute path without NUL characters");
+    }
     const terminalSessionId = harness.id === "ohMyPi" && (process.platform === "win32" || process.platform === "darwin") ? randomUUID() : undefined;
     return {
-        [TERMINAL_IDENTITY_ENV]: JSON.stringify({ version: 1, harnessId: harness.id, launchMode, sessionId, terminalSessionId, startedAt: Date.now() }),
+        [TERMINAL_IDENTITY_ENV]: JSON.stringify({ version: 1, harnessId: harness.id, launchMode, sessionId, projectPath, terminalSessionId, startedAt: Date.now() }),
         ...(terminalSessionId ? { TERM_SESSION_ID: terminalSessionId } : {}),
     };
 }
@@ -50,6 +55,10 @@ export function harnessForTerminal(terminal: vscode.Terminal): Harness | undefin
         : harnessForTerminalName(terminal.name);
 }
 
+function validProjectPath(value: unknown): value is string {
+    return typeof value === "string" && path.isAbsolute(value) && !value.includes("\0");
+}
+
 function parseIdentity(value: string | null | undefined): TerminalIdentity | undefined {
     if (!value) {
         return undefined;
@@ -59,6 +68,7 @@ function parseIdentity(value: string | null | undefined): TerminalIdentity | und
         if (!identity || typeof identity !== "object" || !("version" in identity) || identity.version !== 1
             || !("harnessId" in identity) || !HARNESSES.some((harness) => harness.id === identity.harnessId)
             || !("launchMode" in identity) || (identity.launchMode !== "direct" && identity.launchMode !== "shell")
+            || ("projectPath" in identity && !validProjectPath(identity.projectPath))
             || ("terminalSessionId" in identity && (typeof identity.terminalSessionId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(identity.terminalSessionId)))
             || ("startedAt" in identity && (typeof identity.startedAt !== "number" || !Number.isFinite(identity.startedAt) || identity.startedAt <= 0))
             || ("sessionId" in identity && (typeof identity.sessionId !== "string" || !identity.sessionId))) {

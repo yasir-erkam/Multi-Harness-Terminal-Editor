@@ -25,7 +25,7 @@ export function registerAgentProfile(
             return new vscode.TerminalProfile({
                 ...terminalExitOptions(context, executable,
                     harness.id === "codex" ? await codexLaunchArgs(executable, launch.args) : launch.args,
-                    terminalIdentityEnv(harness, "direct")),
+                    terminalIdentityEnv(harness, "direct", undefined, launch.cwd)),
                 cwd: launch.cwd,
                 location: { viewColumn: vscode.ViewColumn.Active },
                 isTransient: false,

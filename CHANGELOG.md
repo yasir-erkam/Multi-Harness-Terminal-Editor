@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add native Open Terminals multi-selection, visible-only Select All, cancellation, independent agent/project filters and confirmed bulk closure including Close Other Visible Terminals. Preserve saved history and out-of-scope terminals; snapshot confirmations exclude new arrivals and retain failed closures as selected. Persist launch directories across direct/shell/profile/resume metadata for project filtering; older terminals remain under Unknown project.
+
+- Add confirmed takeover for Oh My Pi and Grok Build conversations running outside this window on Linux/code-server. Focus existing local terminals first; otherwise offer localized **Close and Resume** with an unsaved-work warning. Cancel without changes, revalidate the exact process identity before `SIGTERM`, and launch only after bounded release verification. Refuse shared Grok processes and unsafe or failed takeover; ask users to close the other instance manually and retry.
+- Recognize OMP advisor and nested task records in the main session's same-stem artifact directory during takeover, while continuing to reject unrelated writable conversation records and symlink escapes.
+
 ## 1.1.0
 
 - Remove the cards sidebar, layout setting and switch command. Agents, saved sessions and open terminals now always use native VS Code trees, including workspaces with a previously saved cards preference. Remove the webview assets and card-only localization/model interfaces while preserving native selection, deletion and session-scope behavior.

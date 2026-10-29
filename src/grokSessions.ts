@@ -1,7 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { processStartTime, type SessionOwner } from "./sessionTakeover";
 
-export interface GrokOwner {
+export interface GrokOwner extends SessionOwner {
     readonly sessionId: string;
     readonly pid: number;
 }
@@ -38,9 +39,8 @@ export async function grokOwners(sessionsRoot: string, procRoot = "/proc", platf
             throw new Error("Invalid Grok active-session identity");
         }
         try {
-            const text = await fs.readFile(path.join(procRoot, String(row.pid), "stat"), "utf8");
-            const fields = text.slice(text.lastIndexOf(")") + 2).trim().split(/\s+/);
-            if (Number(fields[19]) === row.pid_start) result.push({ sessionId: row.session_id, pid: row.pid });
+            const startTime = await processStartTime(row.pid, procRoot);
+            if (startTime === String(row.pid_start)) result.push({ sessionId: row.session_id, pid: row.pid, startTime });
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== "ENOENT" && (error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
         }

@@ -29,6 +29,7 @@ const harnessIds = [
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
 const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.closeSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSessionSelectionMode", "multiHarness.cancelSessionSelection", "multiHarness.toggleSessionSelection", "multiHarness.selectAllSessions", "multiHarness.deleteSession", "multiHarness.deleteSelectedSessions"];
 allCommandIds.push("multiHarness.toggleSessionLocationScope");
+allCommandIds.push(...["toggleTerminalSelectionMode", "cancelTerminalSelection", "toggleTerminalSelection", "selectAllTerminals", "closeSelectedTerminals", "closeOtherTerminals", "filterTerminalAgent", "filterTerminalProject"].map((id) => `multiHarness.${id}`));
 
 // The source table must agree with the manifest.
 const sourceHarnessIds = [...readFileSync(join(root, "src", "harnesses.ts"), "utf8").matchAll(/id: "([a-z][A-Za-z]*)", displayName: "/g)].map((m) => m[1]);
@@ -107,6 +108,14 @@ for (const command of commands) {
     }
     const sessionIcons = {
         "multiHarness.closeSession": "$(close)",
+        "multiHarness.toggleTerminalSelectionMode": "$(checklist)",
+        "multiHarness.cancelTerminalSelection": "$(close)",
+        "multiHarness.toggleTerminalSelection": "$(check)",
+        "multiHarness.selectAllTerminals": "$(check-all)",
+        "multiHarness.closeSelectedTerminals": "$(close-all)",
+        "multiHarness.closeOtherTerminals": "$(close-all)",
+        "multiHarness.filterTerminalAgent": "$(filter)",
+        "multiHarness.filterTerminalProject": "$(folder)",
         "multiHarness.toggleSessionSelectionMode": "$(checklist)",
         "multiHarness.cancelSessionSelection": "$(close)",
         "multiHarness.toggleSessionSelection": "$(check)",

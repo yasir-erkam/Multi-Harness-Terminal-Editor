@@ -1,6 +1,6 @@
-# Open Terminals yönetimi — ertelenen plan
+# Open Terminals yönetimi
 
-Durum: kullanıcı isteğiyle uygulama ertelendi. Bu özellikler 1.1.0 sürümünün parçası değildir.
+Durum: 1.1.0 sonrasında uygulandı. Çoklu seçim, bağımsız agent/proje filtreleri ve onaylı toplu kapatma mevcuttur. Proje, kalıcı terminal kimliğindeki başlatma dizinidir; CLI içinde sonradan değişen çalışma dizini veya konuşma projesi izlenmez. Eski metadata projesi bilinmeyen olarak listelenir. Filtre değişimi seçim modunu da kapatır.
 
 ## Kapsam ve uygulama sırası
 
@@ -33,4 +33,6 @@ Durum: kullanıcı isteğiyle uygulama ertelendi. Bu özellikler 1.1.0 sürümü
 - Eski veya doğrudan çağrılan komut girdileri modelde yeniden çözülür; başka nesne/path/PID kapatma otoritesi sayılmaz.
 - Gerçek VS Code/code-server yüzeyinde seçme, filtreleme, onay, kapatma ve iptal akışları doğrulanır. Stub testleri görsel doğrulama yerine geçmez.
 
-Uygulama başlamadan önce `src/sessionsView.ts`, `src/terminalIdentity.ts` ve `src/workspaceContext.ts` incelenmeli. Proje filtresi için kalıcı kimliğe proje bilgisinin eklenmesi gerekiyorsa tüm direct/shell/profile/resume ve yeniden bağlanma yolları birlikte güncellenmeli; eski terminallerin bilinmeyen proje durumu açık tutulmalı.
+Doğrulama: Node 22 ile derleme, 79 test grubu ve manifest/workflow kontrolleri geçti. Gerçek çocuk süreçlerle, VS Code API adaptörü üzerinden filtreli seçim/kapatma smoke akışı çalıştırıldı; kapsam dışı süreç korundu. Bu, gerçek VS Code UI doğrulaması değildir. Tarayıcı daemon'u başlatılamadığı için native yüzeyin görsel doğrulaması yapılamadı.
+
+Uygulama noktaları: `src/sessionsView.ts` görünür model, seçim, filtre ve kapatma komutlarını yönetir. `src/terminalIdentity.ts`, `src/launch.ts` ve `src/profiles.ts` başlatma projesini direct/shell/profile/resume ve desteklenen yeniden bağlanma yollarında korur. Filtreler kayıtlı geçmiş kapsamını değiştirmez.

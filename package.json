@@ -59,6 +59,14 @@
     "onView:multiHarness.sessions",
     "onCommand:multiHarness.focusSession",
     "onCommand:multiHarness.closeSession",
+    "onCommand:multiHarness.toggleTerminalSelectionMode",
+    "onCommand:multiHarness.cancelTerminalSelection",
+    "onCommand:multiHarness.toggleTerminalSelection",
+    "onCommand:multiHarness.selectAllTerminals",
+    "onCommand:multiHarness.closeSelectedTerminals",
+    "onCommand:multiHarness.closeOtherTerminals",
+    "onCommand:multiHarness.filterTerminalAgent",
+    "onCommand:multiHarness.filterTerminalProject",
     "onCommand:multiHarness.addFavorite",
     "onCommand:multiHarness.removeFavorite",
     "onCommand:multiHarness.openSettings",
@@ -152,6 +160,14 @@
       }
     ],
     "commands": [
+      { "command": "multiHarness.toggleTerminalSelectionMode", "title": "%command.toggleTerminalSelectionMode.title%", "category": "%category%", "icon": "$(checklist)" },
+      { "command": "multiHarness.cancelTerminalSelection", "title": "%command.cancelTerminalSelection.title%", "category": "%category%", "icon": "$(close)" },
+      { "command": "multiHarness.toggleTerminalSelection", "title": "%command.toggleTerminalSelection.title%", "category": "%category%", "icon": "$(check)" },
+      { "command": "multiHarness.selectAllTerminals", "title": "%command.selectAllTerminals.title%", "category": "%category%", "icon": "$(check-all)" },
+      { "command": "multiHarness.closeSelectedTerminals", "title": "%command.closeSelectedTerminals.title%", "category": "%category%", "icon": "$(close-all)", "enablement": "multiHarness.hasSelectedTerminals && !multiHarness.closingTerminals" },
+      { "command": "multiHarness.closeOtherTerminals", "title": "%command.closeOtherTerminals.title%", "category": "%category%", "icon": "$(close-all)" },
+      { "command": "multiHarness.filterTerminalAgent", "title": "%command.filterTerminalAgent.title%", "category": "%category%", "icon": "$(filter)" },
+      { "command": "multiHarness.filterTerminalProject", "title": "%command.filterTerminalProject.title%", "category": "%category%", "icon": "$(folder)" },
       {
         "command": "multiHarness.focusSession",
         "title": "%command.focusSession.title%",
@@ -399,6 +415,8 @@
     ],
     "menus": {
       "commandPalette": [
+        { "command": "multiHarness.toggleTerminalSelection", "when": "false" },
+        { "command": "multiHarness.closeOtherTerminals", "when": "false" },
         {
           "command": "multiHarness.focusSession",
           "when": "false"
@@ -445,6 +463,7 @@
         }
       ],
       "view/item/context": [
+        { "command": "multiHarness.closeOtherTerminals", "when": "view == multiHarness.sessions && viewItem == openTerminal && !multiHarness.closingTerminals", "group": "terminal" },
         {
           "command": "multiHarness.addFavorite",
           "when": "view == multiHarness.agents && viewItem == agent",
@@ -477,6 +496,12 @@
         }
       ],
       "view/title": [
+        { "command": "multiHarness.toggleTerminalSelectionMode", "when": "view == multiHarness.sessions && !multiHarness.terminalSelectionMode && !multiHarness.closingTerminals", "group": "navigation@1" },
+        { "command": "multiHarness.cancelTerminalSelection", "when": "view == multiHarness.sessions && multiHarness.terminalSelectionMode && !multiHarness.closingTerminals", "group": "navigation@1" },
+        { "command": "multiHarness.selectAllTerminals", "when": "view == multiHarness.sessions && multiHarness.terminalSelectionMode && !multiHarness.closingTerminals", "group": "navigation@2" },
+        { "command": "multiHarness.closeSelectedTerminals", "when": "view == multiHarness.sessions && multiHarness.terminalSelectionMode", "group": "navigation@3" },
+        { "command": "multiHarness.filterTerminalAgent", "when": "view == multiHarness.sessions && !multiHarness.closingTerminals", "group": "navigation@4" },
+        { "command": "multiHarness.filterTerminalProject", "when": "view == multiHarness.sessions && !multiHarness.closingTerminals", "group": "navigation@5" },
         {
           "command": "multiHarness.toggleSessionLocationScope",
           "when": "view == multiHarness.savedSessions",

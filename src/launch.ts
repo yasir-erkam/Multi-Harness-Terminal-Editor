@@ -9,10 +9,11 @@ import { extensionStrings } from "./localization";
 import { showEditorTerminal } from "./editorTerminal";
 import { grokTerminalSessionId, ompTerminalSessionFile, restoreTerminalIdentity, terminalIdentityEnv } from "./terminalIdentity";
 import { codexLaunchArgs } from "./codexLaunch";
-import { ompSessionHasWriter } from "./ompSessionOwner";
+import { ompSessionOwners } from "./ompSessionOwner";
 import { grokOwners } from "./grokSessions";
 import { sessionRoots } from "./savedSessions";
 import { terminalExitOptions, terminalHasExited } from "./terminalExit";
+import { releaseSessionOwners, type SessionOwner } from "./sessionTakeover";
 
 /** How long shell mode waits for shell integration before degrading. */
 export const SHELL_INTEGRATION_TIMEOUT_MS = 10_000;
@@ -133,8 +134,8 @@ function waitForShellIntegration(
     return promise;
 }
 
-function launchEnvironment(harness: Harness, mode: LaunchMode, resume?: ResumeLaunch): Record<string, string> {
-    const env = terminalIdentityEnv(harness, mode, resume?.sessionId);
+function launchEnvironment(harness: Harness, mode: LaunchMode, projectPath: string, resume?: ResumeLaunch): Record<string, string> {
+    const env = terminalIdentityEnv(harness, mode, resume?.sessionId, projectPath);
     if (harness.id === "grokBuild" && resume?.sessionsRoot) {
         const root = path.resolve(resume.sessionsRoot);
         const defaultRoot = sessionRoots().find((candidate) => candidate.harnessId === "grokBuild")!.directory;
@@ -160,7 +161,7 @@ async function openShellMode(
         cwd: launch.cwd,
         location: { viewColumn: vscode.ViewColumn.Active },
         isTransient: false,
-        env: launchEnvironment(harness, "shell", resume),
+        env: launchEnvironment(harness, "shell", launch.cwd, resume),
         iconPath: launch.iconPath,
     });
     status?.track(terminal, harness);
@@ -247,20 +248,33 @@ async function launchAgentTerminal(
             await showEditorTerminal(existing);
             return;
         }
-        if (harness.id === "grokBuild" && resume.sessionsRoot && process.platform === "linux") {
+        if ((harness.id === "grokBuild" && resume.sessionsRoot && process.platform === "linux")
+            || (harness.id === "ohMyPi" && resume.sessionFile && process.platform === "linux")) {
+            const strings = extensionStrings(context);
+            const owners = async (): Promise<readonly SessionOwner[]> => {
+                if (harness.id === "ohMyPi") return ompSessionOwners(resume.sessionFile!);
+                const all = await grokOwners(resume.sessionsRoot!);
+                const matching = all.filter((owner) => owner.sessionId === resume.sessionId);
+                if (matching.some((owner) => all.some((other) => other.pid === owner.pid && other.sessionId !== resume.sessionId))) {
+                    throw new Error("Grok process owns other sessions");
+                }
+                return [...new Map(matching.map((owner) => [owner.pid, owner])).values()];
+            };
             try {
-                if ((await grokOwners(resume.sessionsRoot)).some((owner) => owner.sessionId === resume.sessionId)) {
-                    await vscode.window.showWarningMessage(extensionStrings(context)["savedSessions.alreadyRunning"]);
-                    return;
+                const expected = await owners();
+                if (expected.length) {
+                    const confirm = strings["savedSessions.takeoverConfirm"];
+                    const picked = await vscode.window.showWarningMessage(
+                        strings["savedSessions.takeoverPrompt"].replace("{0}", harness.displayName),
+                        { modal: true }, confirm
+                    );
+                    if (picked !== confirm) return;
+                    await releaseSessionOwners(expected, { owners });
                 }
             } catch {
-                await vscode.window.showWarningMessage(extensionStrings(context)["savedSessions.grokOwnerUnavailable"]);
+                await vscode.window.showErrorMessage(strings["savedSessions.takeoverFailed"]);
                 return;
             }
-        }
-        if (harness.id === "ohMyPi" && resume.sessionFile && await ompSessionHasWriter(resume.sessionFile)) {
-            await vscode.window.showWarningMessage(extensionStrings(context)["savedSessions.alreadyRunning"]);
-            return;
         }
     }
 
@@ -295,7 +309,7 @@ async function launchAgentTerminal(
 
     const terminal = vscode.window.createTerminal({
         name: resume?.terminalName,
-        ...terminalExitOptions(context, executable, launch.args, launchEnvironment(harness, "direct", resume)),
+        ...terminalExitOptions(context, executable, launch.args, launchEnvironment(harness, "direct", launch.cwd, resume)),
         cwd: launch.cwd,
         location: { viewColumn: vscode.ViewColumn.Active },
         isTransient: false,

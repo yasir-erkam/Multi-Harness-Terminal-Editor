@@ -322,6 +322,7 @@ try {
     }
     const writeOwners = (rows) => writeFileSync(registry, JSON.stringify(rows));
     writeOwners([{ session_id: "first", pid: 101, pid_start: 1010 }]);
+    assert.deepEqual(await grokOwners(store, proc), [{ sessionId: "first", pid: 101, startTime: "1010" }], "Grok owners retain the verified process identity for takeover");
     assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc), proc), "first");
     writeOwners([{ session_id: "switched", pid: 101, pid_start: 1010 }, { session_id: "nested", pid: 102, pid_start: 1020 }]);
     assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc), proc), "switched", "nested tool agents do not claim the terminal");
@@ -342,6 +343,49 @@ try {
     passed += 1;
     console.log("ok: Grok registry verifies PID reuse, fresh/switched sessions, nested processes, shared-daemon ambiguity and corrupt stores");
 } finally { rmSync(grokOwnerDir, { recursive: true, force: true }); }
+
+await build({ entryPoints: [join(projectRoot, "src", "ompSessionOwner.ts")], outfile: join(outdir, "ompSessionOwner.test.mjs"), bundle: true, format: "esm", platform: "node", logLevel: "silent" });
+const { ompSessionOwners } = await import(pathToFileURL(join(outdir, "ompSessionOwner.test.mjs")).href);
+if (process.platform === "linux") {
+    const fixture = mkdtempSync(join(tmpdir(), "mhte-omp-owner-"));
+    try {
+        const target = join(fixture, "target.jsonl");
+        const artifacts = join(fixture, "target");
+        const proc = join(fixture, "proc");
+        const owner = join(proc, "123");
+        mkdirSync(join(owner, "fd"), { recursive: true });
+        mkdirSync(join(owner, "fdinfo"));
+        mkdirSync(join(artifacts, "Worker"), { recursive: true });
+        writeFileSync(target, "main session\n");
+        writeFileSync(join(owner, "comm"), "omp\n");
+        const fields = Array(20).fill("0"); fields[19] = "1230";
+        writeFileSync(join(owner, "stat"), "123 (omp) " + fields.join(" "));
+        const descriptor = (number, destination) => {
+            symlinkSync(destination, join(owner, "fd", String(number)));
+            writeFileSync(join(owner, "fdinfo", String(number)), "flags:\t0102001\n");
+        };
+        descriptor(1, target);
+        for (const [index, name] of ["__advisor.jsonl", "__advisor.security.jsonl", "Worker/Nested.jsonl"].entries()) {
+            const file = join(artifacts, name);
+            writeFileSync(file, "internal record\n");
+            descriptor(index + 2, file);
+        }
+        assert.deepEqual(await ompSessionOwners(target, proc), [{ pid: 123, startTime: "1230" }], "main OMP writer with native advisor and nested task records is takeover eligible");
+        assert.deepEqual(await ompSessionOwners(join(fixture, "missing.jsonl"), proc), [], "missing resume records do not invent external owners");
+        const unrelated = join(fixture, "unrelated.jsonl");
+        writeFileSync(unrelated, "unrelated conversation\n");
+        descriptor(5, unrelated);
+        await assert.rejects(ompSessionOwners(target, proc), /another session/, "an unrelated writable conversation still blocks takeover");
+        rmSync(join(owner, "fd", "5"));
+        const escaped = join(artifacts, "escaped.jsonl");
+        symlinkSync(unrelated, escaped);
+        descriptor(5, escaped);
+        await assert.rejects(ompSessionOwners(target, proc), /another session/, "artifact symlinks cannot disguise unrelated writable conversations");
+        assert.equal(readFileSync(target, "utf8"), "main session\n");
+        passed += 1;
+        console.log("ok: OMP native advisor/task writers belong to their main record while unrelated and escaped writers block takeover");
+    } finally { rmSync(fixture, { recursive: true, force: true }); }
+}
 
 const grokDir = mkdtempSync(join(tmpdir(), "mhte-grok-"));
 try {
@@ -1431,6 +1475,126 @@ try {
     passed++;
     console.log("ok: Windows Codex resume orders standalone options without duplicating explicit flags or overriding remote routing");
 
+    // Exercise the real release algorithm through the public launch entry point.
+    // Only process discovery, process identity and signaling are replaced: no
+    // fixture PID can reach process.kill, even when a regression fails open.
+    const takeoverPlugin = {
+        name: "session-takeover-processes",
+        setup(build) {
+            build.onResolve({ filter: /^\.\/(ompSessionOwner|grokSessions|terminalIdentity|sessionTakeover)$/ }, (args) => {
+                if (args.importer === join(projectRoot, "src", "launch.ts")) return { path: args.path.slice(2), namespace: "takeover-test" };
+            });
+            build.onLoad({ filter: /.*/, namespace: "takeover-test" }, (args) => {
+                const realModule = JSON.stringify(join(projectRoot, "src", args.path + ".ts"));
+                const prelude = 'import * as vscode from "vscode"; const state = () => vscode.__calls.takeover;';
+                const contents = {
+                    ompSessionOwner: prelude + 'export async function ompSessionOwners(file) { state().inputs.push(file); return state().owners(); }',
+                    grokSessions: prelude + 'export async function grokOwners(root) { state().inputs.push(root); return state().owners(); }',
+                    terminalIdentity: prelude + `export { terminalIdentityEnv } from ${realModule};
+                        export async function restoreTerminalIdentity(terminal) { return terminal.identity; }
+                        export async function ompTerminalSessionFile(terminal) { return terminal.sessionFile; }
+                        export async function grokTerminalSessionId(terminal) { return terminal.sessionId; }`,
+                    sessionTakeover: prelude + `import { releaseSessionOwners as release } from ${realModule};
+                        export function releaseSessionOwners(expected, dependencies) {
+                            return release(expected, { ...dependencies, startTime: async (pid) => {
+                                state().identityReads.push(pid); return state().startTime;
+                            }, terminate: (pid) => state().terminate(pid), wait: () => state().wait(), attempts: 2 });
+                        }`,
+                }[args.path];
+                return { contents, resolveDir: join(projectRoot, "src") };
+            });
+        },
+    };
+    await build({ entryPoints: [join(projectRoot, "src", "launch.ts")], outfile: join(activationDir, "launch.takeover.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], define: { "process.platform": '"linux"' }, plugins: [takeoverPlugin], logLevel: "silent" });
+    const takeoverLauncher = requireFrom(join(activationDir, "launch.takeover.cjs"));
+    const takeoverWarning = vscodeStub.window.showWarningMessage;
+    try {
+        for (const harnessId of ["ohMyPi", "grokBuild"]) {
+            const harness = vscodeStub.__calls.views[0].provider.getChildren().find((agent) => agent.id === harnessId);
+            const previousSettings = vscodeStub.__fixture.multiHarness[harnessId];
+            vscodeStub.__fixture.multiHarness[harnessId] = { executablePath: fakeCli, arguments: [] };
+            const resume = { sessionId: "takeover-session", sessionFile: join(activationDir, "takeover.jsonl"), sessionsRoot: join(activationDir, "sessions"), terminalName: `${harness.displayName} takeover`, cwd: activationDir, args: ["--resume", "takeover-session"] };
+            const owner = { pid: 424242, startTime: "12345", ...(harnessId === "grokBuild" ? { sessionId: resume.sessionId } : {}) };
+            try {
+                for (const scenario of ["approve", "cancel", "signal-failed", "lingering", "identity-changed", "owners-changed", "local", ...(harnessId === "grokBuild" ? ["shared"] : [])]) {
+                    vscodeStub.window.terminals = [];
+                    const before = { created: vscodeStub.__calls.created.length, warnings: vscodeStub.__calls.warnings.length, errors: vscodeStub.__calls.errors.length };
+                    let ownersRead = 0;
+                    let released = false;
+                    let enterWait;
+                    let finishWait;
+                    const waiting = new Promise((resolve) => { enterWait = resolve; });
+                    const signals = [];
+                    const state = vscodeStub.__calls.takeover = {
+                        inputs: [], identityReads: [], startTime: scenario === "identity-changed" ? "67890" : owner.startTime,
+                        owners() {
+                            ownersRead++;
+                            if (released) return [];
+                            if (scenario === "shared") return [owner, { ...owner, sessionId: "another-session" }];
+                            if (scenario === "owners-changed" && ownersRead > 1) return [{ ...owner, startTime: "67890" }];
+                            return [owner];
+                        },
+                        terminate(pid) {
+                            signals.push(pid);
+                            if (scenario === "signal-failed") throw new Error("permission denied");
+                        },
+                        wait() {
+                            if (scenario !== "approve") return Promise.resolve();
+                            enterWait();
+                            return new Promise((resolve) => { finishWait = () => { released = true; resolve(); }; });
+                        },
+                    };
+                    // Use the actual localized button supplied by launch, rather
+                    // than coupling the tests to an English confirmation label.
+                    vscodeStub.window.showWarningMessage = (message, options, ...items) => {
+                        if (scenario !== "cancel") vscodeStub.__calls.warningResults.push(items[0]);
+                        return takeoverWarning(message, options, ...items);
+                    };
+                    let local;
+                    if (scenario === "local") {
+                        local = { name: "renamed local terminal", identity: { harnessId, sessionId: "old-session" }, sessionFile: resume.sessionFile, sessionId: resume.sessionId, shown: 0, show() { this.shown++; } };
+                        vscodeStub.window.terminals = [local];
+                    }
+                    const launch = takeoverLauncher.openAgentTerminal(context, harness, undefined, resume);
+                    if (scenario === "approve") {
+                        await Promise.race([waiting, launch.then(() => { throw new Error(`${harnessId} launched before waiting for owner release`); })]);
+                        assert.deepEqual(signals, [owner.pid], `${harnessId} approval sends one termination signal`);
+                        assert.equal(vscodeStub.__calls.created.length, before.created, `${harnessId} waits for release before opening a terminal`);
+                        finishWait();
+                    }
+                    await launch;
+                    assert.equal(vscodeStub.__calls.created.length, before.created + (scenario === "approve" ? 1 : 0), `${harnessId}: ${scenario} terminal count`);
+                    assert.deepEqual(signals, ["approve", "signal-failed", "lingering"].includes(scenario) ? [owner.pid] : [], `${harnessId}: ${scenario} signals`);
+                    if (scenario === "local") {
+                        assert.equal(local.shown, 1, `${harnessId} reveals its local terminal despite stale launch metadata`);
+                        assert.equal(ownersRead, 0, `${harnessId} local reuse never inspects external owners`);
+                    } else {
+                        assert.ok(state.inputs.every((input) => input === (harnessId === "ohMyPi" ? resume.sessionFile : resume.sessionsRoot)), `${harnessId} inspects the resumed store`);
+                    }
+                    const prompted = !["local", "shared"].includes(scenario);
+                    assert.equal(vscodeStub.__calls.warnings.length, before.warnings + Number(prompted), `${harnessId}: ${scenario} confirmation count`);
+                    if (prompted) assert.equal(vscodeStub.__calls.warnings.at(-1).options.modal, true);
+                    const failed = !["approve", "cancel", "local"].includes(scenario);
+                    assert.equal(vscodeStub.__calls.errors.length, before.errors + Number(failed), `${harnessId}: ${scenario} reports failure`);
+                    if (scenario === "approve") {
+                        assert.ok(released, `${harnessId} release completes before resume`);
+                        assert.deepEqual(state.identityReads, [owner.pid, owner.pid], `${harnessId} verifies process identity before signaling`);
+                        assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, resume.args);
+                    }
+                }
+            } finally {
+                if (previousSettings === undefined) delete vscodeStub.__fixture.multiHarness[harnessId];
+                else vscodeStub.__fixture.multiHarness[harnessId] = previousSettings;
+            }
+        }
+    } finally {
+        vscodeStub.window.showWarningMessage = takeoverWarning;
+        delete vscodeStub.__calls.takeover;
+        vscodeStub.window.terminals = [];
+    }
+    passed++;
+    console.log("ok: OMP and Grok resumes confirm external takeover, await release, fail closed on unsafe owners and preserve local reuse");
+
     const registeredCommands = vscodeStub.__calls.commands.map((c) => c.id).sort();
     const registeredProfiles = vscodeStub.__calls.profiles.map((p) => p.id).sort();
 
@@ -1722,6 +1886,187 @@ try {
     assert.equal(firstPrime.disposed, 0, "unrecognized close arguments cannot close terminals");
     vscodeStub.window.terminals = [];
     vscodeStub.window.activeTerminal = undefined;
+    {
+        const terminalCommand = (id) => {
+            const entry = vscodeStub.__calls.commands.find((candidate) => candidate.id === `multiHarness.${id}`);
+            assert.ok(entry, `${id} is registered`);
+            return entry.handler;
+        };
+        const toggleMode = terminalCommand("toggleTerminalSelectionMode");
+        const cancel = terminalCommand("cancelTerminalSelection");
+        const toggle = terminalCommand("toggleTerminalSelection");
+        const selectEvery = terminalCommand("selectAllTerminals");
+        const closeSelected = terminalCommand("closeSelectedTerminals");
+        const filterAgent = terminalCommand("filterTerminalAgent");
+        const filterProject = terminalCommand("filterTerminalProject");
+        const closeOthers = terminalCommand("closeOtherTerminals");
+        assert.equal(sessionsView.options.manageCheckboxStateManually, true, "Open Terminals uses native manually managed checkboxes");
+        assert.ok(sessionsView.checkboxHandlers.length > 0, "native checkbox changes are handled");
+        const projectA = join(activationDir, "terminal-project-a");
+        const projectB = join(activationDir, "terminal-project-b");
+        const makeTerminal = (name, harnessId = "primeAgent", projectPath = projectA) => ({
+            name, disposed: 0, failDispose: false,
+            creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId, launchMode: "direct", ...(projectPath === null ? {} : { projectPath }) }) } },
+            dispose() {
+                if (this.failDispose) throw new Error("terminal dispose failed");
+                this.disposed += 1;
+                vscodeStub.window.terminals = vscodeStub.window.terminals.filter((terminal) => terminal !== this);
+                vscodeStub.__calls.terminalCloseHandlers.forEach((handler) => handler(this));
+            },
+        });
+        const keeper = makeTerminal("Same title");
+        const sibling = makeTerminal("Same title");
+        const otherAgent = makeTerminal("Codex work", "codex");
+        const otherProject = makeTerminal("Other project", "primeAgent", projectB);
+        const unknownProject = makeTerminal("Unknown project", "primeAgent", null);
+        const foreignShell = { name: "bash", disposed: 0, dispose() { this.disposed += 1; } };
+        vscodeStub.window.terminals = [keeper, sibling, otherAgent, otherProject, unknownProject, foreignShell];
+        const rows = () => sessionsView.provider.getChildren();
+        const rowFor = (terminal) => rows().find((row) => row.terminal === terminal);
+        const checked = (row) => sessionsView.provider.getTreeItem(row).checkboxState;
+        const pick = async (handler, property, value) => {
+            const previous = vscodeStub.window.showQuickPick;
+            try {
+                vscodeStub.window.showQuickPick = async (items) => {
+                    assert.ok(items.every((item) => typeof item.label === "string"), "filter choices have visible labels");
+                    const match = items.find((item) => item[property] === value);
+                    assert.ok(match, `filter includes ${property}=${String(value)}`);
+                    return match;
+                };
+                await handler();
+            } finally { vscodeStub.window.showQuickPick = previous; }
+        };
+        const keeperRow = rowFor(keeper);
+        const otherProjectRow = rowFor(otherProject);
+        const otherAgentRow = rowFor(otherAgent);
+        await toggleMode();
+        assert.equal(checked(keeperRow), 0);
+        const selectionItem = sessionsView.provider.getTreeItem(keeperRow);
+        assert.equal(selectionItem.command.command, "multiHarness.toggleTerminalSelection");
+        assert.deepEqual(selectionItem.command.arguments, [keeperRow]);
+        await toggle({ ...keeperRow });
+        await toggle({ terminal: keeper });
+        await toggle();
+        assert.equal(checked(keeperRow), 0, "only exact live row objects can change terminal selection");
+        await toggle(keeperRow);
+        keeper.name = "Renamed selected terminal";
+        vscodeStub.__calls.activeTerminalHandlers.forEach((handler) => handler(keeper));
+        assert.equal(rowFor(keeper), keeperRow, "refresh and title changes preserve the exact row identity");
+        assert.equal(checked(rowFor(keeper)), 1, "selection survives title refreshes");
+        const arrival = makeTerminal("New arrival");
+        vscodeStub.window.terminals.push(arrival);
+        vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(arrival));
+        const arrivalRow = rowFor(arrival);
+        assert.equal(checked(rowFor(arrival)), 0, "new arrivals are not implicitly selected");
+        for (const handler of sessionsView.checkboxHandlers) await handler({ items: [[{ ...keeperRow }, 0], [{ terminal: foreignShell }, 1]] });
+        assert.equal(checked(keeperRow), 1, "native checkbox events also reject forged rows");
+        for (const handler of sessionsView.checkboxHandlers) await handler({ items: [[keeperRow, 0]] });
+        assert.equal(checked(keeperRow), 0);
+        for (const handler of sessionsView.checkboxHandlers) await handler({ items: [[keeperRow, 1]] });
+        assert.equal(checked(keeperRow), 1);
+        await cancel();
+        assert.ok(rows().every((row) => checked(row) === undefined), "cancel removes every native selection checkbox");
+        await toggleMode();
+        assert.ok(rows().every((row) => checked(row) === 0), "cancel discards previous selection");
+        await selectEvery();
+        assert.ok(rows().every((row) => checked(row) === 1), "Select All selects every currently visible harness terminal");
+        await pick(filterAgent, "agentId", "primeAgent");
+        assert.ok(rows().every((row) => row.harness.id === "primeAgent"));
+        assert.ok(rows().every((row) => checked(row) === undefined), "changing agent filter resets selection mode");
+        await toggleMode();
+        await selectEvery();
+        await pick(filterProject, "projectPath", projectA);
+        assert.deepEqual(rows().map((row) => row.terminal), [keeper, sibling, arrival], "agent and project filters compose");
+        assert.ok(rows().every((row) => checked(row) === undefined), "changing project filter resets selection mode");
+        await toggleMode();
+        await toggle(rowFor(keeper));
+        await filterAgent();
+        await filterProject();
+        assert.equal(checked(rowFor(keeper)), 1, "dismissing a filter picker preserves scope and selection");
+        await cancel();
+        await pick(filterProject, "projectPath", "");
+        assert.deepEqual(rows().map((row) => row.terminal), [unknownProject], "empty projectPath selects terminals with no known project");
+        await pick(filterProject, "projectPath", undefined);
+        assert.equal(rows().length, 5, "All Projects removes the project filter only");
+        await pick(filterAgent, "agentId", undefined);
+        assert.equal(rows().length, 6, "All Agents restores all recognized terminals without including foreign shells");
+
+        await toggleMode();
+        await toggle(rowFor(sibling));
+        await toggle(rowFor(arrival));
+        arrival.failDispose = true;
+        const originalWarning = vscodeStub.window.showWarningMessage;
+        try {
+            let prompts = 0;
+            vscodeStub.window.showWarningMessage = async (_message, options) => {
+                prompts += 1;
+                assert.equal(options.modal, true, "bulk terminal closure requires modal confirmation");
+                return undefined;
+            };
+            await closeSelected();
+            assert.equal(prompts, 1);
+            assert.equal(sibling.disposed, 0, "canceling the bulk confirmation leaves terminals open");
+            assert.equal(checked(rowFor(sibling)), 1, "canceling confirmation preserves selection");
+            let confirm;
+            vscodeStub.window.showWarningMessage = (_message, options, ...items) => {
+                prompts += 1;
+                assert.equal(options.modal, true);
+                assert.ok(items.length > 0, "bulk confirmation offers an explicit close action");
+                return new Promise((resolve) => { confirm = () => resolve(items[0]); });
+            };
+            const pendingClose = closeSelected();
+            const duplicateClose = closeSelected();
+            assert.equal(prompts, 2, "repeated close requests do not create duplicate pending confirmations");
+            const laterArrival = makeTerminal("Arrived during confirmation");
+            vscodeStub.window.terminals.push(laterArrival);
+            vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(laterArrival));
+            confirm();
+            await Promise.all([pendingClose, duplicateClose]);
+            assert.equal(sibling.disposed, 1, "confirmed closure disposes each selected terminal once");
+            assert.equal(arrival.disposed, 0, "a failed dispose does not count as a closed terminal");
+            assert.equal(checked(rowFor(arrival)), 1, "partial dispose failures remain selected for retry");
+            assert.equal(keeper.disposed, 0, "unselected terminals are protected");
+            assert.equal(laterArrival.disposed, 0, "new arrivals during bulk confirmation are protected");
+            await cancel();
+            arrival.failDispose = false;
+            await pick(filterAgent, "agentId", "primeAgent");
+            await pick(filterProject, "projectPath", projectA);
+            const warningsBeforeInvalid = prompts;
+            await closeOthers({ ...keeperRow });
+            await closeOthers({ terminal: foreignShell });
+            await closeOthers(otherProjectRow);
+            await closeOthers(otherAgentRow);
+            await closeOthers();
+            assert.equal(prompts, warningsBeforeInvalid, "foreign, forged and out-of-scope keeper requests cannot prompt");
+            const pendingOthers = closeOthers(keeperRow);
+            const duplicateOthers = closeOthers(keeperRow);
+            assert.equal(prompts, warningsBeforeInvalid + 1, "Close Others ignores duplicate requests while confirmation is pending");
+            const newest = makeTerminal("Arrived during Close Others");
+            vscodeStub.window.terminals.push(newest);
+            vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(newest));
+            confirm();
+            await Promise.all([pendingOthers, duplicateOthers]);
+            assert.equal(keeper.disposed, 0, "Close Others never closes its exact keeper");
+            assert.equal(arrival.disposed, 1);
+            assert.equal(laterArrival.disposed, 1, "Close Others closes other visible terminals");
+            assert.equal(newest.disposed, 0, "Close Others does not expand its snapshot during confirmation");
+            assert.equal(otherAgent.disposed, 0, "Close Others protects terminals excluded by the agent filter");
+            assert.equal(otherProject.disposed, 0, "Close Others protects terminals excluded by the project filter");
+            assert.equal(unknownProject.disposed, 0);
+            assert.equal(foreignShell.disposed, 0, "Close Others never closes unrelated shell terminals");
+            await closeOthers(arrivalRow);
+            assert.equal(prompts, warningsBeforeInvalid + 1, "closed keeper rows cannot initiate another closure");
+        } finally {
+            vscodeStub.window.showWarningMessage = originalWarning;
+            await cancel();
+            await pick(filterAgent, "agentId", undefined);
+            await pick(filterProject, "projectPath", undefined);
+            vscodeStub.window.terminals = [];
+            vscodeStub.window.activeTerminal = undefined;
+        }
+        passed += 1;
+        console.log("ok: Open Terminals native selection, composed filters and confirmed bulk actions preserve exact terminal identity and scope");
+    }
     const titledTerminal = {
         name: "Fix login validation",
         creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "primeAgent", launchMode: "direct" }) } },
@@ -1843,6 +2188,8 @@ try {
         const createdGrok = vscodeStub.__calls.created.at(-1);
         assert.equal(createdGrok.options.shellPath, undefined);
         assert.equal(createdGrok.options.env.GROK_HOME, join(savedRoot, "other-grok"));
+        assert.equal(JSON.parse(createdGrok.options.env.MULTI_HARNESS_TERMINAL_IDENTITY).projectPath, createdGrok.options.cwd,
+            "shell resumes retain the resolved launch project");
         const executedGrok = [];
         vscodeStub.__calls.shellIntegrationHandlers.forEach((handler) => handler({ terminal: createdGrok.terminal,
             shellIntegration: { executeCommand(executable, args) { executedGrok.push({ executable, args }); return {}; } } }));
@@ -2498,6 +2845,8 @@ try {
     });
     const projectBResume = vscodeStub.__calls.created.at(-1).options;
     assert.equal(projectBResume.cwd, folderB.uri.fsPath);
+    assert.equal(JSON.parse(projectBResume.env.MULTI_HARNESS_TERMINAL_IDENTITY).projectPath, folderB.uri.fsPath,
+        "resume identity follows the recorded project rather than the focused editor");
     assert.equal(projectBResume.isTransient, false, "resumed conversation terminals allow persistence across reloads");
     assert.equal(launcherTarget(projectBResume).executable, join(folderB.uri.fsPath, "node_modules", ".bin", workspaceCli));
     assert.deepEqual(launcherTarget(projectBResume).args, ["--resume", ompFile, "--project", folderB.uri.fsPath]);
@@ -2516,6 +2865,8 @@ try {
     });
     const externalResume = vscodeStub.__calls.created.at(-1).options;
     assert.equal(externalResume.cwd, externalFolder);
+    assert.equal(JSON.parse(externalResume.env.MULTI_HARNESS_TERMINAL_IDENTITY).projectPath, externalFolder,
+        "external resume directories persist in terminal identity");
     assert.equal(launcherTarget(externalResume).executable, fakeCli);
     assert.deepEqual(launcherTarget(externalResume).args, ["--resume", ompFile, "--external"]);
     passed += 1;
@@ -2685,6 +3036,8 @@ try {
                 const persistedOptions = JSON.parse(JSON.stringify(options));
                 assert.deepEqual(persistedOptions.env, options.env, "terminal restoration preserves launcher and identity environment");
                 assert.equal(JSON.parse(persistedOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY).harnessId, "ohMyPi");
+                assert.equal(JSON.parse(persistedOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY).projectPath, options.cwd,
+                    "direct commands and profiles persist their resolved launch directory");
             }
         }
     } finally {
@@ -2715,6 +3068,8 @@ try {
     assert.equal(shellOptions.shellPath, undefined, "shell mode must not override shellPath");
     assert.deepEqual(shellOptions.location, { viewColumn: vscodeStub.ViewColumn.Active }, "shell launches use the active editor group");
     assert.equal(shellOptions.cwd, homedir(), "shell mode uses the same cwd resolution as direct mode (homedir without a workspace)");
+    assert.equal(JSON.parse(shellOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY).projectPath, shellOptions.cwd,
+        "shell commands persist their resolved launch directory");
     assert.equal(vscodeStub.__calls.statusItems.length, 1, "the first shell-mode terminal creates the status item lazily");
     const shellTerminal = vscodeStub.__calls.created.at(-1).terminal;
     const shellExecuteCalls = [];
@@ -3131,6 +3486,27 @@ try {
     assert.equal(await macIdentity.ompTerminalSessionFile(macTerminal, ompRoot), freshFile);
     passed += 1;
     console.log("ok: macOS OMP identity resolves fresh-session breadcrumbs");
+
+    const identityHarness = agents.find((agent) => agent.id === "ohMyPi");
+    const durableIdentityEnv = macIdentity.terminalIdentityEnv(identityHarness, "shell", "identity-session", projectDirectory);
+    const durableIdentityTerminal = { creationOptions: { env: JSON.parse(JSON.stringify(durableIdentityEnv)) } };
+    assert.equal(macIdentity.terminalIdentity(durableIdentityTerminal).projectPath, projectDirectory,
+        "project identity survives terminal option serialization");
+    assert.equal(macIdentity.terminalIdentity(durableIdentityTerminal).sessionId, "identity-session");
+    const legacyIdentityEnv = macIdentity.terminalIdentityEnv(identityHarness, "direct", "legacy-session");
+    assert.equal(macIdentity.terminalIdentity({ creationOptions: { env: legacyIdentityEnv } }).sessionId, "legacy-session",
+        "metadata without projectPath remains compatible");
+    assert.equal(macIdentity.terminalIdentity({ creationOptions: { env: legacyIdentityEnv } }).projectPath, undefined);
+    for (const projectPath of [null, "", "relative/project", 17, {}, `${projectDirectory}\0invalid`]) {
+        const invalidIdentity = { version: 1, harnessId: identityHarness.id, launchMode: "direct", projectPath };
+        assert.equal(macIdentity.terminalIdentity({ creationOptions: { env: {
+            MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify(invalidIdentity),
+        } } }), undefined, "invalid project paths reject durable identity");
+        assert.throws(() => macIdentity.terminalIdentityEnv(identityHarness, "direct", undefined, projectPath), TypeError,
+            "invalid project paths cannot be emitted as launch metadata");
+    }
+    passed += 1;
+    console.log("ok: durable project identity round-trips optional absolute paths and rejects invalid metadata");
 
     if (process.platform === "linux") {
         const ownerFile = join(activationDir, "owned-omp.jsonl");
