@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
 - Add native Open Terminals multi-selection, visible-only Select All, cancellation, independent agent/project filters and confirmed bulk closure including Close Other Visible Terminals. Preserve saved history and out-of-scope terminals; snapshot confirmations exclude new arrivals and retain failed closures as selected. Persist launch directories across direct/shell/profile/resume metadata for project filtering; older terminals remain under Unknown project.
 
