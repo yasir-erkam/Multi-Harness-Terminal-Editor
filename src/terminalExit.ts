@@ -65,6 +65,19 @@ export async function cleanupTerminalExit(terminal: vscode.Terminal): Promise<vo
     }
 }
 
+/**
+ * Electron is a GUI-subsystem process and is not attached to the pseudo
+ * console, so it cannot hand a console stdin handle to an agent CLI. Batch
+ * shims still need the Electron launcher because VS Code cannot execute them.
+ */
+export function usesDirectWindowsTerminal(
+    platform: NodeJS.Platform = process.platform,
+    electronVersion: string | undefined = process.versions.electron,
+    executable = ""
+): boolean {
+    return platform === "win32" && Boolean(electronVersion) && !/\.(?:cmd|bat)$/i.test(executable);
+}
+
 /** Keep a real inherited terminal; the launcher only owns exit retention. */
 export function terminalExitOptions(
     context: vscode.ExtensionContext,
@@ -72,13 +85,35 @@ export function terminalExitOptions(
     args: readonly string[] | undefined,
     env: Record<string, string>
 ): Pick<vscode.TerminalOptions, "shellPath" | "shellArgs" | "env"> {
+    if (usesDirectWindowsTerminal(process.platform, process.versions.electron, executable)) {
+        if (/\.ps1$/i.test(executable)) {
+            return {
+                shellPath: "powershell.exe",
+                shellArgs: [
+                    "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                    executable, ...(args ?? []),
+                ],
+                env,
+            };
+        }
+        return {
+            shellPath: executable,
+            shellArgs: args ? [...args] : undefined,
+            env,
+        };
+    }
     const configured = vscode.workspace.getConfiguration("multiHarness").get<string>("autoCloseOnExit", "success");
     const mode = configured === "never" || configured === "always" ? configured : "success";
     mkdirSync(markerDirectory, { recursive: true, mode: 0o700 });
     const exitFile = path.join(markerDirectory, `${randomUUID()}.json`);
     return {
         shellPath: process.execPath,
-        shellArgs: [vscode.Uri.joinPath(context.extensionUri, "media", "terminal-launcher.cjs").fsPath, mode, executable, ...(args ?? [])],
+        shellArgs: [
+            vscode.Uri.joinPath(context.extensionUri, "media", "terminal-launcher.cjs").fsPath,
+            mode,
+            executable,
+            ...(args ?? []),
+        ],
         env: {
             ...env,
             ELECTRON_RUN_AS_NODE: "1",

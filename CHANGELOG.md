@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.2
+
+- Fix Windows desktop direct launches by bypassing the Electron exit-retention launcher for `.exe` agents and running `.ps1` agents through `powershell.exe`; `.cmd`/`.bat` shims keep the launcher, which the editor needs to execute them. Electron is a GUI-subsystem process and is never attached to the ConPTY console, so routing an interactive CLI through it left stdin without a terminal and agents such as Oh My Pi exited instead of opening their UI. Windows direct tabs are disposed by VS Code on process exit, so `multiHarness.autoCloseOnExit` no longer applies there and failure output is not retained; the exit notification still reports the code. Shell mode and non-Windows hosts keep exit retention.
+
+## 1.2.1
+
+- Initialize Windows desktop console handles before starting the Electron launcher, including saved-session resumes and terminal profiles. Explicitly redirect stdin from `CONIN$` in the fixed native `cmd.exe` bootstrap so interactive CLIs receive console input even when the inherited stdin handle is missing. Preserve JSON argument transport, shell mode and exit retention without a separate Node installation. Add an opt-in real Windows/Electron regression that starts with NUL stdin and checks console TTY detection, raw mode, literal arguments and terminal identity.
+
 ## 1.2.0
 
 - Add native Open Terminals multi-selection, visible-only Select All, cancellation, independent agent/project filters and confirmed bulk closure including Close Other Visible Terminals. Preserve saved history and out-of-scope terminals; snapshot confirmations exclude new arrivals and retain failed closures as selected. Persist launch directories across direct/shell/profile/resume metadata for project filtering; older terminals remain under Unknown project.

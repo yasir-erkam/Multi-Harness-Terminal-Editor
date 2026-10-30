@@ -1407,6 +1407,17 @@ try {
         outfile: join(activationDir, "launch.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent",
     });
     const resumeLauncher = requireFrom(join(activationDir, "launch.cjs"));
+    await build({
+        entryPoints: [join(projectRoot, "src", "terminalExit.ts")],
+        outfile: join(activationDir, "terminalExit.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent",
+    });
+    const terminalExit = requireFrom(join(activationDir, "terminalExit.cjs"));
+    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", "43.7.7", "C:\\Programs\\omp.exe"), true, "Windows desktop spawns executables without an Electron intermediary");
+    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", "43.7.7", "C:\\bin\\agent.ps1"), true, "PowerShell scripts start in a console-subsystem host");
+    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", "43.7.7", "C:\\bin\\agent.cmd"), false, "batch shims keep the launcher that can execute them");
+    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", undefined, "C:\\Programs\\omp.exe"), false, "non-Electron Windows hosts keep the exit launcher");
+    assert.equal(terminalExit.usesDirectWindowsTerminal("linux", "43.7.7", "/usr/bin/omp"), false, "non-Windows hosts keep the exit launcher");
+    console.log("ok: Windows desktop executable and PowerShell launches bypass the unattached Electron console");
 
     const savedState = new Map();
     const globalState = {
