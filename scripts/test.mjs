@@ -11,7 +11,6 @@ import { build } from "esbuild";
 import process from "node:process";
 import { DatabaseSync } from "node:sqlite";
 import { execFileSync, spawn } from "node:child_process";
-import { zstdCompressSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -322,24 +321,24 @@ try {
     }
     const writeOwners = (rows) => writeFileSync(registry, JSON.stringify(rows));
     writeOwners([{ session_id: "first", pid: 101, pid_start: 1010 }]);
-    assert.deepEqual(await grokOwners(store, proc), [{ sessionId: "first", pid: 101, startTime: "1010" }], "Grok owners retain the verified process identity for takeover");
-    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc), proc), "first");
+    assert.deepEqual(await grokOwners(store, proc, "linux"), [{ sessionId: "first", pid: 101, startTime: "1010" }], "Grok owners retain the verified process identity for takeover");
+    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc, "linux"), proc), "first");
     writeOwners([{ session_id: "switched", pid: 101, pid_start: 1010 }, { session_id: "nested", pid: 102, pid_start: 1020 }]);
-    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc), proc), "switched", "nested tool agents do not claim the terminal");
+    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc, "linux"), proc), "switched", "nested tool agents do not claim the terminal");
     writeOwners([{ session_id: "stale", pid: 101, pid_start: 1 }]);
-    assert.deepEqual(await grokOwners(store, proc), []);
+    assert.deepEqual(await grokOwners(store, proc, "linux"), []);
     writeOwners([{ session_id: "one", pid: 101, pid_start: 1010 }, { session_id: "two", pid: 101, pid_start: 1010 }]);
-    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc), proc), undefined, "shared daemon sessions remain ambiguous");
+    assert.equal(await grokSessionForProcess(100, await grokOwners(store, proc, "linux"), proc), undefined, "shared daemon sessions remain ambiguous");
     writeFileSync(registry, "{");
-    await assert.rejects(grokOwners(store, proc));
+    await assert.rejects(grokOwners(store, proc, "linux"));
     assert.deepEqual(await grokOwners(store, proc, "win32"), []);
     writeOwners([{ session_id: "invalid", pid: 101 }]);
-    await assert.rejects(grokOwners(store, proc), /identity/);
+    await assert.rejects(grokOwners(store, proc, "linux"), /identity/);
     writeFileSync(registry + ".corrupt", "preserved backup");
-    await assert.rejects(grokOwners(store, proc), /corrupt backup/);
+    await assert.rejects(grokOwners(store, proc, "linux"), /corrupt backup/);
     rmSync(registry + ".corrupt");
     rmSync(registry);
-    assert.deepEqual(await grokOwners(store, proc), []);
+    assert.deepEqual(await grokOwners(store, proc, "linux"), []);
     passed += 1;
     console.log("ok: Grok registry verifies PID reuse, fresh/switched sessions, nested processes, shared-daemon ambiguity and corrupt stores");
 } finally { rmSync(grokOwnerDir, { recursive: true, force: true }); }
@@ -460,7 +459,7 @@ await build({
     outfile: join(outdir, "deleteSession.test.mjs"),
     bundle: true, format: "esm", platform: "node", logLevel: "silent",
 });
-const { validateSessionDeletion, sessionDeletionFiles, sessionDeletionTarget } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
+const { validateSessionDeletion, sessionDeletionTarget } = await import(pathToFileURL(join(outdir, "deleteSession.test.mjs")).href);
 await build({
     entryPoints: [join(projectRoot, "src", "openCodeDeletion.ts")],
     outfile: join(outdir, "openCodeDeletion.test.mjs"),
@@ -574,7 +573,7 @@ try {
 const deletionDir = mkdtempSync(join(tmpdir(), "mhte-delete-"));
 try {
     const roots = sessionRoots(deletionDir, {});
-    for (const id of ["", "unknown", "gemini", "goose", "aider", "crush", "qwen", "copilot", "cursorAgent", "antigravity"]) {
+    for (const id of ["", "unknown", "deepseek", "gemini", "goose", "aider", "crush", "qwen", "copilot", "cursorAgent", "antigravity"]) {
         assert.equal(supportsSessionDeletion(id), false, `${id} must not expose unsupported deletion actions`);
     }
     for (const root of roots.filter((root) => supportsSessionDeletion(root.harnessId) && !["openCode", "grokBuild"].includes(root.harnessId))) {
@@ -615,39 +614,8 @@ try {
             rmSync(file);
         }
     }
-    const dshRoot = roots.find((root) => root.harnessId === "deepseek");
-    const zstdFile = join(dshRoot.directory, "session.v4.jsonl.zstd");
-    const zstdHeader = Buffer.concat([
-        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session", version: 4, id: "delete-zstd", cwd: deletionDir }) + "\n")),
-        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session/title", seq: 0, data: { title: "Zstd session" } }) + "\n")),
-    ]);
-    writeFileSync(zstdFile, zstdHeader);
-    const [zstdSession] = (await scanSavedSessions([dshRoot])).sessions;
-    assert.equal(zstdSession.id, "delete-zstd");
-    await validateSessionDeletion(zstdSession, roots);
-    const splitRecord = Buffer.from(JSON.stringify({ type: "session", id: zstdSession.id, cwd: deletionDir, title: "🧪 session" }) + "\n");
-    const splitAt = splitRecord.indexOf(Buffer.from("🧪")) + 2;
-    writeFileSync(zstdFile, Buffer.concat([
-        zstdCompressSync(splitRecord.subarray(0, splitAt)), zstdCompressSync(splitRecord.subarray(splitAt)),
-    ]));
-    await validateSessionDeletion(zstdSession, roots);
-    writeFileSync(zstdFile, zstdHeader);
-    const oldGeneration = join(dshRoot.directory, "session.v3.jsonl");
-    writeFileSync(oldGeneration, JSON.stringify({ type: "session", id: zstdSession.id, cwd: deletionDir }) + "\n");
-    assert.deepEqual((await sessionDeletionFiles(zstdSession, roots)).map((entry) => entry.file), [oldGeneration, zstdFile]);
-    writeFileSync(oldGeneration, JSON.stringify({ type: "session", id: "foreign", cwd: deletionDir }) + "\n");
-    await assert.rejects(sessionDeletionFiles(zstdSession, roots), /another conversation/);
-    rmSync(oldGeneration);
-    await assert.rejects(validateSessionDeletion({ ...zstdSession, harnessId: "pi" }, roots), /regular JSONL/);
-    writeFileSync(zstdFile, Buffer.concat([
-        zstdHeader,
-        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session", id: "other", cwd: deletionDir }) + "\n")),
-    ]));
-    await assert.rejects(validateSessionDeletion(zstdSession, roots), /another conversation/);
-    writeFileSync(zstdFile, Buffer.concat([zstdHeader, Buffer.from([0x28, 0xb5, 0x2f, 0xfd, 0x00])]));
-    await assert.rejects(validateSessionDeletion(zstdSession, roots), /record changed/);
     passed += 1;
-    console.log("ok: all six session stores validate identity (including multi-frame .jsonl.zstd), reject shared/replaced files and prevent deletion outside their roots");
+    console.log("ok: JSONL session stores validate identity, reject shared/replaced files and prevent deletion outside their roots");
 } finally {
     rmSync(deletionDir, { recursive: true, force: true });
 }
@@ -675,8 +643,8 @@ try {
     assert.equal(scan.sessions.find((session) => session.id === "cleared").title, "Original request");
     assert.equal(scan.sessions.find((session) => session.id === "empty-name").title, "Original request");
     const rootFor = (env) => sessionRoots(primeDir, env).find((root) => root.harnessId === "primeAgent").directory;
-    assert.equal(rootFor({ PRIME_AGENT_CODING_AGENT_SESSION_DIR: "~/legacy" }), join(primeDir, "legacy"));
-    assert.equal(rootFor({ PRIME_AGENT_SESSION_DIR: "~/current", PRIME_AGENT_CODING_AGENT_SESSION_DIR: "~/legacy" }), join(primeDir, "current"));
+    assert.equal(normalize(rootFor({ PRIME_AGENT_CODING_AGENT_SESSION_DIR: "~/legacy" })), join(primeDir, "legacy"));
+    assert.equal(normalize(rootFor({ PRIME_AGENT_SESSION_DIR: "~/current", PRIME_AGENT_CODING_AGENT_SESSION_DIR: "~/legacy" })), join(primeDir, "current"));
     passed += 1;
     console.log("ok: Prime history excludes recursive children, honors cleared names and resolves legacy session roots");
 } finally {
@@ -773,7 +741,7 @@ try {
     writeFileSync(join(codexRoot.directory, "invalid.jsonl"), "not JSON\n");
     fileSymlink(join(codexRoot.directory, "saved-codex.jsonl"), join(codexRoot.directory, "linked.jsonl"));
     const scan = await scanSavedSessions(roots);
-    assert.equal(scan.sessions.length, 6);
+    assert.equal(scan.sessions.length, 5);
     assert.deepEqual(scan.unreadable, []);
     assert.deepEqual(scan.sessions.map((session) => session.harnessId), roots.map((root) => root.harnessId));
     assert.equal(scan.sessions[0].title, "Renamed Codex conversation");
@@ -782,20 +750,21 @@ try {
     for (const session of scan.sessions) {
         const args = resumeArguments(session);
         assert.equal(args[0], session.harnessId === "codex" ? "resume" : session.harnessId === "pi" ? "--session" : "--resume");
-        assert.equal(args[1], ["codex", "claudeCode", "deepseek"].includes(session.harnessId) ? session.id : session.file);
+        assert.equal(args[1], ["codex", "claudeCode"].includes(session.harnessId) ? session.id : session.file);
     }
     const prime = scan.sessions.find((session) => session.harnessId === "primeAgent");
     writeFileSync(prime.file, JSON.stringify({ type: "session", id: prime.id, cwd: savedDir }) + "\n" + " ".repeat(600000) + '\n{"type":"session_info","name":"Renamed large session"}\n');
     assert.equal((await scanSavedSessions(roots)).sessions.find((session) => session.id === prime.id).title, "Renamed large session");
     writeFileSync(join(codexRoot.directory, "subagent.jsonl"), JSON.stringify({ type: "session_meta", payload: {id: "child", cwd: savedDir, source: {subagent: {}}} }) + "\n");
-    assert.equal((await scanSavedSessions(roots)).sessions.length, 6);
+    assert.equal((await scanSavedSessions(roots)).sessions.length, 5);
     assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: join(savedDir, "missing") }])).sessions, []);
     assert.deepEqual(await scanSavedSessions([{ harnessId: "codex", directory: prime.file }]), { sessions: [], unreadable: [] }, "a session directory replaced by a file behaves like a missing store");
     assert.deepEqual((await scanSavedSessions([{ harnessId: "codex", directory: "relative-root" }])).unreadable, ["codex"]);
     const overrides = sessionRoots(savedDir, { CODEX_HOME: "~/custom-codex", PRIME_AGENT_SESSION_DIR: "~/prime-sessions", DSH_HOME: "~/custom-dsh" });
-    assert.equal(overrides[0].directory, join(savedDir, "custom-codex", "sessions"));
-    assert.equal(normalize(overrides[4].directory), join(savedDir, "prime-sessions"));
-    assert.equal(overrides[6].directory, join(savedDir, "custom-dsh", "sessions"));
+    assert.equal(overrides.find((root) => root.harnessId === "codex").directory, join(savedDir, "custom-codex", "sessions"));
+    assert.equal(normalize(overrides.find((root) => root.harnessId === "primeAgent").directory), join(savedDir, "prime-sessions"));
+    assert.equal(overrides.some((root) => root.harnessId === "deepseek"), false);
+    assert.throws(() => resumeArguments({ harnessId: "deepseek", id: "legacy" }), /unsupported/i);
     const workspace = join(savedDir, "project");
     const sibling = join(savedDir, "project-other");
     mkdirSync(workspace);
@@ -1165,52 +1134,6 @@ try {
     console.log("ok: Antigravity SQLite history filters projects and children, decodes file URIs, resumes by ID and tolerates unavailable indexes");
 } finally { rmSync(agyDir, { recursive: true, force: true }); }
 
-const dshDir = mkdtempSync(join(tmpdir(), "mhte-dsh-"));
-try {
-    const cwd = join(dshDir, "workspace");
-    mkdirSync(cwd);
-    const store = join(dshDir, "sessions");
-    const writeZstdFrames = (file, frameRows) => {
-        mkdirSync(dirname(file), { recursive: true });
-        const buffers = frameRows.map((rows) => zstdCompressSync(Buffer.from(rows.map((row) => JSON.stringify(row)).join("\n") + "\n")));
-        writeFileSync(file, Buffer.concat(buffers));
-    };
-    const mainDir = join(store, "--workspace--", "dsh-main");
-    writeZstdFrames(join(mainDir, "session.v3.jsonl.zstd"), [
-        [{ type: "session", version: 3, id: "dsh-main", cwd }],
-        [{ type: "session/title", seq: 0, data: { title: "Stale v3 title" } }],
-    ]);
-    writeZstdFrames(join(mainDir, "session.v4.jsonl.zstd"), [
-        [{ type: "session", version: 4, id: "dsh-main", cwd }],
-        [{ type: "user/message", seq: 0, data: { content: [{ type: "text", text: "Initial user prompt" }], source: { kind: "user" } } }],
-        [{ type: "session/title", seq: 1, data: { title: "Updated v4 title" } }],
-    ]);
-    // Even if an older generation file has a newer mtime, the highest generation wins in the same session directory.
-    const now = Date.now();
-    utimesSync(join(mainDir, "session.v3.jsonl.zstd"), (now + 5000) / 1000, (now + 5000) / 1000);
-    utimesSync(join(mainDir, "session.v4.jsonl.zstd"), now / 1000, now / 1000);
-    writeZstdFrames(join(store, "--workspace--", "dsh-fallback", "session.v4.jsonl.zstd"), [
-        [{ type: "session", version: 4, id: "dsh-fallback", cwd }],
-        [{ type: "user/message", seq: 0, data: { content: [{ type: "text", text: "Synthetic notification" }], source: { kind: "subagent_notification" } } }],
-        [{ type: "user/message", seq: 1, data: { content: [{ type: "text", text: "Human prompt fallback" }], source: { kind: "user" } } }],
-    ]);
-    writeZstdFrames(join(store, "--workspace--", "dsh-subagent", "session.v4.jsonl.zstd"), [
-        [{ type: "session", version: 4, id: "dsh-subagent", cwd, origin: "subagent", delegationDepth: 1 }],
-        [{ type: "session/title", seq: 0, data: { title: "Subagent session" } }],
-    ]);
-    mkdirSync(join(store, "--workspace--", "dsh-corrupt"), { recursive: true });
-    writeFileSync(join(store, "--workspace--", "dsh-corrupt", "session.v4.jsonl.zstd"), Buffer.from("not-valid-zstd"));
-    const roots = [{ harnessId: "deepseek", directory: store }];
-    const scan = await scanSavedSessions(roots, 100, { harnessId: "deepseek", cwd });
-    assert.deepEqual(scan.unreadable, []);
-    assert.deepEqual(scan.sessions.map((session) => session.id).sort(), ["dsh-fallback", "dsh-main"]);
-    assert.equal(scan.sessions.find((session) => session.id === "dsh-main").title, "Updated v4 title");
-    assert.equal(scan.sessions.find((session) => session.id === "dsh-main").file, join(mainDir, "session.v4.jsonl.zstd"));
-    assert.equal(scan.sessions.find((session) => session.id === "dsh-fallback").title, "Human prompt fallback");
-    assert.deepEqual(resumeArguments(scan.sessions[0]), ["--resume", scan.sessions[0].id]);
-    passed += 1;
-    console.log("ok: DeepSeek Harness multi-frame .jsonl.zstd sessions decode titles, pick highest generation, skip subagents and tolerate corrupt files");
-} finally { rmSync(dshDir, { recursive: true, force: true }); }
 
 // Headless activation test.
 //
@@ -1417,7 +1340,7 @@ try {
     assert.equal(terminalExit.usesDirectWindowsTerminal("linux", "43.7.7"), false, "non-Windows hosts keep the exit launcher");
     const directEnv = { MULTI_HARNESS_TERMINAL_IDENTITY: '{"version":1}' };
     const cmdOptions = terminalExit.windowsDirectTerminalOptions(
-        "C:\\Users\\x y\\AppData\\Roaming\\fnm\\node-versions\\v24.19.0\\installation\\dsh.cmd",
+        "C:\\Users\\x y\\AppData\\Roaming\\fnm\\node-versions\\v24.19.0\\installation\\agent.cmd",
         ["--profile", "tui"],
         directEnv,
         projectRoot,
@@ -1649,7 +1572,12 @@ try {
     const agentsView = vscodeStub.__calls.views[0];
     assert.equal(agentsView.id, manifest.contributes.views.multiHarness[0].id);
     const agents = agentsView.provider.getChildren();
+    assert.equal(agents.length, 15);
+    assert.equal(agents[0].id, "openCode");
     assert.equal(agents.length, contributedProfiles.length);
+    assert.equal(agents.some((agent) => agent.id === "deepseek"), false);
+    assert.equal(registeredCommands.includes("multiHarness.openDeepseek"), false);
+    assert.equal(registeredProfiles.includes("multiHarness.deepseek"), false);
     assert.deepEqual(agents.map((agent) => `multiHarness.${agent.id}`), manifest.contributes.terminal.map((profile) => profile.id), "a fresh installation shares the default agent and contributed profile order");
     assert.deepEqual(vscodeStub.__calls.profiles.map((profile) => profile.id), manifest.contributes.terminal.map((profile) => profile.id), "profile providers register in the default agent order");
     assert.ok(agents.every((agent) => agentsView.provider.getTreeItem(agent).command.command === "multiHarness.selectSessionAgent"));
@@ -1791,31 +1719,6 @@ try {
     passed += 1;
     console.log("ok: Grok Build command, profile and favorites use the configured executable and arguments");
 
-    const deepseek = agents.find((agent) => agent.id === "deepseek");
-    assert.equal(deepseek.displayName, "DeepSeek Harness");
-    assert.equal(deepseek.defaultExecutable, "dsh");
-    assert.deepEqual(deepseek.defaultArgs, ["--profile", "tui"]);
-    assert.equal(deepseek.commandId, "multiHarness.openDeepseek");
-    vscodeStub.__fixture.multiHarness.deepseek = { executablePath: fakeCli };
-    await vscodeStub.__calls.commands.find((command) => command.id === deepseek.commandId).handler();
-    const deepseekDefaultTerminal = vscodeStub.__calls.created.at(-1).options;
-    assert.equal(launcherTarget(deepseekDefaultTerminal).executable, fakeCli);
-    assert.deepEqual(launcherTarget(deepseekDefaultTerminal).args, ["--profile", "tui"]);
-    const deepseekProfile = vscodeStub.__calls.profiles.find((profile) => profile.id === "multiHarness.deepseek");
-    const deepseekProfileOptions = (await deepseekProfile.provider.provideTerminalProfile({})).options;
-    assert.equal(launcherTarget(deepseekProfileOptions).executable, fakeCli);
-    assert.deepEqual(launcherTarget(deepseekProfileOptions).args, ["--profile", "tui"]);
-    vscodeStub.window.terminals = [];
-    vscodeStub.__fixture.multiHarness.deepseek = { executablePath: fakeCli, arguments: ["web", "--port", "8080"] };
-    await vscodeStub.__calls.commands.find((command) => command.id === deepseek.commandId).handler();
-    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, ["web", "--port", "8080"]);
-    vscodeStub.window.terminals = [];
-    await addFavorite.handler(deepseek);
-    assert.equal(agentsView.provider.getTreeItem(deepseek).contextValue, "favoriteAgent");
-    await removeFavorite.handler(deepseek);
-    assert.equal(agentsView.provider.getTreeItem(deepseek).contextValue, "agent");
-    passed += 1;
-    console.log("ok: DeepSeek Harness command, profile and favorites use default tui profile args and custom overrides");
 
     assert.equal(antigravity.displayName, "Antigravity CLI");
     assert.equal(antigravity.defaultExecutable, "agy");
@@ -1864,7 +1767,7 @@ try {
     let sessionRefreshes = 0;
     sessionsView.provider.onDidChangeTreeData(() => { sessionRefreshes += 1; });
     const firstPrime = { name: "Prime Agent", shown: 0, disposed: 0, show() { this.shown += 1; }, dispose() { this.disposed += 1; } };
-    const secondPrime = { name: "Prime Agent", shown: 0, disposed: 0, show() { this.shown += 1; }, dispose() { this.disposed += 1; } };
+    const secondPrime = { name: "Prime Agent", shown: 0, disposed: 0, creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "primeAgent", launchMode: "direct" }) } }, show() { this.shown += 1; }, dispose() { this.disposed += 1; } };
     vscodeStub.window.terminals = [firstPrime, { name: "bash" }, secondPrime];
     vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(secondPrime));
     const openSessions = sessionsView.provider.getChildren();
@@ -2132,7 +2035,7 @@ try {
     const savedSessionRows = async () => (await Promise.all((await savedView.provider.getChildren()).map((item) =>
         "day" in item ? savedView.provider.getChildren(item) : []))).flat();
     const savedRoot = join(activationDir, "saved-conversations");
-    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity", "deepseek", "openCode", "grokBuild"]) {
+    for (const id of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "antigravity", "openCode", "grokBuild"]) {
         vscodeStub.__fixture.multiHarness[id] ??= {};
         vscodeStub.__fixture.multiHarness[id].sessionDirectory = id === "grokBuild" ? join(savedRoot, id, "sessions") : join(savedRoot, id);
     }
@@ -2280,7 +2183,7 @@ try {
             vscodeStub.window.terminals = [...vscodeStub.window.terminals, terminal];
             return terminal;
         };
-        for (const harnessId of ["ohMyPi", "pi", "primeAgent", "codex", "claudeCode", "openCode", "deepseek", "antigravity"]) {
+        for (const harnessId of ["ohMyPi", "pi", "primeAgent", "codex", "claudeCode", "openCode", "antigravity"]) {
             const harness = agents.find((agent) => agent.id === harnessId);
             const previousConfig = vscodeStub.__fixture.multiHarness[harnessId];
             vscodeStub.__fixture.multiHarness[harnessId] = { executablePath: fakeCli, arguments: [] };
@@ -2473,31 +2376,10 @@ try {
     } finally {
         rmSync(retainedExitFile, { force: true });
     }
+    vscodeStub.__calls.terminalCloseHandlers.forEach((handler) => handler(openCodeTerminal));
+    vscodeStub.window.terminals = [];
     assert.equal(launcherTarget(vscodeStub.__calls.created.at(-1).options).executable, fakeCli);
     rmSync(openCodeStore, { recursive: true, force: true });
-    refreshSaved.handler();
-    delete vscodeStub.__fixture.multiHarness.deepseek.arguments;
-    await selectSessionAgent.handler("deepseek");
-    assert.equal(savedView.message, undefined, "DeepSeek Harness is a supported saved-session provider");
-    const dshStore = vscodeStub.__fixture.multiHarness.deepseek.sessionDirectory;
-    const dshSessionDir = join(dshStore, "--recorded-project--", "recorded-deepseek");
-    mkdirSync(dshSessionDir, { recursive: true });
-    writeFileSync(join(dshSessionDir, "session.v4.jsonl.zstd"), Buffer.concat([
-        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session", version: 4, id: "recorded-deepseek", cwd: projectDirectory }) + "\n")),
-        zstdCompressSync(Buffer.from(JSON.stringify({ type: "session/title", seq: 0, data: { title: "DeepSeek saved session" } }) + "\n")),
-    ]));
-    refreshSaved.handler();
-    const dshSaved = (await savedSessionRows())[0];
-    assert.equal(dshSaved.id, "recorded-deepseek");
-    assert.equal(dshSaved.title, "DeepSeek saved session");
-    assert.equal(savedView.provider.getTreeItem(dshSaved).contextValue, "savedSession");
-    const beforeDshResume = vscodeStub.__calls.created.length;
-    await resume.handler({ harnessId: "deepseek", id: "recorded-deepseek" });
-    assert.equal(vscodeStub.__calls.created.length, beforeDshResume + 1);
-    assert.deepEqual(launcherTarget(vscodeStub.__calls.created.at(-1).options).args, ["--profile", "tui", "--resume", "recorded-deepseek"], "dsh launcher flags precede --resume");
-    assert.equal(vscodeStub.__calls.created.at(-1).options.cwd, projectDirectory);
-    vscodeStub.window.terminals = [];
-    rmSync(dshStore, { recursive: true, force: true });
     refreshSaved.handler();
     await selectSessionAgent.handler("aider");
     assert.equal(savedView.message, englishStrings["sessionScope.unsupported"]);
@@ -2742,7 +2624,7 @@ try {
     assert.ok(!existsSync(extraFiles[0]));
     // Exercise the actual deletion command for every writable history provider.
     await cancelSelection();
-    for (const harnessId of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "deepseek"]) {
+    for (const harnessId of ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent"]) {
         const store = vscodeStub.__fixture.multiHarness[harnessId].sessionDirectory;
         mkdirSync(store, { recursive: true });
         const file = join(store, "audit-session.jsonl");
@@ -2768,30 +2650,32 @@ try {
         assert.equal(vscodeStub.__calls.warnings.length, warningsBefore + 1, "terminal close failures must not prompt for permanent deletion");
         assert.ok(!(await savedSessionRows()).some((row) => row.id === id));
     }
-    // Deleting the current DeepSeek generation must also remove its migrations.
-    const generationStore = vscodeStub.__fixture.multiHarness.deepseek.sessionDirectory;
-    const generationDirectory = join(generationStore, "audit-generations");
-    mkdirSync(generationDirectory, { recursive: true });
-    const generationFiles = ["session.jsonl", "session.v3.jsonl", "session.v4.jsonl.zstd"].map((name) => join(generationDirectory, name));
-    const generationRecord = JSON.stringify({ type: "session", id: "audit-generations", cwd: projectDirectory }) + "\n";
-    for (const file of generationFiles) writeFileSync(file, file.endsWith(".zstd") ? zstdCompressSync(Buffer.from(generationRecord)) : generationRecord);
+    // Resuming cannot race a pending deletion confirmation.
+    await selectSessionAgent.handler("primeAgent");
+    const raceFile = join(primeSessions, "audit-race.jsonl");
+    const unrelatedFile = join(primeSessions, "audit-unrelated.jsonl");
+    writeSession(raceFile, "audit-race");
+    writeSession(unrelatedFile, "audit-unrelated");
     refreshSaved.handler();
-    const generationTerminal = deletionTerminal("audit-generations", "deepseek");
-    vscodeStub.window.terminals = [generationTerminal];
+    const raceTerminal = deletionTerminal("audit-race");
+    vscodeStub.window.terminals = [raceTerminal];
     const originalWarning = vscodeStub.window.showWarningMessage;
     vscodeStub.window.showWarningMessage = async (...args) => {
         const before = vscodeStub.__calls.created.length;
-        await resume.handler({ harnessId: "deepseek", id: "audit-generations" });
+        await resume.handler({ harnessId: "primeAgent", id: "audit-race" });
         assert.equal(vscodeStub.__calls.created.length, before, "resume cannot launch while deletion confirmation is pending");
         return originalWarning(...args);
     };
     vscodeStub.__calls.warningResults.push("Move to Trash");
-    await deleteOne({ harnessId: "deepseek", id: "audit-generations" });
-    vscodeStub.window.showWarningMessage = originalWarning;
-    assert.ok(generationFiles.every((file) => !existsSync(file)));
-    assert.equal(generationTerminal.disposed, 1);
-    assert.deepEqual(await savedSessionRows(), [], "older DeepSeek generations must not resurrect deleted sessions");
-    await selectSessionAgent.handler("primeAgent");
+    try {
+        await deleteOne({ harnessId: "primeAgent", id: "audit-race" });
+    } finally {
+        vscodeStub.window.showWarningMessage = originalWarning;
+    }
+    assert.equal(existsSync(raceFile), false);
+    assert.equal(existsSync(unrelatedFile), true, "deletion preserves unrelated sessions");
+    assert.equal(raceTerminal.disposed, 1);
+    rmSync(unrelatedFile);
     writeSession(savedFile, "recorded-prime");
     await cancelSelection();
     vscodeStub.window.terminals = [];
@@ -3334,13 +3218,26 @@ try {
     assert.equal(JSON.parse(restoredConversation.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY).sessionId, "recorded-prime");
     const invalidMetadata = restoredTerminal({ env: { MULTI_HARNESS_TERMINAL_IDENTITY: "{broken" } }, "Oh My Pi");
     const foreignTerminal = restoredTerminal({ name: "Oh My Pi" });
+    let legacyDisposed = 0;
+    const legacyTerminal = { name: "Prime Agent", creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "deepseek", launchMode: "direct", sessionId: "legacy" }) } }, dispose() { legacyDisposed++; } };
+    const previousSelection = savedState.get("workspace:selectedSessionAgent");
+    const previousActiveTerminal = vscodeStub.window.activeTerminal;
+    savedState.set("workspace:selectedSessionAgent", "deepseek");
+    vscodeStub.window.activeTerminal = legacyTerminal;
     vscodeStub.window.terminals = [restoredSameTitle, restoredConversation, restoredDirect,
-        invalidMetadata, foreignTerminal];
+        invalidMetadata, foreignTerminal, legacyTerminal];
     const statusBeforeReload = vscodeStub.__calls.statusItems.length;
     delete requireFrom.cache[requireFrom.resolve(join(activationDir, "extension.cjs"))];
     const freshExtension = requireFrom(join(activationDir, "extension.cjs"));
     const reloadedContext = { ...context, subscriptions: [] };
     freshExtension.activate(reloadedContext);
+    const reloadedSessions = vscodeStub.__calls.views.filter((view) => view.id === "multiHarness.sessions").at(-1);
+    assert.ok(reloadedSessions.provider.getChildren().every((row) => row.harness.id !== "deepseek"), "legacy terminal identity is not registered as an agent");
+    assert.equal(legacyDisposed, 0, "reactivation does not dispose legacy terminals");
+    assert.equal(savedState.get("workspace:selectedSessionAgent"), "deepseek", "legacy persisted selection is not erased");
+    vscodeStub.window.activeTerminal = previousActiveTerminal;
+    if (previousSelection === undefined) savedState.delete("workspace:selectedSessionAgent");
+    else savedState.set("workspace:selectedSessionAgent", previousSelection);
     assert.equal(vscodeStub.__calls.statusItems.length, statusBeforeReload, "direct, unmarked and malformed terminals do not acquire shell tracking");
     const countBeforeRestore = vscodeStub.__calls.created.length;
     const primeHarness = agents.find((agent) => agent.id === "primeAgent");
@@ -3506,12 +3403,108 @@ try {
     passed += 1;
     console.log("ok: OMP deletion follows live terminal breadcrumbs for fresh and switched sessions");
 
+    const restrictedProcPlugin = { name: "restricted-proc", setup(build) {
+            build.onResolve({ filter: /^node:fs\/promises$/ }, (args) => args.importer.endsWith("terminalIdentity.ts")
+                ? { path: "restricted-proc", namespace: "test" } : undefined);
+            build.onLoad({ filter: /.*/, namespace: "test" }, () => ({ contents: `
+                const fs = require("node:fs/promises");
+                exports.readFile = (...args) => globalThis.__identityReadFile(...args);
+                exports.readdir = fs.readdir; exports.readlink = fs.readlink;
+                exports.realpath = fs.realpath; exports.stat = fs.stat;
+            `, loader: "js" }));
+        } };
+    await build({
+        entryPoints: [join(projectRoot, "src", "terminalIdentity.ts")],
+        outfile: join(activationDir, "identity.restricted.cjs"), bundle: true, format: "cjs", platform: "node",
+        external: ["vscode"], define: { "process.platform": '"linux"' }, logLevel: "silent",
+        plugins: [restrictedProcPlugin],
+    });
+    const restrictedIdentity = requireFrom(join(activationDir, "identity.restricted.cjs"));
+    const restrictedTerminal = { name: "Prime Agent", creationOptions: {}, processId: Promise.resolve(123) };
+    let procReads = 0;
+    let rejectRead;
+    try {
+        globalThis.__identityReadFile = () => {
+            procReads++;
+            if (procReads === 1) return new Promise((resolve, reject) => { rejectRead = reject; });
+            return Promise.resolve('MULTI_HARNESS_TERMINAL_IDENTITY={"version":1,"harnessId":"ohMyPi","launchMode":"direct"}\0');
+        };
+        assert.equal(restrictedIdentity.harnessForTerminal(restrictedTerminal), undefined, "title waits for initial discovery");
+        const first = restrictedIdentity.restoreTerminalIdentity(restrictedTerminal);
+        const concurrent = restrictedIdentity.restoreTerminalIdentity(restrictedTerminal);
+        await Promise.resolve();
+        assert.equal(procReads, 1, "concurrent discovery shares one /proc read");
+        rejectRead(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+        assert.deepEqual(await Promise.all([first, concurrent]), [undefined, undefined]);
+        assert.equal(restrictedIdentity.harnessForTerminal(restrictedTerminal)?.id, "primeAgent", "restricted /proc permits title fallback");
+        assert.equal((await restrictedIdentity.restoreTerminalIdentity(restrictedTerminal))?.harnessId, "ohMyPi");
+        assert.equal(procReads, 2, "failed discovery remains retryable");
+        assert.equal(restrictedIdentity.harnessForTerminal(restrictedTerminal)?.id, "ohMyPi", "recovered identity overrides the title");
+        await restrictedIdentity.restoreTerminalIdentity(restrictedTerminal);
+        assert.equal(procReads, 2, "successful discovery is cached");
+        const invalid = { name: "Prime Agent", processId: Promise.resolve(124) };
+        globalThis.__identityReadFile = async () => "MULTI_HARNESS_TERMINAL_IDENTITY={broken\0";
+        await restrictedIdentity.restoreTerminalIdentity(invalid);
+        assert.equal(restrictedIdentity.harnessForTerminal(invalid), undefined, "invalid process identity blocks title fallback");
+        const unmarked = { name: "Prime Agent", processId: Promise.resolve(125) };
+        globalThis.__identityReadFile = async () => "OTHER=value\0";
+        await restrictedIdentity.restoreTerminalIdentity(unmarked);
+        assert.equal(restrictedIdentity.harnessForTerminal(unmarked)?.id, "primeAgent", "unmarked process uses title fallback");
+        await build({
+            entryPoints: [join(projectRoot, "src", "sessionContext.ts")],
+            outfile: join(activationDir, "context.restricted.cjs"), bundle: true, format: "cjs", platform: "node",
+            external: ["vscode"], define: { "process.platform": '"linux"' }, logLevel: "silent",
+            plugins: [restrictedProcPlugin],
+        });
+        const { registerSessionContext } = requireFrom(join(activationDir, "context.restricted.cjs"));
+        const selectionTerminal = { name: "Prime Agent", processId: Promise.resolve(126) };
+        const priorActive = vscodeStub.window.activeTerminal;
+        const selectionContext = { ...context, subscriptions: [], workspaceState: { get: () => undefined, update: async () => {} } };
+        try {
+            let readCount = 0;
+            let resolveRetry;
+            globalThis.__identityReadFile = () => {
+                if (++readCount === 1) return Promise.reject(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+                return new Promise((resolve) => { resolveRetry = resolve; });
+            };
+            vscodeStub.window.activeTerminal = selectionTerminal;
+            const scope = registerSessionContext(selectionContext);
+            await new Promise((resolve) => setImmediate(resolve));
+            const onActive = vscodeStub.__calls.activeTerminalHandlers.at(-1);
+            onActive(selectionTerminal);
+            assert.equal(scope.getScope().agent?.id, "primeAgent", "retry initially selects the fallback title");
+            await Promise.resolve();
+            resolveRetry('MULTI_HARNESS_TERMINAL_IDENTITY={"version":1,"harnessId":"ohMyPi","launchMode":"direct"}\0');
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(scope.getScope().agent?.id, "ohMyPi", "recovered identity replaces fallback selection");
+            const otherTerminal = { name: "Prime Agent", processId: Promise.resolve(127) };
+            let resolveOther;
+            globalThis.__identityReadFile = () => new Promise((resolve) => { resolveOther = resolve; });
+            vscodeStub.window.activeTerminal = otherTerminal;
+            onActive(otherTerminal);
+            await Promise.resolve();
+            await scope.selectAgent("codex");
+            resolveOther('MULTI_HARNESS_TERMINAL_IDENTITY={"version":1,"harnessId":"ohMyPi","launchMode":"direct"}\0');
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(scope.getScope().agent?.id, "codex", "explicit selection supersedes pending discovery");
+        } finally {
+            for (const subscription of selectionContext.subscriptions) subscription.dispose();
+            vscodeStub.window.activeTerminal = priorActive;
+        }
+        passed += 1;
+        console.log("ok: restricted Linux /proc retains title fallback and retries identity discovery");
+    } finally {
+        delete globalThis.__identityReadFile;
+    }
+
     await build({
         entryPoints: [join(projectRoot, "src", "terminalIdentity.ts")],
         outfile: join(activationDir, "identity.macos.cjs"), bundle: true, format: "cjs", platform: "node",
         external: ["vscode"], define: { "process.platform": '"darwin"' }, logLevel: "silent",
     });
     const macIdentity = requireFrom(join(activationDir, "identity.macos.cjs"));
+    assert.equal(macIdentity.harnessForTerminal(legacyTerminal), undefined, "unknown durable identity must not fall back to a renamed supported agent");
+    assert.equal(macIdentity.harnessForTerminal({ name: "Prime Agent", creationOptions: {} })?.id, "primeAgent", "unmarked legacy terminals retain title fallback");
     const macEnv = macIdentity.terminalIdentityEnv(agents.find((agent) => agent.id === "ohMyPi"), "direct");
     assert.ok(macEnv.TERM_SESSION_ID, "macOS OMP terminals receive a durable breadcrumb ID");
     const macTerminal = { creationOptions: { env: macEnv } };
@@ -3754,9 +3747,15 @@ try {
         const shellChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
             env: { ...process.env, ...shellOptions.env }, stdio: "ignore",
         });
+        const invalidChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+            env: { ...process.env, MULTI_HARNESS_TERMINAL_IDENTITY: "{broken" }, stdio: "ignore",
+        });
+        const legacyEnv = { ...process.env };
+        delete legacyEnv.MULTI_HARNESS_TERMINAL_IDENTITY;
+        const legacyChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { env: legacyEnv, stdio: "ignore" });
         const procContext = { ...context, subscriptions: [] };
         try {
-            await Promise.all([child, shellChild].map((process) => new Promise((resolve, reject) => {
+            await Promise.all([child, shellChild, invalidChild, legacyChild].map((process) => new Promise((resolve, reject) => {
                 process.once("spawn", resolve); process.once("error", reject);
             })));
             // Browser reconnection can return no original launch options at all.
@@ -3778,6 +3777,13 @@ try {
             }
             assert.equal(vscodeStub.__calls.statusItems.length, statusBeforeProc + 1, "Linux shell process metadata restores tracking");
             assert.equal((await identities.restoreTerminalIdentity(procConversation)).sessionId, "recorded-prime");
+            const invalidProc = { name: "Prime Agent", processId: Promise.resolve(invalidChild.pid) };
+            const legacyProc = { name: "Prime Agent", processId: Promise.resolve(legacyChild.pid) };
+            assert.equal(identities.harnessForTerminal(invalidProc), undefined, "title classification waits for Linux discovery");
+            assert.equal(identities.harnessForTerminal(legacyProc), undefined, "legacy titles also wait for discovery");
+            await Promise.all([identities.restoreTerminalIdentity(invalidProc), identities.restoreTerminalIdentity(legacyProc)]);
+            assert.equal(identities.harnessForTerminal(invalidProc), undefined, "invalid process identity blocks title fallback");
+            assert.equal(identities.harnessForTerminal(legacyProc)?.id, "primeAgent", "unmarked process retains legacy title fallback");
             for (const value of [null, "{broken", "[]", '{"version":2}', '{"version":1,"harnessId":"unknown","launchMode":"shell"}']) {
                 assert.equal(await identities.restoreTerminalIdentity(restoredTerminal({ env: { MULTI_HARNESS_TERMINAL_IDENTITY: value } })), undefined);
             }
@@ -3787,9 +3793,9 @@ try {
             console.log("ok: real Linux processes restore conversation identity and shell tracking when code-server omits launch metadata");
         } finally {
             for (const subscription of procContext.subscriptions) subscription.dispose();
-            const exits = [child, shellChild].map((process) => process.exitCode === null
+            const exits = [child, shellChild, invalidChild, legacyChild].map((process) => process.exitCode === null
                 ? new Promise((resolve) => process.once("exit", resolve)) : Promise.resolve());
-            child.kill(); shellChild.kill();
+            child.kill(); shellChild.kill(); invalidChild.kill(); legacyChild.kill();
             await Promise.all(exits);
             vscodeStub.window.terminals = [];
         }

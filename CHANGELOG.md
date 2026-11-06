@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.2.3
 
 - Start Windows desktop `.cmd` and `.bat` agents through console-subsystem `cmd.exe` instead of the Electron launcher, including terminal profiles and saved-session resumes. As with other Windows desktop direct terminals, exit output is not retained and `multiHarness.autoCloseOnExit` does not apply.
+- Remove DeepSeek Harness integration because its official CLI does not provide the expected interactive TUI. Existing CLI installations, settings, session files and open terminals are left unchanged.
 
 ## 1.2.2
 

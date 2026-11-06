@@ -8,7 +8,6 @@ const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const nls = JSON.parse(readFileSync(join(root, "package.nls.json"), "utf8"));
 
 const harnessIds = [
-    "deepseek",
     "openCode",
     "claudeCode",
     "codex",
@@ -197,8 +196,6 @@ for (const id of harnessIds) {
 check(properties["multiHarness.notifyOnExit"]?.type === "boolean" && properties["multiHarness.notifyOnExit"]?.scope === "window", "setting multiHarness.notifyOnExit is boolean/window");
 const agySessions = properties["multiHarness.antigravity.sessionDirectory"];
 check(agySessions?.type === "string" && agySessions.default === "" && agySessions.scope === "machine-overridable", "Antigravity session directory override is declared");
-const dshSessions = properties["multiHarness.deepseek.sessionDirectory"];
-check(dshSessions?.type === "string" && dshSessions.default === "" && dshSessions.scope === "machine-overridable", "DeepSeek Harness session directory override is declared");
 const openCodeSessions = properties["multiHarness.openCode.sessionDirectory"];
 check(openCodeSessions?.type === "string" && openCodeSessions.default === "" && openCodeSessions.scope === "machine-overridable", "OpenCode session directory override is declared");
 const grokSessions = properties["multiHarness.grokBuild.sessionDirectory"];

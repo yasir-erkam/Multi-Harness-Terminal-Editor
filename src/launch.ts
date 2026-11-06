@@ -48,7 +48,7 @@ export function resolveAgentLaunch(context: vscode.ExtensionContext, harness: Ha
     const cwd = resource?.fsPath ?? os.homedir();
     const config = vscode.workspace.getConfiguration("multiHarness", resource);
     const configuredPath = config.get<string>(settingKey(harness, "executablePath"), harness.defaultExecutable);
-    const args: readonly string[] = config.get<string[]>(settingKey(harness, "arguments"), harness.defaultArgs ? [...harness.defaultArgs] : []);
+    const args: readonly string[] = config.get<string[]>(settingKey(harness, "arguments"), []);
     const configuredMode = config.get<string>("launchMode", "direct");
 
     return {
@@ -282,10 +282,7 @@ async function launchAgentTerminal(
     const configuredArgs = launch.args;
     if (resume) {
         launch.name = resume.terminalName;
-        // `dsh` parses launcher flags like `--profile tui` only before inner app flags like `--resume`.
-        launch.args = harness.id === "deepseek"
-            ? [...(launch.args ?? []), ...resume.args]
-            : [...resume.args, ...(launch.args ?? [])];
+        launch.args = [...resume.args, ...(launch.args ?? [])];
     }
     const executable = resolveExecutable(launch.executable, { rootFolder: launch.cwd });
     if (!executable) {

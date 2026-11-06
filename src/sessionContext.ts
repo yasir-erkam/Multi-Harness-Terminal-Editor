@@ -29,15 +29,15 @@ export function registerSessionContext(context: vscode.ExtensionContext): Sessio
         selectedId = vscode.window.activeTerminal ? harnessForTerminal(vscode.window.activeTerminal)?.id : undefined;
     }
     async function selectAgent(id: string): Promise<void> {
-        if (selectedId === id || !HARNESSES.some((agent) => agent.id === id)) {
-            return;
-        }
+        if (!HARNESSES.some((agent) => agent.id === id)) return;
         selectionRevision++;
+        if (selectedId === id) return;
         selectedId = id;
         changes.fire();
         await context.workspaceState.update("selectedSessionAgent", id);
     }
     const followTerminal = (terminal: vscode.Terminal | undefined): void => {
+        ++selectionRevision;
         if (!terminal) {
             return;
         }
@@ -45,11 +45,12 @@ export function registerSessionContext(context: vscode.ExtensionContext): Sessio
         if (agent) {
             void selectAgent(agent.id);
         }
+        const revision = selectionRevision;
         if (!terminalIdentity(terminal)) {
-            const revision = selectionRevision;
-            void restoreTerminalIdentity(terminal).then((identity) => {
-                if (identity && !disposed && selectionRevision === revision && vscode.window.activeTerminal === terminal) {
-                    void selectAgent(identity.harnessId);
+            void restoreTerminalIdentity(terminal).then(() => {
+                if (!disposed && selectionRevision === revision && vscode.window.activeTerminal === terminal) {
+                    const restoredAgent = harnessForTerminal(terminal);
+                    if (restoredAgent) void selectAgent(restoredAgent.id);
                 }
             });
         }

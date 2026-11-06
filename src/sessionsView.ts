@@ -76,8 +76,8 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
         closed.delete(terminal);
         refresh();
         if (!terminalIdentity(terminal)) {
-            void restoreTerminalIdentity(terminal).then((identity) => {
-                if (identity && !disposed && vscode.window.terminals.includes(terminal)) refresh();
+            void restoreTerminalIdentity(terminal).then(() => {
+                if (!disposed && !closed.has(terminal) && vscode.window.terminals.includes(terminal)) refresh();
             });
         }
     };

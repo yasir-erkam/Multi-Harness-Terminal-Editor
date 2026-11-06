@@ -2,7 +2,6 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as zlib from "node:zlib";
 
 export interface SavedSession {
     readonly harnessId: string;
@@ -40,102 +39,11 @@ async function canonicalDirectory(directory: string): Promise<string> {
 }
 
 const WINDOW_BYTES = 256 * 1024;
-const ZSTD_READ_BYTES = 8 * 1024 * 1024;
 const MAX_CANDIDATES = 1000;
-const ZSTD_MAGIC = 0xfd2fb528;
-const SKIPPABLE_MAGIC_MASK = 0xfffffff0;
-const SKIPPABLE_MAGIC_BASE = 0x184d2a50;
-const DSH_GENERATION_FILE = /^session(?:\.v([1-9]\d*))?\.jsonl(?:\.zstd)?$/;
-
-export interface ZstdFrameScan {
-    readonly frames: { start: number; end: number }[];
-    readonly completePrefixLength: number;
-    readonly error?: "invalidMagic" | "corruptHeader" | "corruptBlock";
-}
-
-/**
- * DeepSeek Harness appends each JSONL flush as an independent Zstandard frame,
- * and Node's `zlib.zstdDecompressSync` decodes one frame per call.
- */
-export function scanZstdFrames(buffer: Buffer): ZstdFrameScan {
-    const frames: { start: number; end: number }[] = [];
-    let offset = 0;
-    while (offset < buffer.length) {
-        const frameStart = offset;
-        if (offset + 4 > buffer.length) {
-            return { frames, completePrefixLength: frameStart };
-        }
-        const magic = buffer.readUInt32LE(offset);
-        offset += 4;
-        if ((magic & SKIPPABLE_MAGIC_MASK) === SKIPPABLE_MAGIC_BASE) {
-            if (offset + 4 > buffer.length) {
-                return { frames, completePrefixLength: frameStart };
-            }
-            const payloadSize = buffer.readUInt32LE(offset);
-            offset += 4;
-            if (offset + payloadSize > buffer.length) {
-                return { frames, completePrefixLength: frameStart };
-            }
-            offset += payloadSize;
-            continue;
-        }
-        if (magic !== ZSTD_MAGIC) {
-            return { frames, completePrefixLength: frameStart, error: "invalidMagic" };
-        }
-        if (offset >= buffer.length) {
-            return { frames, completePrefixLength: frameStart };
-        }
-        const fhd = buffer[offset++]!;
-        if ((fhd & 0b0001_1000) !== 0) {
-            return { frames, completePrefixLength: frameStart, error: "corruptHeader" };
-        }
-        const singleSegment = (fhd & 0b0010_0000) !== 0;
-        const checksumFlag = (fhd & 0b0000_0100) !== 0;
-        const dictIdFlag = fhd & 0b0000_0011;
-        const fcsFlag = fhd >> 6;
-        const windowDescBytes = singleSegment ? 0 : 1;
-        const dictIdBytes = dictIdFlag === 0 ? 0 : 1 << (dictIdFlag - 1);
-        const fcsBytes = fcsFlag === 0 ? (singleSegment ? 1 : 0) : 1 << fcsFlag;
-        const headerExtra = windowDescBytes + dictIdBytes + fcsBytes;
-        if (offset + headerExtra > buffer.length) {
-            return { frames, completePrefixLength: frameStart };
-        }
-        offset += headerExtra;
-        while (true) {
-            if (offset + 3 > buffer.length) {
-                return { frames, completePrefixLength: frameStart };
-            }
-            const blockHeader = buffer[offset]! | (buffer[offset + 1]! << 8) | (buffer[offset + 2]! << 16);
-            offset += 3;
-            const lastBlock = (blockHeader & 1) !== 0;
-            const blockType = (blockHeader >> 1) & 0b11;
-            const blockSize = blockHeader >> 3;
-            if (blockType === 3) {
-                return { frames, completePrefixLength: frameStart, error: "corruptBlock" };
-            }
-            const payloadBytes = blockType === 1 ? 1 : blockSize;
-            if (offset + payloadBytes > buffer.length) {
-                return { frames, completePrefixLength: frameStart };
-            }
-            offset += payloadBytes;
-            if (lastBlock) {
-                break;
-            }
-        }
-        if (checksumFlag) {
-            if (offset + 4 > buffer.length) {
-                return { frames, completePrefixLength: frameStart };
-            }
-            offset += 4;
-        }
-        frames.push({ start: frameStart, end: offset });
-    }
-    return { frames, completePrefixLength: offset };
-}
 
 /** Providers with identity-validated JSONL or provider-native deletion. */
 export function supportsSessionDeletion(harnessId: string): boolean {
-    return ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "deepseek", "grokBuild", "openCode"].includes(harnessId);
+    return ["codex", "claudeCode", "pi", "ohMyPi", "primeAgent", "grokBuild", "openCode"].includes(harnessId);
 }
 
 /** Native session stores only; unsupported agents are deliberately not inferred. */
@@ -150,7 +58,6 @@ export function sessionRoots(home = os.homedir(), env: NodeJS.ProcessEnv = proce
         { harnessId: "ohMyPi", directory: path.join(base("PI_CONFIG_DIR", ".omp"), "agent", "sessions") },
         { harnessId: "primeAgent", directory: primeSessionDirectory ? expand(primeSessionDirectory) : path.join(base("PRIME_AGENT_CODING_AGENT_DIR", ".prime/agent"), "sessions") },
         { harnessId: "antigravity", directory: path.join(home, ".gemini", "antigravity-cli") },
-        { harnessId: "deepseek", directory: path.join(base("DSH_HOME", ".dsh"), "sessions") },
         { harnessId: "grokBuild", directory: path.join(base("GROK_HOME", ".grok"), "sessions") },
         { harnessId: "openCode", directory: path.join(base("XDG_DATA_HOME", ".local/share"), "opencode") },
     ];
@@ -426,41 +333,6 @@ function clean(value: unknown): string {
 async function readWindows(file: string, size: number): Promise<Record<string, any>[]> {
     const handle = await fs.open(file, "r");
     try {
-        if (file.endsWith(".jsonl.zstd")) {
-            const buffer = Buffer.alloc(Math.min(size, ZSTD_READ_BYTES));
-            const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-            const { frames } = scanZstdFrames(buffer.subarray(0, bytesRead));
-            const headChunks: string[] = [];
-            let headBytes = 0;
-            let headEndIndex = 0;
-            for (; headEndIndex < frames.length && headBytes < WINDOW_BYTES; headEndIndex++) {
-                try {
-                    const frame = frames[headEndIndex]!;
-                    const chunk = zlib.zstdDecompressSync(buffer.subarray(frame.start, frame.end));
-                    headChunks.push(chunk.toString("utf8"));
-                    headBytes += chunk.length;
-                } catch {
-                    break;
-                }
-            }
-            const result = records(headChunks.join(""));
-            if (headEndIndex < frames.length) {
-                const tailChunks: string[] = [];
-                let tailBytes = 0;
-                for (let i = frames.length - 1; i >= headEndIndex && tailBytes < WINDOW_BYTES; i--) {
-                    try {
-                        const frame = frames[i]!;
-                        const chunk = zlib.zstdDecompressSync(buffer.subarray(frame.start, frame.end));
-                        tailChunks.unshift(chunk.toString("utf8"));
-                        tailBytes += chunk.length;
-                    } catch {
-                        break;
-                    }
-                }
-                result.push(...records(tailChunks.join("")));
-            }
-            return result;
-        }
         const head = Buffer.alloc(Math.min(size, WINDOW_BYTES));
         await handle.read(head, 0, head.length, 0);
         const result = records(head.toString("utf8"));
@@ -512,9 +384,6 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
                 return undefined;
             }
         }
-        if (harnessId === "deepseek" && (header?.origin === "subagent" || (typeof header?.delegationDepth === "number" && header.delegationDepth > 0))) {
-            return undefined;
-        }
     }
     if (!header || typeof header.id !== "string" || !/^[a-zA-Z0-9_-]{1,160}$/.test(header.id) || typeof header.cwd !== "string" || header.cwd.includes("\0") || !path.isAbsolute(header.cwd)) {
         return undefined;
@@ -526,10 +395,9 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
             ? (row.type === "event_msg" && (row.payload?.type === "user_message" || row.payload?.type === "agent_message"))
                 || (row.type === "response_item" && row.payload?.type === "message" && (row.payload.role === "user" || row.payload.role === "assistant"))
             : row.type === "user" || row.type === "assistant"
-                || (row.type === "message" && (row.message?.role === "user" || row.message?.role === "assistant"))
-                || row.type === "user/message" || row.type === "assistant/message";
+                || (row.type === "message" && (row.message?.role === "user" || row.message?.role === "assistant"));
         if (isMessage && !row.isMeta && !row.isSidechain) {
-            const timestamp = row.timestamp ?? row.message?.timestamp ?? row.data?.timestamp;
+            const timestamp = row.timestamp ?? row.message?.timestamp;
             const parsed = typeof timestamp === "number" && Number.isFinite(timestamp) ? timestamp : parseTimestamp(timestamp);
             lastMessage = Math.max(lastMessage, parsed);
         }
@@ -538,8 +406,6 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
         } else if (row.type === "session_info" || row.type === "sessionInfo") {
             // Prime persists a null/empty name when the user clears a rename.
             title = harnessId === "primeAgent" ? clean(row.name) : clean(row.name) || title;
-        } else if (row.type === "session/title") {
-            title = clean(row.data?.title) || title;
         }
     }
     if (!title) {
@@ -550,11 +416,7 @@ function parseSession(harnessId: string, file: string, modified: number, rows: R
             if (title) {
                 break;
             }
-            const message = row.type === "user" || row.type === "message"
-                ? row.message
-                : row.type === "user/message" && (!row.data?.source || row.data.source.kind === "user")
-                    ? { role: "user", content: row.data?.content }
-                    : undefined;
+            const message = row.type === "user" || row.type === "message" ? row.message : undefined;
             if (message && (message.role === "user" || row.type === "user") && !row.isMeta) {
                 const content = message.content;
                 title = clean(typeof content === "string" ? content : Array.isArray(content)
@@ -600,7 +462,6 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
                 return;
             }
             const entries = await fs.opendir(directory);
-            let bestGeneration: { version: number; zstd: boolean; candidate: { root: SessionRoot; file: string; modified: number; size: number } } | undefined;
             for await (const entry of entries) {
                 if (options.signal?.aborted) {
                     return;
@@ -624,29 +485,16 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
                         }
                     }
                     await walk(root, file, depth + 1);
-                } else if (entry.isFile() && (entry.name.endsWith(".jsonl") || (root.harnessId === "deepseek" && entry.name.endsWith(".jsonl.zstd")))) {
+                } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
                     try {
                         const stat = await fs.stat(file);
                         if (stat.isFile()) {
-                            const candidate = { root, file, modified: stat.mtimeMs, size: stat.size };
-                            const match = root.harnessId === "deepseek" ? DSH_GENERATION_FILE.exec(entry.name) : null;
-                            if (match) {
-                                const version = match[1] ? Number(match[1]) : 0;
-                                const zstd = entry.name.endsWith(".zstd");
-                                if (!bestGeneration || version > bestGeneration.version || (version === bestGeneration.version && zstd && !bestGeneration.zstd)) {
-                                    bestGeneration = { version, zstd, candidate };
-                                }
-                            } else {
-                                candidates.push(candidate);
-                            }
+                            candidates.push({ root, file, modified: stat.mtimeMs, size: stat.size });
                         }
                     } catch {
                         // A session may disappear while the list is being refreshed.
                     }
                 }
-            }
-            if (bestGeneration) {
-                candidates.push(bestGeneration.candidate);
             }
         } catch (error) {
             const code = (error as NodeJS.ErrnoException).code;
@@ -738,8 +586,7 @@ export function resumeArguments(session: SavedSession): string[] {
         case "antigravity": return ["--conversation", session.id];
         case "codex": return ["resume", session.id];
         case "claudeCode":
-        case "grokBuild":
-        case "deepseek": return ["--resume", session.id];
+        case "grokBuild": return ["--resume", session.id];
         case "pi": return ["--session", session.file];
         case "ohMyPi":
         case "primeAgent": return ["--resume", session.file];

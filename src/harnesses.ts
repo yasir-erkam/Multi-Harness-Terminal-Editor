@@ -5,15 +5,12 @@ export interface Harness {
     readonly displayName: string;
     /** Default command name if no explicit path is configured. */
     readonly defaultExecutable: string;
-    /** Default CLI arguments if no explicit arguments setting is configured. */
-    readonly defaultArgs?: readonly string[];
     /** Contributed command id, spelled out so the bundle stays greppable. */
     readonly commandId: string;
 }
 
 /** Descending GitHub stars snapshot; sources and unranked-agent fallback: docs/agent-order.md. */
 export const HARNESSES: readonly Harness[] = [
-    { id: "deepseek", displayName: "DeepSeek Harness", defaultExecutable: "dsh", defaultArgs: ["--profile", "tui"], commandId: "multiHarness.openDeepseek" },
     { id: "openCode", displayName: "OpenCode", defaultExecutable: "opencode", commandId: "multiHarness.openOpenCode" },
     { id: "claudeCode", displayName: "Claude Code", defaultExecutable: "claude", commandId: "multiHarness.openClaudeCode" },
     { id: "codex", displayName: "Codex", defaultExecutable: "codex", commandId: "multiHarness.openCodex" },

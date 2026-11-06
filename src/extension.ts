@@ -7,7 +7,7 @@ import { registerAgentsView } from "./agentsView";
 import { registerSessionsView } from "./sessionsView";
 import { registerSessionContext } from "./sessionContext";
 import { registerSavedSessionsView } from "./savedSessionsView";
-import { harnessForTerminal } from "./terminalIdentity";
+import { harnessForTerminal, restoreTerminalIdentity } from "./terminalIdentity";
 import { registerTerminalTitles } from "./terminalTitles";
 import { cleanupTerminalExit } from "./terminalExit";
 
@@ -53,11 +53,12 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!config.get<boolean>("notifyOnExit", false)) {
                 return;
             }
-            const displayName = harnessForTerminal(terminal)?.displayName;
-            if (!displayName || !terminal.exitStatus) {
-                return;
-            }
-            void vscode.window.showInformationMessage(`${displayName} terminal exited with code ${terminal.exitStatus.code}`);
+            void restoreTerminalIdentity(terminal).then(() => {
+                const displayName = harnessForTerminal(terminal)?.displayName;
+                if (displayName && terminal.exitStatus) {
+                    void vscode.window.showInformationMessage(`${displayName} terminal exited with code ${terminal.exitStatus.code}`);
+                }
+            });
         })
     );
 }

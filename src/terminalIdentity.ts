@@ -9,6 +9,11 @@ import { inspectWindowsSessionProcesses, windowsCodexUsesSession } from "./windo
 // Environment metadata stays with the process across browser reconnections.
 // Keep identity separate from the editable title and do not store conversation text.
 const restoredIdentities = new WeakMap<vscode.Terminal, TerminalIdentity>();
+// Failed attempts permit title fallback but must remain eligible for retry.
+const discoveredTerminals = new WeakSet<vscode.Terminal>();
+const attemptedTerminals = new WeakSet<vscode.Terminal>();
+const invalidRestoredIdentities = new WeakSet<vscode.Terminal>();
+const identityDiscoveries = new WeakMap<vscode.Terminal, Promise<TerminalIdentity | undefined>>();
 const TERMINAL_IDENTITY_ENV = "MULTI_HARNESS_TERMINAL_IDENTITY";
 
 export interface TerminalIdentity {
@@ -50,9 +55,15 @@ export function terminalIdentity(terminal: vscode.Terminal): TerminalIdentity | 
 /** Durable launch metadata takes precedence over the legacy editable title. */
 export function harnessForTerminal(terminal: vscode.Terminal): Harness | undefined {
     const identity = terminalIdentity(terminal);
-    return identity
-        ? HARNESSES.find((harness) => harness.id === identity.harnessId)
-        : harnessForTerminalName(terminal.name);
+    if (identity) {
+        return HARNESSES.find((harness) => harness.id === identity.harnessId);
+    }
+    const options = terminal.creationOptions;
+    if (invalidRestoredIdentities.has(terminal) || (options && "env" in options && options.env?.[TERMINAL_IDENTITY_ENV] != null)
+        || (process.platform === "linux" && !attemptedTerminals.has(terminal))) {
+        return undefined;
+    }
+    return harnessForTerminalName(terminal.name);
 }
 
 function validProjectPath(value: unknown): value is string {
@@ -81,28 +92,35 @@ function parseIdentity(value: string | null | undefined): TerminalIdentity | und
 }
 
 /** Reattached Linux/code-server terminals may omit the original env options. */
-export async function restoreTerminalIdentity(terminal: vscode.Terminal): Promise<TerminalIdentity | undefined> {
+export function restoreTerminalIdentity(terminal: vscode.Terminal): Promise<TerminalIdentity | undefined> {
     const identity = terminalIdentity(terminal);
-    if (identity || process.platform !== "linux" || terminal.exitStatus) {
-        return identity;
+    const pending = identityDiscoveries.get(terminal);
+    if (pending) return pending;
+    if (identity || process.platform !== "linux" || terminal.exitStatus || discoveredTerminals.has(terminal)) {
+        return Promise.resolve(identity);
     }
-    try {
-        const pid = await terminal.processId;
-        if (!pid || !Number.isSafeInteger(pid) || pid <= 0) {
-            return undefined;
-        }
-        const environment = await readFile(`/proc/${pid}/environ`, "utf8");
-        const prefix = `${TERMINAL_IDENTITY_ENV}=`;
-        const value = environment.split("\0").find((entry) => entry.startsWith(prefix))?.slice(prefix.length);
-        const restored = parseIdentity(value);
-        if (restored && !terminal.exitStatus) {
-            restoredIdentities.set(terminal, restored);
+    const discovery = (async () => {
+        try {
+            const pid = await terminal.processId;
+            if (!pid || !Number.isSafeInteger(pid) || pid <= 0) return undefined;
+            const environment = await readFile(`/proc/${pid}/environ`, "utf8");
+            const prefix = `${TERMINAL_IDENTITY_ENV}=`;
+            const entry = environment.split("\0").find((item) => item.startsWith(prefix));
+            const restored = parseIdentity(entry?.slice(prefix.length));
+            if (restored) restoredIdentities.set(terminal, restored);
+            else if (entry !== undefined) invalidRestoredIdentities.add(terminal);
+            discoveredTerminals.add(terminal);
             return restored;
+        } catch {
+            // A closed process or restricted /proc must not prevent normal launches.
+        } finally {
+            attemptedTerminals.add(terminal);
+            identityDiscoveries.delete(terminal);
         }
-    } catch {
-        // A closed process or restricted /proc must not prevent normal launches.
-    }
-    return undefined;
+        return undefined;
+    })();
+    identityDiscoveries.set(terminal, discovery);
+    return discovery;
 }
 
 /** OMP updates its terminal breadcrumb when a fresh session starts or switches. */

@@ -9,7 +9,7 @@ import { extensionStrings } from "./localization";
 import { supportsSessionDeletion, resumeArguments, scanSavedSessions, sessionRoots, type SavedSession, type SessionScan } from "./savedSessions";
 import { type AgentStatus } from "./status";
 import { type SessionContext } from "./sessionContext";
-import { SessionDeletionError, sessionDeletionFiles, sessionDeletionTarget } from "./deleteSession";
+import { SessionDeletionError, sessionDeletionTarget } from "./deleteSession";
 import { deleteOpenCodeSession, validateOpenCodeDeletion } from "./openCodeDeletion";
 import { grokTerminalSessionId, codexTerminalSessionFiles, ompTerminalSessionFile, restoreTerminalIdentity, windowsCodexSessionMatches } from "./terminalIdentity";
 import { terminalHasExited } from "./terminalExit";
@@ -193,23 +193,20 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                     } catch (error) { fail(session, error); }
                     continue;
                 }
-                let files: SavedSession[];
+                let target: string;
                 let terminals: vscode.Terminal[];
                 try {
-                    await sessionDeletionFiles(session, roots);
+                    await sessionDeletionTarget(session, roots);
                     terminals = await deletionTerminals(session);
                     // Live-process discovery can take time; revalidate before deleting.
-                    files = await sessionDeletionFiles(session, roots);
+                    target = await sessionDeletionTarget(session, roots);
                 } catch (error) {
                     if ((error as NodeJS.ErrnoException).code === "ENOENT") selected.delete(sessionKey(session));
                     else fail(session, error);
                     continue;
                 }
                 try {
-                    for (const file of files) {
-                        const target = await sessionDeletionTarget(file, roots);
-                        await vscode.workspace.fs.delete(vscode.Uri.file(target), { recursive: file.harnessId === "grokBuild", useTrash: true });
-                    }
+                    await vscode.workspace.fs.delete(vscode.Uri.file(target), { recursive: session.harnessId === "grokBuild", useTrash: true });
                 } catch {
                     trashFailed.push(session);
                     continue;
@@ -228,13 +225,10 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                         continue;
                     }
                     try {
-                        await sessionDeletionFiles(session, roots);
+                        await sessionDeletionTarget(session, roots);
                         const terminals = await deletionTerminals(session);
-                        const files = await sessionDeletionFiles(session, roots);
-                        for (const file of files) {
-                            const target = await sessionDeletionTarget(file, roots);
-                            await vscode.workspace.fs.delete(vscode.Uri.file(target), { recursive: file.harnessId === "grokBuild", useTrash: false });
-                        }
+                        const target = await sessionDeletionTarget(session, roots);
+                        await vscode.workspace.fs.delete(vscode.Uri.file(target), { recursive: session.harnessId === "grokBuild", useTrash: false });
                         finishDeletion(session, terminals);
                     } catch (error) { fail(session, error); }
                 }

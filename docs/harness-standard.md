@@ -100,7 +100,6 @@ Aşağıdaki tablo uygulama desteğini gösterir; standart uyumluluğu veya ger�
 
 | Harness | Liste / resume | Yerel silme | Silme sonrası terminal eşleme sınırı |
 | --- | --- | --- | --- |
-| DeepSeek Harness | Var | Var; doğrulanan dosya nesilleri | Resume kimliği; yeni/değiştirilmiş konuşma canlı izlenmiyor |
 | OpenCode | Var; SQLite / eski JSON | Var; native ilişkiler / konuşma ailesi | Resume kimliği; yeni/değiştirilmiş konuşma canlı izlenmiyor |
 | Claude Code | Var | Var | Resume kimliği; yeni/değiştirilmiş konuşma canlı izlenmiyor |
 | Codex | Var | Var | Silmede Linux writable rollout, Windows writable handle + süreç ağacı; keşif yoksa resume kimliği. macOS canlı keşfi yok |

@@ -13,20 +13,19 @@ GitHub API endpoint used to fetch it.
 
 | Order | Agent | GitHub repository | Stars |
 | --- | --- | --- | ---: |
-| 1 | DeepSeek Harness | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) | [254,720](https://api.github.com/repos/deepseek-ai/deepseek-harness) |
-| 2 | OpenCode | [anomalyco/opencode](https://github.com/anomalyco/opencode) | [218,004](https://api.github.com/repos/anomalyco/opencode) |
-| 3 | Claude Code | [anthropics/claude-code](https://github.com/anthropics/claude-code) | [152,745](https://api.github.com/repos/anthropics/claude-code) |
-| 4 | Codex | [openai/codex](https://github.com/openai/codex) | [129,970](https://api.github.com/repos/openai/codex) |
-| 5 | Pi Agent | [earendil-works/pi](https://github.com/earendil-works/pi) | [116,475](https://api.github.com/repos/earendil-works/pi) |
-| 6 | Gemini CLI | [google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) | [107,459](https://api.github.com/repos/google-gemini/gemini-cli) |
-| 7 | Goose | [aaif-goose/goose](https://github.com/aaif-goose/goose) | [55,451](https://api.github.com/repos/block/goose) |
-| 8 | Aider | [Aider-AI/aider](https://github.com/Aider-AI/aider) | [49,648](https://api.github.com/repos/Aider-AI/aider) |
-| 9 | Oh My Pi | [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi) | [35,981](https://api.github.com/repos/can1357/oh-my-pi) |
-| 10 | Crush | [charmbracelet/crush](https://github.com/charmbracelet/crush) | [28,713](https://api.github.com/repos/charmbracelet/crush) |
-| 11 | Qwen Code | [QwenLM/qwen-code](https://github.com/QwenLM/qwen-code) | [28,587](https://api.github.com/repos/QwenLM/qwen-code) |
-| 12 | Prime Agent | [PrimeIntellect-ai/prime-agent](https://github.com/PrimeIntellect-ai/prime-agent) | [22,186](https://api.github.com/repos/PrimeIntellect-ai/prime-agent) |
-| 13 | Copilot CLI | [github/copilot-cli](https://github.com/github/copilot-cli) | [11,276](https://api.github.com/repos/github/copilot-cli) |
-| 14 | Antigravity CLI | [google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli) | [2,604](https://api.github.com/repos/google-antigravity/antigravity-cli) |
+| 1 | OpenCode | [anomalyco/opencode](https://github.com/anomalyco/opencode) | [218,004](https://api.github.com/repos/anomalyco/opencode) |
+| 2 | Claude Code | [anthropics/claude-code](https://github.com/anthropics/claude-code) | [152,745](https://api.github.com/repos/anthropics/claude-code) |
+| 3 | Codex | [openai/codex](https://github.com/openai/codex) | [129,970](https://api.github.com/repos/openai/codex) |
+| 4 | Pi Agent | [earendil-works/pi](https://github.com/earendil-works/pi) | [116,475](https://api.github.com/repos/earendil-works/pi) |
+| 5 | Gemini CLI | [google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli) | [107,459](https://api.github.com/repos/google-gemini/gemini-cli) |
+| 6 | Goose | [aaif-goose/goose](https://github.com/aaif-goose/goose) | [55,451](https://api.github.com/repos/block/goose) |
+| 7 | Aider | [Aider-AI/aider](https://github.com/Aider-AI/aider) | [49,648](https://api.github.com/repos/Aider-AI/aider) |
+| 8 | Oh My Pi | [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi) | [35,981](https://api.github.com/repos/can1357/oh-my-pi) |
+| 9 | Crush | [charmbracelet/crush](https://github.com/charmbracelet/crush) | [28,713](https://api.github.com/repos/charmbracelet/crush) |
+| 10 | Qwen Code | [QwenLM/qwen-code](https://github.com/QwenLM/qwen-code) | [28,587](https://api.github.com/repos/QwenLM/qwen-code) |
+| 11 | Prime Agent | [PrimeIntellect-ai/prime-agent](https://github.com/PrimeIntellect-ai/prime-agent) | [22,186](https://api.github.com/repos/PrimeIntellect-ai/prime-agent) |
+| 12 | Copilot CLI | [github/copilot-cli](https://github.com/github/copilot-cli) | [11,276](https://api.github.com/repos/github/copilot-cli) |
+| 13 | Antigravity CLI | [google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli) | [2,604](https://api.github.com/repos/google-antigravity/antigravity-cli) |
 | Unranked tail | Cursor Agent | No verified CLI-specific upstream repository | Unknown |
 
 ## Grok Build addition
@@ -35,7 +34,7 @@ Grok Build was added on **2026-10-28** using the GitHub REST API
 [`xai-org/grok-build`](https://api.github.com/repos/xai-org/grok-build):
 **27,586** stars (response Date: `Wed, 28 Oct 2026 10:12:43 GMT`).
 The other counts above retain their original snapshot; they were not refreshed.
-Grok Build is inserted between Qwen Code and Prime Agent, making it the 12th
+Grok Build is inserted between Qwen Code and Prime Agent, making it the 11th
 ranked agent and shifting later agents down one position. Its upstream is
 [xai-org/grok-build](https://github.com/xai-org/grok-build).
 This mixed-date insertion is a fixed ordering aid, not a current comparison

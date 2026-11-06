@@ -1,6 +1,6 @@
 # Multi-Harness Terminal Editor
 
-Run sixteen AI coding-agent CLIs in native editor-area terminals. Select an agent to browse its saved conversations for your project, resume a session, and keep your favorite agents within reach.
+Run fifteen AI coding-agent CLIs in native editor-area terminals. Select an agent to browse its saved conversations for your project, resume a session, and keep your favorite agents within reach.
 
 [Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=yasir-erkam-ozdemir.multi-harness-terminal-editor) · [Install from Open VSX](https://open-vsx.org/extension/yasir-erkam-ozdemir/multi-harness-terminal-editor) · [Download a VSIX](https://github.com/yasir-erkam/Multi-Harness-Terminal-Editor/releases/latest)
 
@@ -20,7 +20,7 @@ Run sixteen AI coding-agent CLIs in native editor-area terminals. Select an agen
 4. **Double-click the agent** to open its editor-area terminal, or select a saved conversation to resume it.
 5. Use the star to favorite an agent and the gear to open extension settings.
 
-Saved conversations are supported for **Codex, Claude Code, OpenCode, Pi, Oh My Pi, Prime Agent, Antigravity CLI, DeepSeek Harness and Grok Build**. All sixteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
+Saved conversations are supported for **Codex, Claude Code, OpenCode, Pi, Oh My Pi, Prime Agent, Antigravity CLI and Grok Build**. All fifteen agents can open terminals. **Open Terminals** focuses an existing tab; **Sessions** shows saved history, including conversations whose terminal tabs are closed.
 
 The sidebar uses native VS Code lists for agents, saved sessions and open terminals. The selected agent is remembered per workspace.
 
@@ -28,24 +28,24 @@ The [harness feature and session-lifecycle standard (Türkçe)](docs/harness-sta
 
 ## What it is
 
-Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as **native VS Code terminals in the editor area**. Open any of the sixteen supported agents from the Activity Bar launcher, an optional editor title-bar button, or the agent picker. Editor title-bar buttons ship **off by default** and are toggled on per agent. The terminals are ordinary editor-area terminals: they can be split, moved, reordered and closed like any other tab.
+Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as **native VS Code terminals in the editor area**. Open any of the fifteen supported agents from the Activity Bar launcher, an optional editor title-bar button, or the agent picker. Editor title-bar buttons ship **off by default** and are toggled on per agent. The terminals are ordinary editor-area terminals: they can be split, moved, reordered and closed like any other tab.
 
 ## Features
 
 - **Native sidebar.** Agents, saved sessions and open terminals appear in native VS Code lists with favorites, project and location filters, settings and launch commands.
 
-- **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all sixteen agents and includes a gear button for extension settings. Click an agent once to select it and show its saved sessions for the current project; double-click to open its terminal.
+- **Activity Bar launcher.** The Multi-Harness YEÖ sidebar lists all fifteen agents and includes a gear button for extension settings. Click an agent once to select it and show its saved sessions for the current project; double-click to open its terminal.
 - **Favorite agents.** Hover over an agent and click the star to keep it at the top of the sidebar. Click the filled star to remove it. Favorites persist across window reloads and workspaces in the same VS Code profile.
-- **Saved sessions.** The Sessions view lists up to 100 recent conversations for the selected agent whose recorded working directory matches the current project folder. Launch an agent, focus its terminal, or use Select Session Agent in the Sessions header to change the agent filter. In multi-root workspaces the folder follows the active editor and stays selected while focus moves to the sidebar or terminal. Symlink aliases match the same directory. This preview supports Codex, Claude Code, OpenCode, Pi, Oh My Pi, Prime Agent, Antigravity CLI, DeepSeek Harness and Grok Build. Click a conversation to resume its exact record; closed tabs do not remove saved history. The selected agent's history is checked automatically every three seconds after each scan finishes; new records, title changes and external deletions update the list without manual refresh. Use Refresh Sessions for an immediate rescan. Unsupported agents show an explanation instead of another agent's history.
+- **Saved sessions.** The Sessions view lists up to 100 recent conversations for the selected agent whose recorded working directory matches the current project folder. Launch an agent, focus its terminal, or use Select Session Agent in the Sessions header to change the agent filter. In multi-root workspaces the folder follows the active editor and stays selected while focus moves to the sidebar or terminal. Symlink aliases match the same directory. This preview supports Codex, Claude Code, OpenCode, Pi, Oh My Pi, Prime Agent, Antigravity CLI and Grok Build. Click a conversation to resume its exact record; closed tabs do not remove saved history. The selected agent's history is checked automatically every three seconds after each scan finishes; new records, title changes and external deletions update the list without manual refresh. Use Refresh Sessions for an immediate rescan. Unsupported agents show an explanation instead of another agent's history.
 - **Planned saved-session integrations.** Saved-session support for Gemini CLI, Goose, Aider, Crush, Qwen Code, Copilot CLI and Cursor Agent is planned for future work; it is not available yet.
 - **Session location scope.** Use the globe button in the Sessions header to switch between **Current location** and **All locations**. All locations removes only the project-folder filter: the selected agent and 100-conversation limit remain unchanged, and no open folder is required. The choice is remembered per workspace. Changing location scope clears deletion selections; resumed conversations still open in their recorded directory.
 - **Open terminals.** The Open Terminals view lists open agent terminal tabs, including resumed sessions, using their current terminal titles. Conversations with the same title remain separate by their saved identity. Click a row to focus that exact terminal, or its close (×) button to close it and stop its running process. A dot marks the active terminal. Saved conversation files are kept; this view is separate from saved history and does not claim to track agent process state.
 - **Manage open terminals.** In the Open Terminals header, select terminals with checkboxes (or the selection indicator on older VS Code versions), select all visible rows, cancel selection, or close the selected terminals. The header shows the selected count. Bulk closure requires confirmation with the target count and titles, warns that running processes may be interrupted, and never deletes saved conversations. New terminals are not added to an existing selection or pending confirmation. Failed closures remain selected. Agent and project filters combine independently of saved-history scope; changing either clears selection. Project means the recorded launch directory, not the CLI's current directory or conversation; older terminals without project metadata appear under **Unknown project**. Right-click a row and choose **Close Other Visible Terminals** to keep that row and close only the other filtered terminals after confirmation.
-- **Delete saved conversations.** Available for Codex, Claude Code, Pi, Oh My Pi, Prime Agent, DeepSeek Harness, OpenCode and Grok Build. Antigravity history is read-only. Use a session's trash button or right-click menu for one conversation. Choose Select Sessions in the Sessions header to enter selection mode, mark conversations with checkboxes, then Delete Selected Sessions. Select All Listed Sessions selects the currently listed agent/location results (up to 100). Selections survive refreshes and title changes, and clear when you change agents, projects or location scope. The confirmation lists the selected titles. For JSONL providers the extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. OpenCode instead requires explicit permanent-deletion approval and removes the selected conversation and its descendants, messages and parts through its native storage layout, never by deleting the shared database. Unsuccessful deletions remain selected. The selected conversation's JSONL record is removed; for DeepSeek, matching sibling `session[.v<N>].jsonl[.zstd]` generations are validated and removed first so old migrations cannot reappear. Auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed terminals and reconnected terminals whose identity can be recovered. OMP also follows live terminal breadcrumbs for fresh and switched conversations on Linux, Windows and macOS. On Linux/code-server, Codex also matches fresh and switched conversations through writable live rollout files, including shell/Node launchers and reconnection. On Windows desktop VS Code, Codex deletion also matches writable session-file handles to the terminal's Codex process tree, including PowerShell/Node launchers and in-process switches. Read-only handles do not identify the active conversation. This requires Windows PowerShell, CIM and native process-handle access; if inspection is restricted, saved resume identity remains the fallback. Outside those Codex deletion paths, the remaining providers identify resumed conversations only: fresh sessions and in-process conversation switches cannot be tracked reliably, so a tab may remain open or retain its original resume identity. Close such a terminal through Open Terminals before deleting its history. Canceled or failed deletions keep their terminals open. A terminal-close failure is reported separately from file deletion and does not trigger a permanent-deletion prompt. Resuming is disabled while deletion is in progress. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks.
+- **Delete saved conversations.** Available for Codex, Claude Code, Pi, Oh My Pi, Prime Agent, OpenCode and Grok Build. Antigravity history is read-only. Use a session's trash button or right-click menu for one conversation. Choose Select Sessions in the Sessions header to enter selection mode, mark conversations with checkboxes, then Delete Selected Sessions. Select All Listed Sessions selects the currently listed agent/location results (up to 100). Selections survive refreshes and title changes, and clear when you change agents, projects or location scope. The confirmation lists the selected titles. For JSONL providers the extension first tries Trash / Recycle Bin; if that fails, permanent deletion requires a separate explicit confirmation. OpenCode instead requires explicit permanent-deletion approval and removes the selected conversation and its descendants, messages and parts through its native storage layout, never by deleting the shared database. Unsuccessful deletions remain selected. The selected conversation's JSONL record is removed. Auxiliary indexes, artifacts and unrelated history are preserved. Files containing multiple conversation identities are refused. Terminals linked by their saved conversation identity close after successful deletion, including renamed terminals and reconnected terminals whose identity can be recovered. OMP also follows live terminal breadcrumbs for fresh and switched conversations on Linux, Windows and macOS. On Linux/code-server, Codex also matches fresh and switched conversations through writable live rollout files, including shell/Node launchers and reconnection. On Windows desktop VS Code, Codex deletion also matches writable session-file handles to the terminal's Codex process tree, including PowerShell/Node launchers and in-process switches. Read-only handles do not identify the active conversation. This requires Windows PowerShell, CIM and native process-handle access; if inspection is restricted, saved resume identity remains the fallback. Outside those Codex deletion paths, the remaining providers identify resumed conversations only: fresh sessions and in-process conversation switches cannot be tracked reliably, so a tab may remain open or retain its original resume identity. Close such a terminal through Open Terminals before deleting its history. Canceled or failed deletions keep their terminals open. A terminal-close failure is reported separately from file deletion and does not trigger a permanent-deletion prompt. Resuming is disabled while deletion is in progress. On older VS Code builds without native tree checkboxes, selection uses check marks and row clicks.
 
   **Windows Codex and the shared daemon:** New local interactive Codex launches (including resume, shell mode and terminal profiles) probe the configured executable's `--help` and add `--no-daemon` only when supported. This keeps the writable rollout in that terminal's process tree instead of a shared background server. Common local model/sandbox/profile options are supported; explicit `--no-daemon`, remote routing, custom subcommands/prompts and unrecognized arguments are left untouched. Older CLIs or failed capability probes also retain their original arguments. With custom arguments, add `--no-daemon` yourself if your CLI supports it and you want per-terminal deletion matching. Existing daemon-connected tabs must be closed and freshly launched to gain this ownership behavior; a shared daemon's file handles cannot safely identify a tab, so those tabs may remain open after history deletion. Linux/macOS launch behavior is unchanged; daemon-backed Codex on those platforms has the same file-ownership limitation. The extension does not record prompts or alter/stop the shared daemon.
 
-- **Sixteen agents.** Each agent has an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, settings and icon.
+- **Fifteen agents.** Each agent has an id (for example `claudeCode`, `openCode`, `ohMyPi`) that drives its command, settings and icon.
 - **New conversations.** Opening an agent from Agents, the picker or its command starts a new terminal each time. Use **Open Terminals** to focus an existing tab. Saved conversations reuse terminals by conversation identity, so resuming the same conversation does not start a duplicate process.
   Concurrent requests to resume the same conversation share one pending launch. Different conversations remain independent; closing a terminal or a failed launch does not prevent a later resume.
   On Linux/code-server, Oh My Pi checks writable session descriptors and Grok Build checks verified live-session ownership before resuming. An existing terminal in this window is focused first. If the conversation is running elsewhere, a modal warning offers **Close and Resume**: it closes the other running instance and opens the conversation here, with a warning that unsaved work may be lost. Canceling leaves the other instance unchanged and opens nothing. Approval revalidates the exact process ID and start identity, sends only `SIGTERM`, and waits a bounded time for ownership to be released before launching. If the process cannot be safely identified or closed, ownership is not released, or a Grok process owns multiple conversations, no new terminal opens; close the other instance manually and retry. These best-effort checks require readable Linux process information and are not an atomic cross-window launch lock. Windows/macOS retain same-window terminal reuse only.
@@ -54,7 +54,7 @@ Multi-Harness Terminal Editor opens AI coding-agent CLIs — "harnesses" — as 
   Resumed terminals receive the saved topic immediately at creation in both launch modes; later topic changes continue to use the periodic refresh.
 - **Sessions use the full editor area by default.** Opening or focusing an agent terminal joins split editor groups into a single group, preserving all open tabs. Set `multiHarness.useFullEditorArea` to `false` to keep your split layout. Terminal profiles open in the active editor group without adding a split.
 - **Terminal persistence.** Agent terminals allow VS Code/code-server to reconnect after a window reload or reopening the browser tab in the same workspace when `terminal.integrated.enablePersistentSessions` is enabled. This applies to direct launches, shell launches, resumed conversations and terminal profiles. Conversation identity survives reloads even when terminal titles change (Linux/code-server also recovers identity from the running process if restored launch options are unavailable), and restored shell terminals regain status tracking without rerunning the agent command. Commands started before the reload show an unknown duration if their start event was missed. Existing terminals created by older extension versions must be reopened once to use persistence and identity tracking. After a server/container restart, restoring a terminal may start a new process; it does not guarantee that an agent conversation resumes. Shell mode may restore only the shell after a process restart; use Saved Sessions to resume a recorded conversation.
-- **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all sixteen harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
+- **Agent picker.** `multiHarness.openAgentPicker` — **Multi-Harness: Open Agent...** in the Command Palette — shows a Quick Pick over all fifteen harnesses and opens the one you choose; handy when you keep the title-bar icons hidden.
 - **Optional shell launch mode with live status.** `multiHarness.launchMode: "shell"` runs agents through your shell so a status-bar item can report running/finished state, duration and exit code; the default `direct` mode is unchanged. See [Launch modes](#launch-modes).
 - **Terminal profile dropdown.** Every agent is also contributed as a VS Code terminal profile (`multiHarness.<id>`), so you can start one from the terminal panel's `+` dropdown; a profile cannot launch if its executable cannot be resolved.
 - **Per-agent editor title-bar icons.** Every agent has its own toggle, `multiHarness.show<Id>Icon` (boolean, default `false`). Enable only the agents you want in the editor title bar.
@@ -79,7 +79,6 @@ The default order follows descending GitHub repository star counts from a fixed 
 
 | Harness id | Display name | Open command | Default executable |
 | --- | --- | --- | --- |
-| `deepseek` | DeepSeek Harness | `multiHarness.openDeepseek` | `dsh` |
 | `openCode` | OpenCode | `multiHarness.openOpenCode` | `opencode` |
 | `claudeCode` | Claude Code | `multiHarness.openClaudeCode` | `claude` |
 | `codex` | Codex | `multiHarness.openCodex` | `codex` |
@@ -109,12 +108,11 @@ The following commands appear in the Command Palette under the `Multi-Harness` c
 
 | Command ID | Palette label | Description |
 | --- | --- | --- |
-| `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all sixteen harnesses. |
+| `multiHarness.openAgentPicker` | Open Agent... | Quick Pick over all fifteen harnesses. |
 | `multiHarness.openSettings` | Open Settings | Open settings filtered to this extension. |
 | `multiHarness.refreshSessions` | Refresh Sessions | Reload saved conversations for the selected agent and project. |
 | `multiHarness.selectSessionAgent` | Select Session Agent | Choose the agent whose saved conversations are shown. |
 | `multiHarness.toggleSessionLocationScope` | Switch Sessions: Current Location / All Locations | Toggle the project-folder filter while keeping the selected agent. |
-| `multiHarness.openDeepseek` | Open DeepSeek Harness | Open a DeepSeek Harness terminal. |
 | `multiHarness.openOpenCode` | Open OpenCode | Open an OpenCode terminal. |
 | `multiHarness.openClaudeCode` | Open Claude Code | Open a Claude Code terminal. |
 | `multiHarness.openCodex` | Open Codex | Open a Codex terminal. |
@@ -181,13 +179,12 @@ not an individual conversation file.
 | `multiHarness.ohMyPi.sessionDirectory` | `~/.omp/agent/sessions` |
 | `multiHarness.primeAgent.sessionDirectory` | `~/.prime/agent/sessions` |
 | `multiHarness.antigravity.sessionDirectory` | `~/.gemini/antigravity-cli` |
-| `multiHarness.deepseek.sessionDirectory` | `~/.dsh/sessions` |
 | `multiHarness.grokBuild.sessionDirectory` | `~/.grok/sessions` |
 
 These defaults use the extension host’s home directory. When no setting override
 is provided, discovery also honors `CODEX_HOME`, `CLAUDE_CONFIG_DIR`,
 `PI_CODING_AGENT_SESSION_DIR` / `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`,
-`PRIME_AGENT_SESSION_DIR` / `PRIME_AGENT_CODING_AGENT_DIR`, `DSH_HOME`,
+`PRIME_AGENT_SESSION_DIR` / `PRIME_AGENT_CODING_AGENT_DIR`,
 `GROK_HOME` (with a `sessions` subdirectory), and
 `XDG_DATA_HOME` (with an `opencode` subdirectory) for their respective agents.
 Prime also honors the legacy `PRIME_AGENT_CODING_AGENT_SESSION_DIR` when
@@ -215,7 +212,6 @@ groups. Terminal profile launches always use the active group.
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
-| `multiHarness.showDeepseekIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showOpenCodeIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showClaudeCodeIcon` | `boolean` | `false` | `window` |
 | `multiHarness.showCodexIcon` | `boolean` | `false` | `window` |
@@ -235,7 +231,6 @@ groups. Terminal profile launches always use the active group.
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
-| `multiHarness.deepseek.executablePath` | `string` | `"dsh"` | machine-overridable |
 | `multiHarness.openCode.executablePath` | `string` | `"opencode"` | machine-overridable |
 | `multiHarness.claudeCode.executablePath` | `string` | `"claude"` | machine-overridable |
 | `multiHarness.codex.executablePath` | `string` | `"codex"` | machine-overridable |
@@ -255,7 +250,6 @@ groups. Terminal profile launches always use the active group.
 
 | Setting | Type | Default | Scope |
 | --- | --- | --- | --- |
-| `multiHarness.deepseek.arguments` | `array` of `string` | `["--profile", "tui"]` | `resource` |
 | `multiHarness.openCode.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.claudeCode.arguments` | `array` of `string` | `[]` | `resource` |
 | `multiHarness.codex.arguments` | `array` of `string` | `[]` | `resource` |
@@ -452,7 +446,7 @@ MIT. See [LICENSE](LICENSE).
 Editor title-bar and terminal icons use the harnesses' application marks,
 including Claude Code's mascot, GitHub Copilot's robot, Gemini CLI's terminal
 mark, and Crush's pixel heart. Eleven use upstream website or application assets;
-Claude Code, Codex, GitHub Copilot and DeepSeek Harness use the corresponding LobeHub brand marks.
+Claude Code, Codex and GitHub Copilot use the corresponding LobeHub brand marks.
 Brand colors are preserved; monochrome foregrounds adapt to light/dark themes.
 Sources and licenses are recorded in
 [media/THIRD_PARTY_NOTICES.md](media/THIRD_PARTY_NOTICES.md).

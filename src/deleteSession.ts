@@ -2,9 +2,7 @@ import { createReadStream } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
-import * as zlib from "node:zlib";
-import { StringDecoder } from "node:string_decoder";
-import { scanZstdFrames, supportsSessionDeletion, type SavedSession, type SessionRoot } from "./savedSessions";
+import { supportsSessionDeletion, type SavedSession, type SessionRoot } from "./savedSessions";
 
 export class SessionDeletionError extends Error {
     constructor(readonly reason: "invalidFile" | "outsideStore" | "sharedFile" | "changedFile", message: string) {
@@ -12,21 +10,6 @@ export class SessionDeletionError extends Error {
     }
 }
 
-/** DeepSeek migrations leave older generations that would otherwise reappear. */
-export async function sessionDeletionFiles(session: SavedSession, roots: readonly SessionRoot[]): Promise<SavedSession[]> {
-    const files: SavedSession[] = [];
-    const generation = /^session(?:\.v[1-9]\d*)?\.jsonl(?:\.zstd)?$/;
-    if (session.harnessId === "deepseek" && generation.test(path.basename(session.file))) {
-        for (const entry of await fs.readdir(path.dirname(session.file), { withFileTypes: true })) {
-            const file = path.join(path.dirname(session.file), entry.name);
-            if (generation.test(entry.name) && file !== session.file) files.push({ ...session, file });
-        }
-    }
-    // Keep the listed generation until all its older records have been removed.
-    files.push(session);
-    for (const file of files) await validateSessionDeletion(file, roots);
-    return files;
-}
 
 /** Return the validated deletion path; Grok requires recursive directory deletion. */
 export async function sessionDeletionTarget(session: SavedSession, roots: readonly SessionRoot[]): Promise<string> {
@@ -152,8 +135,7 @@ export async function validateSessionDeletion(session: SavedSession, roots: read
         return;
     }
     const stat = await fs.lstat(session.file);
-    const isZstd = session.harnessId === "deepseek" && session.file.endsWith(".jsonl.zstd");
-    if (!stat.isFile() || stat.isSymbolicLink() || (!session.file.endsWith(".jsonl") && !isZstd)) {
+    if (!stat.isFile() || stat.isSymbolicLink() || !session.file.endsWith(".jsonl")) {
         throw new SessionDeletionError("invalidFile", "The session record is not a regular JSONL file.");
     }
     const file = await fs.realpath(session.file);
@@ -195,39 +177,15 @@ export async function validateSessionDeletion(session: SavedSession, roots: read
             identified = true;
         }
     };
-    if (isZstd) {
-        const buffer = await fs.readFile(file);
-        const scan = scanZstdFrames(buffer);
-        if (scan.error || scan.completePrefixLength !== buffer.length || scan.frames.length === 0) {
-            throw new SessionDeletionError("changedFile", "The session record changed; refresh the session list.");
+    const stream = createReadStream(file, { encoding: "utf8" });
+    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+    try {
+        for await (const line of lines) {
+            await inspectLine(line);
         }
-        const decoder = new StringDecoder("utf8");
-        let partial = "";
-        for (const frame of scan.frames) {
-            let chunk: Buffer;
-            try {
-                chunk = zlib.zstdDecompressSync(buffer.subarray(frame.start, frame.end));
-            } catch {
-                throw new SessionDeletionError("changedFile", "The session record changed; refresh the session list.");
-            }
-            const lines = (partial + decoder.write(chunk)).split("\n");
-            partial = lines.pop()!;
-            for (const line of lines) {
-                await inspectLine(line);
-            }
-        }
-        await inspectLine(partial + decoder.end());
-    } else {
-        const stream = createReadStream(file, { encoding: "utf8" });
-        const lines = createInterface({ input: stream, crlfDelay: Infinity });
-        try {
-            for await (const line of lines) {
-                await inspectLine(line);
-            }
-        } finally {
-            lines.close();
-            stream.destroy();
-        }
+    } finally {
+        lines.close();
+        stream.destroy();
     }
     if (!identified) {
         throw new SessionDeletionError("changedFile", "The session record changed; refresh the session list.");

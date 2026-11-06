@@ -1,8 +1,8 @@
 {
   "name": "multi-harness-terminal-editor",
   "displayName": "%displayName%",
-  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Grok Build, Goose, Prime Agent, Antigravity CLI, DeepSeek Harness) in native editor-area terminal tabs.",
-  "version": "1.2.2",
+  "description": "Open AI coding-agent CLIs (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Gemini CLI, Copilot CLI, Cursor Agent, Aider, Crush, Qwen Code, Grok Build, Goose, Prime Agent, Antigravity CLI) in native editor-area terminal tabs.",
+  "version": "1.2.3",
   "license": "MIT",
   "publisher": "yasir-erkam-ozdemir",
   "icon": "media/icon.png",
@@ -36,9 +36,6 @@
     "prime-agent",
     "antigravity",
     "agy",
-    "deepseek harness",
-    "deepseek",
-    "dsh",
     "grok build",
     "grok"
   ],
@@ -112,9 +109,7 @@
     "onCommand:multiHarness.deleteSession",
     "onCommand:multiHarness.deleteSelectedSessions",
     "onCommand:multiHarness.openAntigravity",
-    "onTerminalProfile:multiHarness.antigravity",
-    "onCommand:multiHarness.openDeepseek",
-    "onTerminalProfile:multiHarness.deepseek"
+    "onTerminalProfile:multiHarness.antigravity"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -196,15 +191,6 @@
         "title": "%command.openSettings.title%",
         "category": "%category%",
         "icon": "$(gear)"
-      },
-      {
-        "command": "multiHarness.openDeepseek",
-        "title": "%command.openDeepseek.title%",
-        "category": "%category%",
-        "icon": {
-          "light": "media/deepseek-light.svg",
-          "dark": "media/deepseek-dark.svg"
-        }
       },
       {
         "command": "multiHarness.openOpenCode",
@@ -545,83 +531,78 @@
       ],
       "editor/title": [
         {
-          "command": "multiHarness.openDeepseek",
-          "group": "navigation@101",
-          "when": "config.multiHarness.showDeepseekIcon"
-        },
-        {
           "command": "multiHarness.openOpenCode",
-          "group": "navigation@102",
+          "group": "navigation@101",
           "when": "config.multiHarness.showOpenCodeIcon"
         },
         {
           "command": "multiHarness.openClaudeCode",
-          "group": "navigation@103",
+          "group": "navigation@102",
           "when": "config.multiHarness.showClaudeCodeIcon"
         },
         {
           "command": "multiHarness.openCodex",
-          "group": "navigation@104",
+          "group": "navigation@103",
           "when": "config.multiHarness.showCodexIcon"
         },
         {
           "command": "multiHarness.openPi",
-          "group": "navigation@105",
+          "group": "navigation@104",
           "when": "config.multiHarness.showPiIcon"
         },
         {
           "command": "multiHarness.openGemini",
-          "group": "navigation@106",
+          "group": "navigation@105",
           "when": "config.multiHarness.showGeminiIcon"
         },
         {
           "command": "multiHarness.openGoose",
-          "group": "navigation@107",
+          "group": "navigation@106",
           "when": "config.multiHarness.showGooseIcon"
         },
         {
           "command": "multiHarness.openAider",
-          "group": "navigation@108",
+          "group": "navigation@107",
           "when": "config.multiHarness.showAiderIcon"
         },
         {
           "command": "multiHarness.openOhMyPi",
-          "group": "navigation@109",
+          "group": "navigation@108",
           "when": "config.multiHarness.showOhMyPiIcon"
         },
         {
           "command": "multiHarness.openCrush",
-          "group": "navigation@110",
+          "group": "navigation@109",
           "when": "config.multiHarness.showCrushIcon"
         },
         {
           "command": "multiHarness.openQwen",
-          "group": "navigation@111",
+          "group": "navigation@110",
           "when": "config.multiHarness.showQwenIcon"
         },
         {
           "command": "multiHarness.openGrokBuild",
-          "group": "navigation@112",
+          "group": "navigation@111",
           "when": "config.multiHarness.showGrokBuildIcon"
         },
         {
           "command": "multiHarness.openPrimeAgent",
-          "group": "navigation@113",
+          "group": "navigation@112",
           "when": "config.multiHarness.showPrimeAgentIcon"
         },
         {
           "command": "multiHarness.openCopilot",
-          "group": "navigation@114",
+          "group": "navigation@113",
           "when": "config.multiHarness.showCopilotIcon"
         },
         {
           "command": "multiHarness.openAntigravity",
-          "group": "navigation@115",
+          "group": "navigation@114",
           "when": "config.multiHarness.showAntigravityIcon"
         },
         {
           "command": "multiHarness.openCursorAgent",
-          "group": "navigation@116",
+          "group": "navigation@115",
           "when": "config.multiHarness.showCursorAgentIcon"
         }
       ]
@@ -629,12 +610,6 @@
     "configuration": {
       "title": "%configuration.title%",
       "properties": {
-        "multiHarness.showDeepseekIcon": {
-          "type": "boolean",
-          "default": false,
-          "description": "%showDeepseekIcon.description%",
-          "scope": "window"
-        },
         "multiHarness.showOpenCodeIcon": {
           "type": "boolean",
           "default": false,
@@ -707,12 +682,6 @@
           "description": "%showPrimeAgentIcon.description%",
           "scope": "window"
         },
-        "multiHarness.deepseek.executablePath": {
-          "type": "string",
-          "default": "dsh",
-          "description": "%deepseek.executablePath.description%",
-          "scope": "machine-overridable"
-        },
         "multiHarness.openCode.executablePath": {
           "type": "string",
           "default": "opencode",
@@ -784,18 +753,6 @@
           "default": "prime-agent",
           "description": "%primeAgent.executablePath.description%",
           "scope": "machine-overridable"
-        },
-        "multiHarness.deepseek.arguments": {
-          "type": "array",
-          "default": [
-            "--profile",
-            "tui"
-          ],
-          "items": {
-            "type": "string"
-          },
-          "description": "%deepseek.arguments.description%",
-          "scope": "resource"
         },
         "multiHarness.openCode.arguments": {
           "type": "array",
@@ -1053,20 +1010,10 @@
           },
           "description": "%cursorAgent.arguments.description%",
           "scope": "resource"
-        },
-        "multiHarness.deepseek.sessionDirectory": {
-          "type": "string",
-          "default": "",
-          "description": "%deepseek.sessionDirectory.description%",
-          "scope": "machine-overridable"
         }
       }
     },
     "terminal": [
-      {
-        "id": "multiHarness.deepseek",
-        "title": "%terminal.profile.deepseek.title%"
-      },
       {
         "id": "multiHarness.openCode",
         "title": "%terminal.profile.openCode.title%"
