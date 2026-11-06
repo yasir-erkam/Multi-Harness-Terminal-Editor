@@ -1412,12 +1412,34 @@ try {
         outfile: join(activationDir, "terminalExit.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent",
     });
     const terminalExit = requireFrom(join(activationDir, "terminalExit.cjs"));
-    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", "43.7.7", "C:\\Programs\\omp.exe"), true, "Windows desktop spawns executables without an Electron intermediary");
-    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", "43.7.7", "C:\\bin\\agent.ps1"), true, "PowerShell scripts start in a console-subsystem host");
-    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", "43.7.7", "C:\\bin\\agent.cmd"), false, "batch shims keep the launcher that can execute them");
-    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", undefined, "C:\\Programs\\omp.exe"), false, "non-Electron Windows hosts keep the exit launcher");
-    assert.equal(terminalExit.usesDirectWindowsTerminal("linux", "43.7.7", "/usr/bin/omp"), false, "non-Windows hosts keep the exit launcher");
-    console.log("ok: Windows desktop executable and PowerShell launches bypass the unattached Electron console");
+    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", "43.7.7"), true, "Windows desktop Electron hosts use direct console-subsystem terminals");
+    assert.equal(terminalExit.usesDirectWindowsTerminal("win32", undefined), false, "non-Electron Windows hosts keep the exit launcher");
+    assert.equal(terminalExit.usesDirectWindowsTerminal("linux", "43.7.7"), false, "non-Windows hosts keep the exit launcher");
+    const directEnv = { MULTI_HARNESS_TERMINAL_IDENTITY: '{"version":1}' };
+    const cmdOptions = terminalExit.windowsDirectTerminalOptions(
+        "C:\\Users\\x y\\AppData\\Roaming\\fnm\\node-versions\\v24.19.0\\installation\\dsh.cmd",
+        ["--profile", "tui"],
+        directEnv,
+        projectRoot,
+        "C:\\WINDOWS\\system32\\cmd.exe"
+    );
+    assert.equal(cmdOptions.shellPath, "C:\\WINDOWS\\system32\\cmd.exe", "batch shims run in the console-subsystem cmd.exe host");
+    assert.equal(typeof cmdOptions.shellArgs, "string", "Windows cmd.exe direct options pass a verbatim command line string");
+    assert.ok(cmdOptions.shellArgs.startsWith('/d /s /v:off /c "') && cmdOptions.shellArgs.endsWith('"'), "batch command lines are wrapped for cmd.exe /s /c");
+    assert.equal(cmdOptions.env, directEnv);
+    const batOptions = terminalExit.windowsDirectTerminalOptions("C:\\bin\\agent.BAT", ["--profile", "tui"], directEnv, projectRoot, undefined);
+    assert.equal(batOptions.shellPath, "cmd.exe", "batch direct options fall back to cmd.exe when ComSpec is unset");
+    assert.equal(typeof batOptions.shellArgs, "string");
+    assert.ok(batOptions.shellArgs.startsWith('/d /s /v:off /c "') && batOptions.shellArgs.endsWith('"'));
+    const exeOptions = terminalExit.windowsDirectTerminalOptions("C:\\Programs\\omp.exe", ["--profile", "tui"], directEnv, projectRoot, "C:\\WINDOWS\\system32\\cmd.exe");
+    assert.equal(exeOptions.shellPath, "C:\\Programs\\omp.exe");
+    assert.deepEqual(exeOptions.shellArgs, ["--profile", "tui"]);
+    assert.equal(exeOptions.env, directEnv);
+    const ps1Options = terminalExit.windowsDirectTerminalOptions("C:\\bin\\agent.ps1", ["--profile", "tui"], directEnv, projectRoot, "C:\\WINDOWS\\system32\\cmd.exe");
+    assert.equal(ps1Options.shellPath, "powershell.exe");
+    assert.deepEqual(ps1Options.shellArgs, ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\bin\\agent.ps1", "--profile", "tui"]);
+    assert.equal(ps1Options.env, directEnv);
+    console.log("ok: Windows desktop executable, PowerShell and batch launches bypass the unattached Electron console");
 
     const savedState = new Map();
     const globalState = {

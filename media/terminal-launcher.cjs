@@ -5,6 +5,7 @@
 const { spawn, spawnSync } = require("node:child_process");
 const os = require("node:os");
 const { writeFileSync } = require("node:fs");
+const { buildWindowsBatchCommand } = require("./windows-cmd.cjs");
 
 const args = process.argv.slice(2);
 const mode = ["success", "never", "always"].includes(args[0]) ? args.shift() : "success";
@@ -145,20 +146,9 @@ process.on("SIGINT", () => {
     // too. Forwarding here would deliver it twice to an interactive child.
 });
 
-// cmd.exe has its own command-line parser, distinct from Windows argv parsing.
-// Escape both layers (and one extra layer for npm's %* forwarding shims).
-function cmdArgument(value, doubleEscape) {
-    let escaped = String(value).replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, "$1$1");
-    escaped = `"${escaped}"`.replace(/([()\][%!^"`<>&|;, *?])/g, "^$1");
-    return doubleEscape ? escaped.replace(/([()\][%!^"`<>&|;, *?])/g, "^$1") : escaped;
-}
-
 function launch() {
     if (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(executable)) {
-        const doubleEscape = /[\\/]node_modules[\\/]\.bin[\\/]/i.test(executable);
-        const command = executable.replace(/([()\][%!^"`<>&|;, *?])/g, "^$1");
-        const line = [command, ...args.map((arg) => cmdArgument(arg, doubleEscape))].join(" ");
-        return spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/v:off", "/c", `"${line}"`], {
+        return spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/v:off", "/c", `"${buildWindowsBatchCommand(executable, args)}"`], {
             env, stdio: "inherit", shell: false, windowsVerbatimArguments: true,
         });
     }

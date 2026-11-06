@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Start Windows desktop `.cmd` and `.bat` agents through console-subsystem `cmd.exe` instead of the Electron launcher, including terminal profiles and saved-session resumes. As with other Windows desktop direct terminals, exit output is not retained and `multiHarness.autoCloseOnExit` does not apply.
+
 ## 1.2.2
 
 - Fix Windows desktop direct launches by bypassing the Electron exit-retention launcher for `.exe` agents and running `.ps1` agents through `powershell.exe`; `.cmd`/`.bat` shims keep the launcher, which the editor needs to execute them. Electron is a GUI-subsystem process and is never attached to the ConPTY console, so routing an interactive CLI through it left stdin without a terminal and agents such as Oh My Pi exited instead of opening their UI. Windows direct tabs are disposed by VS Code on process exit, so `multiHarness.autoCloseOnExit` no longer applies there and failure output is not retained; the exit notification still reports the code. Shell mode and non-Windows hosts keep exit retention.

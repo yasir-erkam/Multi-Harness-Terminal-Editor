@@ -67,15 +67,47 @@ export async function cleanupTerminalExit(terminal: vscode.Terminal): Promise<vo
 
 /**
  * Electron is a GUI-subsystem process and is not attached to the pseudo
- * console, so it cannot hand a console stdin handle to an agent CLI. Batch
- * shims still need the Electron launcher because VS Code cannot execute them.
+ * console, so it cannot hand a console stdin handle to an agent CLI.
  */
 export function usesDirectWindowsTerminal(
     platform: NodeJS.Platform = process.platform,
-    electronVersion: string | undefined = process.versions.electron,
-    executable = ""
+    electronVersion: string | undefined = process.versions.electron
 ): boolean {
-    return platform === "win32" && Boolean(electronVersion) && !/\.(?:cmd|bat)$/i.test(executable);
+    return platform === "win32" && Boolean(electronVersion);
+}
+
+export function windowsDirectTerminalOptions(
+    executable: string,
+    args: readonly string[] | undefined,
+    env: Record<string, string>,
+    extensionPath: string,
+    comSpec: string | undefined
+): Pick<vscode.TerminalOptions, "shellPath" | "shellArgs" | "env"> {
+    if (/\.ps1$/i.test(executable)) {
+        return {
+            shellPath: "powershell.exe",
+            shellArgs: [
+                "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                executable, ...(args ?? []),
+            ],
+            env,
+        };
+    }
+    if (/\.(?:cmd|bat)$/i.test(executable)) {
+        const { buildWindowsBatchCommand } = require(path.join(extensionPath, "media", "windows-cmd.cjs")) as {
+            buildWindowsBatchCommand(executable: string, args: readonly string[]): string;
+        };
+        return {
+            shellPath: comSpec || "cmd.exe",
+            shellArgs: `/d /s /v:off /c "${buildWindowsBatchCommand(executable, args ?? [])}"`,
+            env,
+        };
+    }
+    return {
+        shellPath: executable,
+        shellArgs: args ? [...args] : undefined,
+        env,
+    };
 }
 
 /** Keep a real inherited terminal; the launcher only owns exit retention. */
@@ -85,22 +117,8 @@ export function terminalExitOptions(
     args: readonly string[] | undefined,
     env: Record<string, string>
 ): Pick<vscode.TerminalOptions, "shellPath" | "shellArgs" | "env"> {
-    if (usesDirectWindowsTerminal(process.platform, process.versions.electron, executable)) {
-        if (/\.ps1$/i.test(executable)) {
-            return {
-                shellPath: "powershell.exe",
-                shellArgs: [
-                    "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                    executable, ...(args ?? []),
-                ],
-                env,
-            };
-        }
-        return {
-            shellPath: executable,
-            shellArgs: args ? [...args] : undefined,
-            env,
-        };
+    if (usesDirectWindowsTerminal(process.platform, process.versions.electron)) {
+        return windowsDirectTerminalOptions(executable, args, env, context.extensionUri.fsPath, process.env.ComSpec);
     }
     const configured = vscode.workspace.getConfiguration("multiHarness").get<string>("autoCloseOnExit", "success");
     const mode = configured === "never" || configured === "always" ? configured : "success";

@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const launcher = fileURLToPath(new URL("../media/terminal-launcher.cjs", import.meta.url));
+const require = createRequire(import.meta.url);
+const { buildWindowsBatchCommand } = require("../media/windows-cmd.cjs");
 const prompt = "Press any key to close this terminal.";
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
 const sessions = new Set();
@@ -135,6 +138,12 @@ try {
                 const session = start(["always", batch, ...windowsArgs]);
                 assert.equal((await session.done).code, 0, session.output);
                 assert.deepEqual(JSON.parse(session.output), windowsArgs, "batch launchers preserve literal spaces and shell metacharacters");
+                const line = buildWindowsBatchCommand(batch, windowsArgs);
+                const direct = spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/v:off", "/c", `"${line}"`], {
+                    encoding: "utf8", shell: false, windowsVerbatimArguments: true,
+                });
+                assert.equal(direct.status, 0, direct.stderr || direct.stdout);
+                assert.deepEqual(JSON.parse(direct.stdout), windowsArgs, "direct cmd.exe batch command lines preserve literal arguments");
             }
             const powershell = join(directory, "agent.ps1");
             writeFileSync(powershell, `& '${process.execPath.replaceAll("'", "''")}' '${output.replaceAll("'", "''")}' @args\r\nexit $LASTEXITCODE\r\n`);
