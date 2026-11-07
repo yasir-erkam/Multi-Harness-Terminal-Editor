@@ -1764,11 +1764,16 @@ try {
 
     const sessionsView = vscodeStub.__calls.views.find((view) => view.id === "multiHarness.sessions");
     assert.deepEqual(sessionsView.provider.getChildren(), []);
-    let sessionRefreshes = 0;
-    sessionsView.provider.onDidChangeTreeData(() => { sessionRefreshes += 1; });
     const firstPrime = { name: "Prime Agent", shown: 0, disposed: 0, show() { this.shown += 1; }, dispose() { this.disposed += 1; } };
     const secondPrime = { name: "Prime Agent", shown: 0, disposed: 0, creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "primeAgent", launchMode: "direct" }) } }, show() { this.shown += 1; }, dispose() { this.disposed += 1; } };
     vscodeStub.window.terminals = [firstPrime, { name: "bash" }, secondPrime];
+    if (process.platform === "linux") {
+        assert.deepEqual(sessionsView.provider.getChildren().map((session) => session.terminal), [secondPrime], "legacy title waits for Linux identity discovery");
+    }
+    vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(firstPrime));
+    await new Promise((resolve) => setImmediate(resolve));
+    let sessionRefreshes = 0;
+    sessionsView.provider.onDidChangeTreeData(() => { sessionRefreshes += 1; });
     vscodeStub.__calls.terminalOpenHandlers.forEach((handler) => handler(secondPrime));
     const openSessions = sessionsView.provider.getChildren();
     assert.equal(openSessions.length, 2, "ordinary shell terminals are excluded");
