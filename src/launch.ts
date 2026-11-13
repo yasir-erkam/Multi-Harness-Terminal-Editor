@@ -280,6 +280,8 @@ async function launchAgentTerminal(
         const exited = await Promise.all(terminals.map((terminal) => terminalHasExited(terminal)));
         const activeFiles = harness.id === "ohMyPi" && resume.sessionsRoot && resume.sessionFile
             ? await Promise.all(terminals.map((terminal) => ompTerminalSessionFile(terminal, resume.sessionsRoot!))) : [];
+        const ompSessionFile = harness.id === "ohMyPi" && resume.sessionFile
+            ? await fs.realpath(resume.sessionFile).catch(() => undefined) : undefined;
         const codexSessionFile = harness.id === "codex" && resume.sessionFile
             ? await fs.realpath(resume.sessionFile).catch(() => path.resolve(resume.sessionFile!)) : undefined;
         const codexFiles = harness.id === "codex" && resume.sessionsRoot && codexSessionFile
@@ -297,8 +299,8 @@ async function launchAgentTerminal(
                 return identity?.harnessId === harness.id && grokIds[index] !== undefined && grokIds[index] === resume.sessionId;
             }
             if (harness.id === "ohMyPi") {
-                return identity?.harnessId === harness.id && Boolean(activeFiles[index] && resume.sessionFile)
-                    && path.relative(activeFiles[index]!, resume.sessionFile!) === "";
+                return identity?.harnessId === harness.id && Boolean(activeFiles[index] && ompSessionFile)
+                    && path.relative(activeFiles[index]!, ompSessionFile!) === "";
             }
             if (harness.id === "codex") {
                 if (identity?.harnessId !== harness.id || !codexSessionFile) return false;

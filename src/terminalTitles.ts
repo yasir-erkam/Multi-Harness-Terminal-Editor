@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -31,8 +32,9 @@ export function registerTerminalTitles(context: vscode.ExtensionContext, onDidRe
             const sessionId = grokId === undefined ? identity.sessionId : grokId;
             if (!file && !sessionId) return;
             const scan = await scanSavedSessions([root], Number.MAX_SAFE_INTEGER);
-            const session = scan.sessions.find((candidate) => file
-                ? path.relative(candidate.file, file) === ""
+            const files = file ? await Promise.all(scan.sessions.map((candidate) => realpath(candidate.file).catch(() => undefined))) : [];
+            const session = scan.sessions.find((candidate, index) => file
+                ? files[index] !== undefined && path.relative(files[index]!, file) === ""
                 : candidate.id === sessionId);
             if (!session || !session.title || session.title === session.id) return;
             const title = `${harness.defaultExecutable} - ${session.title}`;

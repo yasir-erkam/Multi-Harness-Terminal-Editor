@@ -147,7 +147,7 @@ export async function ompTerminalSessionFile(terminal: vscode.Terminal, sessions
         // PTY numbers are reused; an old process's breadcrumb is not live identity.
         if (process.platform === "linux" && startedAt !== undefined && metadata.mtimeMs < startedAt) return undefined;
         const file = breadcrumb.split("\n")[1]?.trim();
-        return file && path.isAbsolute(file) ? file : undefined;
+        return file && path.isAbsolute(file) ? await realpath(file) : undefined;
     } catch { return undefined; }
 }
 

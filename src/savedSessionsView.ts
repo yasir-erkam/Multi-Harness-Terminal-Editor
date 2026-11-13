@@ -173,19 +173,19 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         const codexFiles = codexRoot ? await Promise.all(terminals.map((terminal) => codexTerminalSessionFiles(terminal, codexRoot.directory))) : [];
         const grokRoot = session.harnessId === "grokBuild" ? sessionRoot(session) : undefined;
         const grokIds = grokRoot ? await Promise.all(terminals.map((terminal) => grokTerminalSessionId(terminal, grokRoot.directory))) : [];
-        const sessionFile = codexRoot ? await fs.realpath(session.file) : session.file;
-        const windowsMatches = codexRoot ? await windowsCodexSessionMatches(terminals, sessionFile) : new Map<vscode.Terminal, boolean>();
+        const sessionFile = codexRoot ? await fs.realpath(session.file) : root ? await fs.realpath(session.file).catch(() => undefined) : session.file;
+        const windowsMatches = codexRoot ? await windowsCodexSessionMatches(terminals, sessionFile!) : new Map<vscode.Terminal, boolean>();
         return terminals.filter((_terminal, index) => {
             if (exited[index] || _terminal.exitStatus) return false;
             const identity = identities[index];
             if (identity?.harnessId !== session.harnessId) return false;
             if (session.harnessId === "ohMyPi") {
                 const activeFile = activeFiles[index];
-                return activeFile !== undefined && path.relative(activeFile, session.file) === "";
+                return activeFile !== undefined && sessionFile !== undefined && path.relative(activeFile, sessionFile) === "";
             }
             if (session.harnessId === "codex") {
                 const windowsMatch = windowsMatches.get(_terminal);
-                return windowsMatch ?? (codexFiles[index]?.some((file) => path.relative(file, sessionFile) === "") ?? false);
+                return windowsMatch ?? (codexFiles[index]?.some((file) => path.relative(file, sessionFile!) === "") ?? false);
             }
             if (session.harnessId === "grokBuild") {
                 return grokIds[index] !== undefined && grokIds[index] !== null && expectedIds.has(grokIds[index]!);

@@ -1626,6 +1626,7 @@ try {
             const previousSettings = vscodeStub.__fixture.multiHarness[harnessId];
             vscodeStub.__fixture.multiHarness[harnessId] = { executablePath: fakeCli, arguments: [] };
             const resume = { sessionId: "takeover-session", sessionFile: join(activationDir, "takeover.jsonl"), sessionsRoot: join(activationDir, "sessions"), terminalName: `${harness.displayName} takeover`, cwd: activationDir, args: ["--resume", "takeover-session"] };
+            writeFileSync(resume.sessionFile, "fixture");
             const owner = { pid: 424242, startTime: "12345", ...(harnessId === "grokBuild" ? { sessionId: resume.sessionId } : {}) };
             try {
                 for (const scenario of ["approve", "cancel", "signal-failed", "lingering", "identity-changed", "owners-changed", "local", ...(harnessId === "grokBuild" ? ["shared"] : [])]) {
@@ -1713,6 +1714,7 @@ try {
         vscodeStub.__fixture.multiHarness[harnessId] = { executablePath: fakeCli, arguments: [] };
         vscodeStub.__calls.takeover = { owners: () => [], inputs: [] };
         const request = { sessionId: "old", sessionFile: join(activationDir, "old.jsonl"), sessionsRoot: join(activationDir, "sessions"), terminalName: "Old", cwd: activationDir, args: ["--resume", "old"] };
+        writeFileSync(request.sessionFile, "fixture");
         try {
             for (const discovery of ["switched", "missing", "matching", ...(harnessId === "codex" ? ["windows-match", "windows-mismatch"] : [])]) {
                 const terminal = { name: "Old", identity: { harnessId, sessionId: discovery === "matching" || discovery === "windows-match" ? "initially-different" : "old" }, shown: 0, show() { this.shown++; } };
@@ -2839,6 +2841,57 @@ try {
         disposed: 0,
         dispose() { this.disposed += 1; },
     });
+    {
+        const files = ["context-terminal-a", "context-terminal-b"].map((id) => join(primeSessions, `${id}.jsonl`));
+        for (const [index, file] of files.entries()) writeSession(file, `context-terminal-${"ab"[index]}`, "Same title");
+        refreshSaved.handler();
+        const rows = await Promise.all([getRow("context-terminal-a"), getRow("context-terminal-b")]);
+        const first = deletionTerminal(rows[0].id);
+        const firstShell = deletionTerminal(rows[0].id, "primeAgent", "shell");
+        const second = deletionTerminal(rows[1].id, "primeAgent", "shell");
+        const unrelated = deletionTerminal("other");
+        const otherAgent = deletionTerminal(rows[0].id, "codex");
+        const unknown = deletionTerminal(undefined);
+        const retained = deletionTerminal(rows[0].id);
+        const marker = join(dirname(resumed.options.env.MULTI_HARNESS_LAUNCHER_EXIT_FILE), `${randomUUID()}.json`);
+        retained.creationOptions.env.MULTI_HARNESS_LAUNCHER_EXIT_FILE = marker;
+        writeFileSync(marker, JSON.stringify({ code: 1 }));
+        const priorActive = vscodeStub.window.activeTerminal;
+        let closes = 0;
+        for (const terminal of [first, firstShell, second]) terminal.dispose = function () {
+            this.disposed++;
+            this.exitStatus = { code: 0 };
+            vscodeStub.window.terminals = vscodeStub.window.terminals.filter((candidate) => candidate !== this);
+            if (vscodeStub.window.activeTerminal === this) {
+                vscodeStub.window.activeTerminal = vscodeStub.window.terminals.find((candidate) => candidate === second);
+                for (const handler of [...vscodeStub.__calls.activeTerminalHandlers]) handler(vscodeStub.window.activeTerminal);
+            }
+            for (const handler of [...vscodeStub.__calls.terminalCloseHandlers]) handler(this);
+            closes++;
+        };
+        try {
+            vscodeStub.window.activeTerminal = first;
+            vscodeStub.window.terminals = [first, firstShell, second, unrelated, otherAgent, unknown, retained];
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await command("deleteContextSessions")(rows[1], rows);
+            assert.ok(files.every((file) => !existsSync(file)), "context menu deletes both real selected records");
+            assert.equal(first.disposed, 1, "first selected conversation closes its direct terminal");
+            assert.equal(firstShell.disposed, 1, "first selected conversation closes its matching shell terminal");
+            assert.equal(second.disposed, 1, "close/active events and refresh do not skip the second verified terminal");
+            assert.equal(closes, 3);
+            assert.equal(unrelated.disposed, 0, "unrelated conversation remains open");
+            assert.equal(otherAgent.disposed, 0, "same session ID in another harness remains open");
+            assert.equal(unknown.disposed, 0, "unverifiable identity remains open");
+            assert.equal(retained.disposed, 0, "retained output remains open");
+            assert.ok(existsSync(marker), "retained exit marker is preserved");
+        } finally {
+            rmSync(marker, { force: true });
+            for (const file of files) rmSync(file, { force: true });
+            vscodeStub.window.activeTerminal = priorActive;
+            vscodeStub.window.terminals = [];
+            refreshSaved.handler();
+        }
+    }
     const secondTerminal = deletionTerminal("second");
     vscodeStub.window.terminals = [secondTerminal];
     const deletesBeforeCancel = vscodeStub.__calls.fsDeletes.length;
@@ -4031,13 +4084,21 @@ try {
     const switchedFile = join(ompRoot, "switched.jsonl");
     writeSession(freshFile, "fresh-omp");
     writeSession(switchedFile, "switched-omp");
+    const freshAlias = join(dirname(ompRoot), "fresh-alias.jsonl");
+    symlinkSync(freshFile, freshAlias, "file");
     const freshOmp = deletionTerminal(undefined, "ohMyPi");
     const switchedOmp = deletionTerminal("fresh-omp", "ohMyPi", "shell");
     freshOmp.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY = JSON.stringify({ version: 1, harnessId: "ohMyPi", launchMode: "direct", terminalSessionId: "fresh-tab" });
     switchedOmp.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY = JSON.stringify({ version: 1, harnessId: "ohMyPi", launchMode: "shell", sessionId: "fresh-omp", terminalSessionId: "switched-tab" });
-    writeFileSync(join(crumbs, "apple-fresh-tab"), `${projectDirectory}\n${freshFile}\nfresh\n`);
+    const retainedOmp = deletionTerminal(undefined, "ohMyPi");
+    retainedOmp.creationOptions.env.MULTI_HARNESS_TERMINAL_IDENTITY = JSON.stringify({ version: 1, harnessId: "ohMyPi", launchMode: "direct", terminalSessionId: "retained-tab" });
+    const retainedMarker = join(dirname(resumed.options.env.MULTI_HARNESS_LAUNCHER_EXIT_FILE), `${randomUUID()}.json`);
+    retainedOmp.creationOptions.env.MULTI_HARNESS_LAUNCHER_EXIT_FILE = retainedMarker;
+    writeFileSync(retainedMarker, JSON.stringify({ code: 1 }));
+    writeFileSync(join(crumbs, "apple-retained-tab"), `${projectDirectory}\n${freshAlias}\n`);
+    writeFileSync(join(crumbs, "apple-fresh-tab"), `${projectDirectory}\n${freshAlias}\nfresh\n`);
     writeFileSync(join(crumbs, "apple-switched-tab"), `${projectDirectory}\n${switchedFile}\n`);
-    vscodeStub.window.terminals = [freshOmp, switchedOmp];
+    vscodeStub.window.terminals = [retainedOmp, freshOmp, switchedOmp];
     await windowsCommand("selectSessionAgent")("ohMyPi");
     freshOmp.shown = switchedOmp.shown = 0;
     freshOmp.show = function () { this.shown++; };
@@ -4053,6 +4114,8 @@ try {
     await windowsCommand("deleteSession")({ harnessId: "ohMyPi", id: "fresh-omp" });
     assert.equal(freshOmp.disposed, 1, "deleting a fresh OMP session closes its renamed terminal without a launch session ID");
     assert.equal(switchedOmp.disposed, 0, "an OMP terminal switched to another session stays open despite its old launch ID");
+    assert.equal(retainedOmp.disposed, 0, "retained output remains open even when its breadcrumb matches");
+    rmSync(retainedMarker, { force: true });
     vscodeStub.__calls.warningResults.push("Move to Trash");
     await windowsCommand("deleteSession")({ harnessId: "ohMyPi", id: "switched-omp" });
     assert.equal(switchedOmp.disposed, 1, "deletion follows the currently active OMP session after an in-process switch");
@@ -4234,6 +4297,8 @@ try {
     const macEnv = macIdentity.terminalIdentityEnv(agents.find((agent) => agent.id === "ohMyPi"), "direct");
     assert.ok(macEnv.TERM_SESSION_ID, "macOS OMP terminals receive a durable breadcrumb ID");
     const macTerminal = { creationOptions: { env: macEnv } };
+    writeSession(freshFile, "fresh-omp");
+    writeSession(switchedFile, "switched-omp");
     writeFileSync(join(crumbs, `apple-${macEnv.TERM_SESSION_ID}`), `${projectDirectory}\n${freshFile}\n`);
     assert.equal(await macIdentity.ompTerminalSessionFile(macTerminal, ompRoot), freshFile);
     passed += 1;
