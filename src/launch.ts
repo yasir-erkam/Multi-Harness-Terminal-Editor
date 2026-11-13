@@ -1,3 +1,4 @@
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -7,7 +8,7 @@ import { hasShellIntegrationApi, type AgentStatus } from "./status";
 import { workspaceFolder } from "./workspaceContext";
 import { extensionStrings } from "./localization";
 import { showEditorTerminal } from "./editorTerminal";
-import { grokTerminalSessionId, ompTerminalSessionFile, restoreTerminalIdentity, terminalIdentityEnv } from "./terminalIdentity";
+import { codexTerminalSessionFiles, grokTerminalSessionId, ompTerminalSessionFile, restoreTerminalIdentity, terminalIdentityEnv, windowsCodexSessionMatches } from "./terminalIdentity";
 import { codexLaunchArgs } from "./codexLaunch";
 import { ompSessionOwners } from "./ompSessionOwner";
 import { grokOwners } from "./grokSessions";
@@ -64,9 +65,18 @@ export function resolveAgentLaunch(context: vscode.ExtensionContext, harness: Ha
     };
 }
 
-async function offerOpenSettings(displayName: string, configuredPath: string, harness: Harness): Promise<void> {
-    const message = `Multi-Harness: could not find an executable for ${displayName} ('${configuredPath}'). Install the CLI or set ${fullSettingKey(harness, "executablePath")}.`;
-    const openSettings = "Open Settings";
+async function offerOpenSettings(
+    context: vscode.ExtensionContext,
+    displayName: string,
+    configuredPath: string,
+    harness: Harness
+): Promise<void> {
+    const strings = extensionStrings(context);
+    const message = strings["terminal.missingExecutable"]
+        .replace("{displayName}", displayName)
+        .replace("{configuredPath}", configuredPath)
+        .replace("{settingKey}", fullSettingKey(harness, "executablePath"));
+    const openSettings = strings["terminal.openSettings"];
     const picked = await vscode.window.showErrorMessage(message, openSettings);
     if (picked === openSettings) {
         await vscode.commands.executeCommand(
@@ -101,6 +111,9 @@ function waitForShellIntegration(
     if (terminal.shellIntegration) {
         return Promise.resolve(terminal.shellIntegration);
     }
+    if (terminal.exitStatus) {
+        return Promise.resolve(undefined);
+    }
     const subscribe = vscode.window.onDidChangeTerminalShellIntegration;
     if (typeof subscribe !== "function") {
         return Promise.resolve(undefined);
@@ -116,21 +129,40 @@ function waitForShellIntegration(
         resolve = resolveFn;
     });
     let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    let integrationSubscription: vscode.Disposable | undefined;
+    let closeSubscription: vscode.Disposable | undefined;
     const finish = (integration: vscode.TerminalShellIntegration | undefined): void => {
         if (settled) {
             return;
         }
         settled = true;
         clearTimeout(timer);
-        subscription.dispose();
+        integrationSubscription?.dispose();
+        closeSubscription?.dispose();
         resolve(integration);
     };
-    const subscription = subscribe((event) => {
+    integrationSubscription = subscribe((event) => {
         if (event.terminal === terminal) {
             finish(event.shellIntegration);
         }
     });
-    const timer = setTimeout(() => finish(undefined), timeoutMs);
+    if (settled) {
+        integrationSubscription.dispose();
+        return promise;
+    }
+    if (typeof vscode.window.onDidCloseTerminal === "function") {
+        closeSubscription = vscode.window.onDidCloseTerminal((closedTerminal) => {
+            if (closedTerminal === terminal) {
+                finish(undefined);
+            }
+        });
+    }
+    if (settled) {
+        closeSubscription?.dispose();
+        return promise;
+    }
+    timer = setTimeout(() => finish(undefined), timeoutMs);
     return promise;
 }
 
@@ -148,6 +180,7 @@ function launchEnvironment(harness: Harness, mode: LaunchMode, projectPath: stri
 }
 
 async function openShellMode(
+    context: vscode.ExtensionContext,
     harness: Harness,
     launch: AgentLaunch,
     executable: string,
@@ -164,20 +197,40 @@ async function openShellMode(
         env: launchEnvironment(harness, "shell", launch.cwd, resume),
         iconPath: launch.iconPath,
     });
-    status?.track(terminal, harness);
-    await showEditorTerminal(terminal);
+    let closed = Boolean(terminal.exitStatus);
+    const closeSubscription = typeof vscode.window.onDidCloseTerminal === "function"
+        ? vscode.window.onDidCloseTerminal((closedTerminal) => {
+            if (closedTerminal === terminal) {
+                closed = true;
+            }
+        })
+        : undefined;
+    try {
+        status?.track(terminal, harness);
+        await showEditorTerminal(terminal);
+        if (closed || terminal.exitStatus) {
+            return;
+        }
 
-    const integration = await waitForShellIntegration(terminal, SHELL_INTEGRATION_TIMEOUT_MS);
-    if (integration) {
-        integration.executeCommand(executable, launch.args ?? []);
-        return;
+        const integration = await waitForShellIntegration(terminal, SHELL_INTEGRATION_TIMEOUT_MS);
+        if (closed || terminal.exitStatus) {
+            return;
+        }
+        if (integration) {
+            integration.executeCommand(executable, launch.args ?? []);
+            return;
+        }
+
+        terminal.sendText(fallbackCommandLine(executable, launch.args));
+        const strings = extensionStrings(context);
+        void vscode.window.showInformationMessage(
+            strings["terminal.shellFallback"]
+                .replace("{seconds}", String(SHELL_INTEGRATION_TIMEOUT_MS / 1000))
+                .replace("{displayName}", harness.displayName)
+        );
+    } finally {
+        closeSubscription?.dispose();
     }
-
-    terminal.sendText(fallbackCommandLine(executable, launch.args));
-    void vscode.window.showInformationMessage(
-        `Multi-Harness: status tracking is unavailable in this terminal (shell integration did not activate within ${SHELL_INTEGRATION_TIMEOUT_MS / 1000}s). ` +
-            `${harness.displayName} was started with a quoted command line instead.`
-    );
 }
 
 const pendingResumes = new Map<string, Promise<void>>();
@@ -189,7 +242,7 @@ export async function openAgentTerminal(
     status?: AgentStatus,
     resume?: ResumeLaunch
 ): Promise<void> {
-    const resumeKey = resume ? JSON.stringify([harness.id, resume.sessionId ?? resume.sessionFile ?? resume.terminalName]) : undefined;
+    const resumeKey = resume ? JSON.stringify([harness.id, resume.sessionsRoot ?? null, resume.sessionFile ?? null, resume.sessionId ?? resume.terminalName]) : undefined;
     if (resumeKey) {
         const pending = pendingResumes.get(resumeKey);
         if (pending) {
@@ -225,8 +278,14 @@ async function launchAgentTerminal(
         const terminals = [...vscode.window.terminals];
         const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
         const exited = await Promise.all(terminals.map((terminal) => terminalHasExited(terminal)));
-        const activeFiles = harness.id === "ohMyPi" && resume.sessionsRoot
+        const activeFiles = harness.id === "ohMyPi" && resume.sessionsRoot && resume.sessionFile
             ? await Promise.all(terminals.map((terminal) => ompTerminalSessionFile(terminal, resume.sessionsRoot!))) : [];
+        const codexSessionFile = harness.id === "codex" && resume.sessionFile
+            ? await fs.realpath(resume.sessionFile).catch(() => path.resolve(resume.sessionFile!)) : undefined;
+        const codexFiles = harness.id === "codex" && resume.sessionsRoot && codexSessionFile
+            ? await Promise.all(terminals.map((terminal) => codexTerminalSessionFiles(terminal, resume.sessionsRoot!))) : [];
+        const windowsMatches = harness.id === "codex" && codexSessionFile
+            ? await windowsCodexSessionMatches(terminals, codexSessionFile) : new Map<vscode.Terminal, boolean>();
         const grokIds = harness.id === "grokBuild" && resume.sessionsRoot
             ? await Promise.all(terminals.map((terminal) => grokTerminalSessionId(terminal, resume.sessionsRoot!))) : [];
         const existing = terminals.find((terminal, index) => {
@@ -234,11 +293,18 @@ async function launchAgentTerminal(
                 return false;
             }
             const identity = identities[index];
-            if (grokIds[index] !== undefined) {
-                return identity?.harnessId === harness.id && grokIds[index] === resume.sessionId;
+            if (harness.id === "grokBuild") {
+                return identity?.harnessId === harness.id && grokIds[index] !== undefined && grokIds[index] === resume.sessionId;
             }
-            if (activeFiles[index] && resume.sessionFile) {
-                return identity?.harnessId === harness.id && path.relative(activeFiles[index]!, resume.sessionFile) === "";
+            if (harness.id === "ohMyPi") {
+                return identity?.harnessId === harness.id && Boolean(activeFiles[index] && resume.sessionFile)
+                    && path.relative(activeFiles[index]!, resume.sessionFile!) === "";
+            }
+            if (harness.id === "codex") {
+                if (identity?.harnessId !== harness.id || !codexSessionFile) return false;
+                const windowsMatch = windowsMatches.get(terminal);
+                if (windowsMatch !== undefined) return windowsMatch;
+                return codexFiles[index]?.some((file) => path.relative(file, codexSessionFile) === "") ?? false;
             }
             return resume.sessionId
                 ? identity?.harnessId === harness.id && identity.sessionId === resume.sessionId
@@ -286,7 +352,7 @@ async function launchAgentTerminal(
     }
     const executable = resolveExecutable(launch.executable, { rootFolder: launch.cwd });
     if (!executable) {
-        await offerOpenSettings(launch.name, launch.executable, harness);
+        await offerOpenSettings(context, launch.name, launch.executable, harness);
         return;
     }
     if (harness.id === "codex") {
@@ -300,7 +366,7 @@ async function launchAgentTerminal(
     // Shell mode needs the 1.93 shell-integration API; without it, falling back
     // to a direct-mode terminal keeps the CLI usable on older VS Code.
     if (launch.launchMode === "shell" && hasShellIntegrationApi()) {
-        await openShellMode(harness, launch, executable, status, resume);
+        await openShellMode(context, harness, launch, executable, status, resume);
         return;
     }
 

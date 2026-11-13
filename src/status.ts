@@ -35,11 +35,11 @@ export function hasShellIntegrationApi(): boolean {
  */
 export class AgentStatus implements vscode.Disposable {
     private readonly tracked = new WeakMap<vscode.Terminal, Harness>();
-    private readonly startTimes = new WeakMap<vscode.TerminalShellExecution, number>();
+    private readonly activeExecutions = new Map<vscode.TerminalShellExecution, { terminal: vscode.Terminal; harness: Harness; startedAt: number }>();
     private readonly subscriptions: vscode.Disposable[] = [];
     private item: vscode.StatusBarItem | undefined;
     private hideTimer: NodeJS.Timeout | undefined;
-    private current: Harness | undefined;
+    private lastFinished: { terminal: vscode.Terminal; text: string } | undefined;
 
     /** Remember a shell-mode terminal and enable the status surface lazily. */
     track(terminal: vscode.Terminal, harness: Harness): void {
@@ -64,11 +64,9 @@ export class AgentStatus implements vscode.Disposable {
         if (!harness || !this.item) {
             return;
         }
-        this.startTimes.set(event.execution, Date.now());
-        this.current = harness;
-        this.clearHideTimer();
-        this.item.text = `$(sync~spin) ${harness.displayName}`;
-        this.item.show();
+        this.activeExecutions.delete(event.execution);
+        this.activeExecutions.set(event.execution, { terminal: event.terminal, harness, startedAt: Date.now() });
+        this.render();
     }
 
     private onEnd(event: vscode.TerminalShellExecutionEndEvent): void {
@@ -76,18 +74,40 @@ export class AgentStatus implements vscode.Disposable {
         if (!harness || !this.item) {
             return;
         }
-        const startedAt = this.startTimes.get(event.execution);
-        this.startTimes.delete(event.execution);
-        const seconds = startedAt === undefined ? "?" : ((Date.now() - startedAt) / 1000).toFixed(1);
+        const active = this.activeExecutions.get(event.execution);
+        this.activeExecutions.delete(event.execution);
+        const seconds = active === undefined ? "?" : ((Date.now() - active.startedAt) / 1000).toFixed(1);
         const icon = event.exitCode === 0 ? "$(check)" : "$(error)";
         const exit = event.exitCode === undefined ? "?" : String(event.exitCode);
-        this.current = harness;
-        this.item.text = `${icon} ${harness.displayName} — ${seconds}s (exit ${exit})`;
-        this.item.show();
-        this.hideTimer = setTimeout(() => {
-            this.hideTimer = undefined;
-            this.item?.hide();
-        }, STATUS_HIDE_DELAY_MS);
+        this.lastFinished = { terminal: event.terminal, text: `${icon} ${harness.displayName} — ${seconds}s (exit ${exit})` };
+        this.render();
+    }
+
+    private render(): void {
+        if (!this.item) {
+            return;
+        }
+        this.clearHideTimer();
+        let latestActive: { harness: Harness } | undefined;
+        for (const entry of this.activeExecutions.values()) {
+            latestActive = entry;
+        }
+        if (latestActive) {
+            this.item.text = `$(sync~spin) ${latestActive.harness.displayName}`;
+            this.item.show();
+            return;
+        }
+        if (this.lastFinished) {
+            this.item.text = this.lastFinished.text;
+            this.item.show();
+            this.hideTimer = setTimeout(() => {
+                this.hideTimer = undefined;
+                this.lastFinished = undefined;
+                this.item?.hide();
+            }, STATUS_HIDE_DELAY_MS);
+            return;
+        }
+        this.item.hide();
     }
 
     private clearHideTimer(): void {
@@ -99,18 +119,30 @@ export class AgentStatus implements vscode.Disposable {
 
     /** Forget a terminal that closed; keeps the tracked set leak-free. */
     onTerminalClosed(terminal: vscode.Terminal): void {
-        const harness = this.tracked.get(terminal);
-        this.tracked.delete(terminal);
-        if (harness && harness.id === this.current?.id) {
-            this.clearHideTimer();
+        let changed = this.tracked.delete(terminal);
+        for (const [execution, entry] of this.activeExecutions) {
+            if (entry.terminal === terminal) {
+                this.activeExecutions.delete(execution);
+                changed = true;
+            }
+        }
+        if (this.lastFinished?.terminal === terminal) {
+            this.lastFinished = undefined;
+            changed = true;
+        }
+        if (changed) {
+            this.render();
         }
     }
 
     dispose(): void {
         this.clearHideTimer();
+        this.activeExecutions.clear();
+        this.lastFinished = undefined;
         for (const subscription of this.subscriptions) {
             subscription.dispose();
         }
+        this.subscriptions.length = 0;
         this.item?.dispose();
         this.item = undefined;
     }

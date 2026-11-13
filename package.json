@@ -106,6 +106,8 @@
     "onCommand:multiHarness.cancelSessionSelection",
     "onCommand:multiHarness.toggleSessionSelection",
     "onCommand:multiHarness.selectAllSessions",
+    "onCommand:multiHarness.deleteContextSessions",
+    "onCommand:multiHarness.closeContextTerminals",
     "onCommand:multiHarness.deleteSession",
     "onCommand:multiHarness.deleteSelectedSessions",
     "onCommand:multiHarness.openAntigravity",
@@ -173,6 +175,13 @@
         "title": "%command.closeSession.title%",
         "category": "%category%",
         "icon": "$(close)"
+      },
+      {
+        "command": "multiHarness.closeContextTerminals",
+        "title": "%command.closeContextTerminals.title%",
+        "category": "%category%",
+        "icon": "$(close-all)",
+        "enablement": "!multiHarness.closingTerminals"
       },
       {
         "command": "multiHarness.addFavorite",
@@ -374,6 +383,13 @@
         "enablement": "!multiHarness.deletingSessions"
       },
       {
+        "command": "multiHarness.deleteContextSessions",
+        "title": "%command.deleteContextSessions.title%",
+        "category": "%category%",
+        "icon": "$(trash)",
+        "enablement": "!multiHarness.deletingSessions"
+      },
+      {
         "command": "multiHarness.deleteSelectedSessions",
         "title": "%command.deleteSelectedSessions.title%",
         "category": "%category%",
@@ -402,6 +418,9 @@
     "menus": {
       "commandPalette": [
         { "command": "multiHarness.toggleTerminalSelection", "when": "false" },
+        { "command": "multiHarness.cancelTerminalSelection", "when": "false" },
+        { "command": "multiHarness.selectAllTerminals", "when": "false" },
+        { "command": "multiHarness.closeContextTerminals", "when": "false" },
         { "command": "multiHarness.closeOtherTerminals", "when": "false" },
         {
           "command": "multiHarness.focusSession",
@@ -444,6 +463,10 @@
           "when": "false"
         },
         {
+          "command": "multiHarness.deleteContextSessions",
+          "when": "false"
+        },
+        {
           "command": "multiHarness.deleteSelectedSessions",
           "when": "false"
         }
@@ -466,7 +489,7 @@
           "group": "inline"
         },
         {
-          "command": "multiHarness.deleteSession",
+          "command": "multiHarness.deleteContextSessions",
           "when": "view == multiHarness.savedSessions && viewItem == savedSession && !multiHarness.deletingSessions",
           "group": "session"
         },
@@ -476,8 +499,8 @@
           "group": "inline"
         },
         {
-          "command": "multiHarness.closeSession",
-          "when": "view == multiHarness.sessions && viewItem == openTerminal",
+          "command": "multiHarness.closeContextTerminals",
+          "when": "view == multiHarness.sessions && viewItem == openTerminal && !multiHarness.closingTerminals",
           "group": "terminal"
         }
       ],

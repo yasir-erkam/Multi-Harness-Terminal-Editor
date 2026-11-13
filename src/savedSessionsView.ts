@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -29,6 +30,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     let selectionMode = false;
     let allLocations = context.workspaceState.get<boolean>("allSessionLocations", false);
     let deleting = false;
+    let activeResumes = 0;
     let selectionScope = "";
     let nativeCheckboxes = false;
     const selected = new Set<string>();
@@ -39,8 +41,37 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             void vscode.commands.executeCommand("setContext", key, value);
         }
     }
-    const sessionKey = (session: SavedSession): string => `${session.harnessId}:${session.id}`;
-    const scopeKey = (): string => JSON.stringify([selection.getScope().agent?.id, allLocations ? undefined : selection.getScope().cwd, allLocations]);
+    const sessionKey = (session: Pick<SavedSession, "harnessId" | "id" | "file">): string => {
+        const resolved = path.resolve(session.file);
+        let current = resolved;
+        const suffix: string[] = [];
+        let file = resolved;
+        while (true) {
+            try {
+                file = path.join(realpathSync(current), ...suffix.reverse());
+                break;
+            } catch {
+                const parent = path.dirname(current);
+                if (parent === current) break;
+                suffix.push(path.basename(current));
+                current = parent;
+            }
+        }
+        if (process.platform === "win32") file = file.toLowerCase();
+        return JSON.stringify([session.harnessId, file, session.id]);
+    };
+    function resolveSession(sessions: readonly SavedSession[], request: unknown): SavedSession | undefined {
+        if (!request || typeof request !== "object" || "notice" in request || "day" in request
+            || !("harnessId" in request) || !("id" in request)
+            || typeof request.harnessId !== "string" || typeof request.id !== "string") return undefined;
+        const matches = sessions.filter((session) => session.harnessId === request.harnessId && session.id === request.id);
+        if ("file" in request && request.file !== undefined) {
+            if (typeof request.file !== "string" || !path.isAbsolute(request.file)) return undefined;
+            const key = sessionKey({ harnessId: request.harnessId, id: request.id, file: request.file });
+            return matches.find((session) => sessionKey(session) === key);
+        }
+        return matches.length === 1 ? matches[0] : undefined;
+    }
     function getRoots() {
         const config = vscode.workspace.getConfiguration("multiHarness");
         return sessionRoots().map((root) => {
@@ -49,6 +80,28 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             return override ? { ...root, directory: override.replace(/^~(?=$|[/\\])/, os.homedir()) } : root;
         });
     }
+    function sessionRoot(session: SavedSession) {
+        let file: string;
+        try { file = realpathSync(session.file); } catch { return undefined; }
+        const roots = getRoots().filter((root) => {
+            if (root.harnessId !== session.harnessId) return false;
+            try {
+                const relative = path.relative(realpathSync(root.directory), file);
+                return relative !== "" && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+            } catch { return false; }
+        });
+        return roots.length === 1 ? roots[0] : undefined;
+    }
+    const scopeKey = (): string | undefined => {
+        const scope = selection.getScope();
+        const agentId = scope.agent?.id;
+        try {
+            const storeRoot = agentId ? getRoots().find((root) => root.harnessId === agentId)?.directory : undefined;
+            return JSON.stringify([agentId, allLocations ? undefined : scope.cwd, allLocations, storeRoot]);
+        } catch {
+            return undefined;
+        }
+    };
     function getMessage(): string | undefined {
         const scope = selection.getScope();
         if (!scope.agent) {
@@ -87,9 +140,11 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         if (request !== pending || key !== scopeKey()) {
             return getSessions();
         }
-        if (!result.unreadable.length && !deleting) {
-            const present = new Set(result.sessions.map(sessionKey));
-            for (const key of selected) if (!present.has(key)) selected.delete(key);
+        if (!deleting) {
+            if (!result.unreadable.length) {
+                const present = new Set(result.sessions.map(sessionKey));
+                for (const key of selected) if (!present.has(key)) selected.delete(key);
+            }
             updateHeader();
         }
         return result;
@@ -98,42 +153,51 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         updateHeader();
         changes.fire();
     }
-    async function toggleSelection(request?: { harnessId?: string; id?: string }): Promise<void> {
+    async function toggleSelection(request?: { harnessId?: string; id?: string; file?: string }): Promise<void> {
         if (deleting || !selectionMode || !request) return;
-        const session = (await getSessions()).sessions.find((candidate) => candidate.harnessId === request.harnessId && candidate.id === request.id);
+        const session = resolveSession((await getSessions()).sessions, request);
         if (!session || deleting || !selectionMode) return;
         const key = sessionKey(session);
         if (selected.has(key)) selected.delete(key);
         else selected.add(key);
         notifySelection();
     }
-    async function sessionTerminals(session: SavedSession): Promise<vscode.Terminal[]> {
+    async function sessionTerminals(session: SavedSession, sessionIds: readonly string[] = [session.id]): Promise<vscode.Terminal[]> {
+        const expectedIds = new Set(sessionIds);
         const terminals = [...vscode.window.terminals];
         const identities = await Promise.all(terminals.map((terminal) => restoreTerminalIdentity(terminal)));
         const exited = await Promise.all(terminals.map((terminal) => terminalHasExited(terminal)));
-        const root = session.harnessId === "ohMyPi" ? getRoots().find((candidate) => candidate.harnessId === "ohMyPi") : undefined;
+        const root = session.harnessId === "ohMyPi" ? sessionRoot(session) : undefined;
         const activeFiles = root ? await Promise.all(terminals.map((terminal) => ompTerminalSessionFile(terminal, root.directory))) : [];
-        const codexRoot = session.harnessId === "codex" ? getRoots().find((candidate) => candidate.harnessId === "codex") : undefined;
+        const codexRoot = session.harnessId === "codex" ? sessionRoot(session) : undefined;
         const codexFiles = codexRoot ? await Promise.all(terminals.map((terminal) => codexTerminalSessionFiles(terminal, codexRoot.directory))) : [];
-        const grokRoot = session.harnessId === "grokBuild" ? getRoots().find((candidate) => candidate.harnessId === "grokBuild") : undefined;
+        const grokRoot = session.harnessId === "grokBuild" ? sessionRoot(session) : undefined;
         const grokIds = grokRoot ? await Promise.all(terminals.map((terminal) => grokTerminalSessionId(terminal, grokRoot.directory))) : [];
         const sessionFile = codexRoot ? await fs.realpath(session.file) : session.file;
         const windowsMatches = codexRoot ? await windowsCodexSessionMatches(terminals, sessionFile) : new Map<vscode.Terminal, boolean>();
         return terminals.filter((_terminal, index) => {
             if (exited[index] || _terminal.exitStatus) return false;
             const identity = identities[index];
-            const activeFile = activeFiles[index];
-            const files = codexFiles[index];
-            const matches = grokIds[index] !== undefined ? grokIds[index] === session.id : windowsMatches.get(_terminal) ?? (files?.length
-                ? files.some((file) => path.relative(file, sessionFile) === "")
-                : activeFile ? path.relative(activeFile, session.file) === "" : identity?.sessionId === session.id);
-            return identity?.harnessId === session.harnessId && matches;
+            if (identity?.harnessId !== session.harnessId) return false;
+            if (session.harnessId === "ohMyPi") {
+                const activeFile = activeFiles[index];
+                return activeFile !== undefined && path.relative(activeFile, session.file) === "";
+            }
+            if (session.harnessId === "codex") {
+                const windowsMatch = windowsMatches.get(_terminal);
+                return windowsMatch ?? (codexFiles[index]?.some((file) => path.relative(file, sessionFile) === "") ?? false);
+            }
+            if (session.harnessId === "grokBuild") {
+                return grokIds[index] !== undefined && grokIds[index] !== null && expectedIds.has(grokIds[index]!);
+            }
+            return identity.sessionId !== undefined && expectedIds.has(identity.sessionId);
         });
     }
-    async function deletionTerminals(session: SavedSession): Promise<vscode.Terminal[]> {
-        const terminals = await sessionTerminals(session);
+    async function deletionTerminals(session: SavedSession, sessionIds?: readonly string[]): Promise<vscode.Terminal[]> {
+        const terminals = await sessionTerminals(session, sessionIds);
         if (session.harnessId === "grokBuild" && process.platform === "linux") {
-            const root = getRoots().find((candidate) => candidate.harnessId === "grokBuild")!;
+            const root = sessionRoot(session);
+            if (!root) throw new Error(strings["savedSessions.invalidFile"]);
             const owners = await grokOwners(root.directory);
             if (owners.some((owner) => owner.sessionId === session.id) && !terminals.length) {
                 throw new Error(strings["savedSessions.alreadyRunning"]);
@@ -141,32 +205,50 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
         }
         return terminals;
     }
-    function closeSessionTerminals(terminals: vscode.Terminal[]): void {
+    async function closeSessionTerminals(terminals: vscode.Terminal[]): Promise<void> {
         const errors: unknown[] = [];
         for (const terminal of terminals) {
-            if (vscode.window.terminals.includes(terminal)) {
-                try { terminal.dispose(); } catch (error) { errors.push(error); }
-            }
+            if (!vscode.window.terminals.includes(terminal) || terminal.exitStatus) continue;
+            if (await terminalHasExited(terminal)) continue;
+            if (!vscode.window.terminals.includes(terminal) || terminal.exitStatus) continue;
+            try { terminal.dispose(); } catch (error) { errors.push(error); }
         }
         if (errors.length) throw errors[0];
     }
-    async function deleteSessions(request?: { harnessId?: string; id?: string }): Promise<void> {
-        if (deleting || !supportsSessionDeletion(selection.getScope().agent?.id ?? "")) return;
+    async function deleteSessions(requests?: readonly unknown[]): Promise<void> {
+        const agentId = selection.getScope().agent?.id ?? "";
+        if (deleting || disposed || activeResumes > 0 || !supportsSessionDeletion(agentId)) return;
+        if (requests !== undefined) {
+            if (!requests.some((item) => item && typeof item === "object" && !("notice" in item) && !("day" in item)
+                && "harnessId" in item && item.harnessId === agentId && "id" in item && typeof item.id === "string")) {
+                return;
+            }
+        } else if (!selectionMode || !selected.size) {
+            return;
+        }
         deleting = true;
         notifySelection();
         const originalScope = scopeKey();
         const failures: string[] = [];
         const failedKeys = new Set<string>();
         try {
-            const targets = (await getSessions()).sessions.filter((session) => request
-                ? session.harnessId === request.harnessId && session.id === request.id : selected.has(sessionKey(session)));
-            if (!targets.length || originalScope !== scopeKey()) return;
+            if (originalScope === undefined) return;
+            const listed = (await getSessions()).sessions;
+            const requestedKeys = requests === undefined ? undefined : new Set(requests
+                .map((item) => resolveSession(listed, item))
+                .filter((session): session is SavedSession => session !== undefined && session.harnessId === agentId)
+                .map(sessionKey));
+            const targets = requestedKeys
+                ? listed.filter((session) => requestedKeys.has(sessionKey(session)))
+                : listed.filter((session) => selected.has(sessionKey(session)));
+            if (!targets.length || disposed || originalScope !== scopeKey()) return;
             const detail = targets.map((session) => session.title).join("\n");
             const confirm = strings["savedSessions.deleteConfirm"].replace("{count}", String(targets.length));
             const providerDeletion = targets.every((session) => session.harnessId === "openCode");
             const action = strings[providerDeletion ? "savedSessions.deletePermanently" : "savedSessions.moveToTrash"];
             const help = strings[providerDeletion ? "savedSessions.openCodeDeleteHelp" : "savedSessions.deleteHelp"];
             if (await vscode.window.showWarningMessage(confirm, { modal: true, detail: `${detail}\n\n${help}` }, action) !== action) return;
+            if (disposed || originalScope !== scopeKey()) return;
             const roots = getRoots();
             const trashFailed: SavedSession[] = [];
             const fail = (session: SavedSession, error: unknown): void => {
@@ -175,21 +257,23 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                     : error instanceof Error ? error.message : String(error);
                 failures.push(`${session.title}: ${reason}`);
             };
-            const finishDeletion = (session: SavedSession, terminals: vscode.Terminal[]): void => {
+            const finishDeletion = async (session: SavedSession, terminals: vscode.Terminal[]): Promise<void> => {
                 selected.delete(sessionKey(session));
                 try {
-                    closeSessionTerminals(terminals);
+                    await closeSessionTerminals(terminals);
                 } catch (error) {
                     failures.push(`${session.title}: ${strings["savedSessions.closeFailed"]} (${error instanceof Error ? error.message : String(error)})`);
                 }
             };
             for (const session of targets) {
+                if (disposed || originalScope !== scopeKey()) break;
                 if (session.harnessId === "openCode") {
                     try {
-                        await validateOpenCodeDeletion(session, roots);
-                        const terminals = await deletionTerminals(session);
-                        await deleteOpenCodeSession(session, roots);
-                        finishDeletion(session, terminals);
+                        const expectedIds = await validateOpenCodeDeletion(session, roots);
+                        const terminals = await deletionTerminals(session, expectedIds);
+                        if (disposed || originalScope !== scopeKey()) break;
+                        await deleteOpenCodeSession(session, roots, expectedIds);
+                        await finishDeletion(session, terminals);
                     } catch (error) { fail(session, error); }
                     continue;
                 }
@@ -198,8 +282,10 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                 try {
                     await sessionDeletionTarget(session, roots);
                     terminals = await deletionTerminals(session);
+                    if (disposed || originalScope !== scopeKey()) break;
                     // Live-process discovery can take time; revalidate before deleting.
                     target = await sessionDeletionTarget(session, roots);
+                    if (disposed || originalScope !== scopeKey()) break;
                 } catch (error) {
                     if ((error as NodeJS.ErrnoException).code === "ENOENT") selected.delete(sessionKey(session));
                     else fail(session, error);
@@ -211,41 +297,52 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                     trashFailed.push(session);
                     continue;
                 }
-                finishDeletion(session, terminals);
+                await finishDeletion(session, terminals);
             }
-            if (trashFailed.length) {
+            if (trashFailed.length && !disposed && originalScope === scopeKey()) {
                 const permanent = strings["savedSessions.deletePermanently"];
                 const approved = await vscode.window.showWarningMessage(
                     strings["savedSessions.trashUnavailable"].replace("{count}", String(trashFailed.length)),
                     { modal: true, detail: trashFailed.map((session) => session.title).join("\n") }, permanent
                 ) === permanent;
-                for (const session of trashFailed) {
-                    if (!approved) {
-                        failedKeys.add(sessionKey(session));
-                        continue;
+                if (!disposed && originalScope === scopeKey()) {
+                    for (const session of trashFailed) {
+                        if (disposed || originalScope !== scopeKey()) break;
+                        if (!approved) {
+                            failedKeys.add(sessionKey(session));
+                            continue;
+                        }
+                        try {
+                            await sessionDeletionTarget(session, roots);
+                            const terminals = await deletionTerminals(session);
+                            if (disposed || originalScope !== scopeKey()) break;
+                            const target = await sessionDeletionTarget(session, roots);
+                            if (disposed || originalScope !== scopeKey()) break;
+                            await vscode.workspace.fs.delete(vscode.Uri.file(target), { recursive: session.harnessId === "grokBuild", useTrash: false });
+                            await finishDeletion(session, terminals);
+                        } catch (error) { fail(session, error); }
                     }
-                    try {
-                        await sessionDeletionTarget(session, roots);
-                        const terminals = await deletionTerminals(session);
-                        const target = await sessionDeletionTarget(session, roots);
-                        await vscode.workspace.fs.delete(vscode.Uri.file(target), { recursive: session.harnessId === "grokBuild", useTrash: false });
-                        finishDeletion(session, terminals);
-                    } catch (error) { fail(session, error); }
                 }
             }
-            if (originalScope === scopeKey() && failedKeys.size) {
-                selectionMode = true;
-                for (const key of failedKeys) selected.add(key);
+            if (originalScope === scopeKey()) {
+                if (failedKeys.size) {
+                    selectionMode = true;
+                    for (const key of failedKeys) selected.add(key);
+                } else if (selected.size === 0) {
+                    selectionMode = false;
+                }
             }
-            refresh();
-            if (failures.length) {
+            if (!disposed) refresh();
+            if (!disposed && failures.length) {
                 await vscode.window.showErrorMessage(`${strings["savedSessions.deleteFailed"]}\n${failures.join("\n")}`);
             }
         } catch (error) {
-            await vscode.window.showErrorMessage(`${strings["savedSessions.deleteFailed"]}\n${error instanceof Error ? error.message : String(error)}`);
+            if (!disposed) {
+                await vscode.window.showErrorMessage(`${strings["savedSessions.deleteFailed"]}\n${error instanceof Error ? error.message : String(error)}`);
+            }
         } finally {
             deleting = false;
-            notifySelection();
+            if (!disposed) notifySelection();
         }
     }
     function refresh(): void {
@@ -295,7 +392,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             const harness = HARNESSES.find((candidate) => candidate.id === session.harnessId)!;
             const date = new Date(session.modified).toLocaleDateString(vscode.env?.language ?? "en");
             return {
-                id: `${session.harnessId}:${session.id}`,
+                id: sessionKey(session),
                 contextValue: supportsSessionDeletion(session.harnessId) ? "savedSession" : "savedSessionReadOnly",
                 checkboxState: nativeCheckboxes && selectionMode ? (selected.has(sessionKey(session)) ? 1 : 0) : undefined,
                 label: session.title,
@@ -308,12 +405,12 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
                 command: deleting ? undefined : {
                     command: selectionMode ? "multiHarness.toggleSessionSelection" : "multiHarness.resumeSession",
                     title: strings["command.resumeSession.title"],
-                    arguments: [{ harnessId: session.harnessId, id: session.id }],
+                    arguments: [{ harnessId: session.harnessId, id: session.id, file: session.file }],
                 },
             };
         },
     };
-    const options = { treeDataProvider: provider, manageCheckboxStateManually: true };
+    const options = { treeDataProvider: provider, manageCheckboxStateManually: true, canSelectMany: true };
     const view = vscode.window.createTreeView("multiHarness.savedSessions", options) as vscode.TreeView<SavedSessionItem> & {
         onDidChangeCheckboxState?: vscode.Event<{ items: readonly (readonly [SavedSessionItem, number])[] }>;
     };
@@ -334,7 +431,7 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
     let previousAgentPresence: boolean | undefined;
     function updateHeader(): void {
         const scope = selection.getScope();
-        const key = scopeKey();
+        const key = scopeKey() ?? "";
         if (selectionScope !== key) {
             selectionScope = key;
             selectionMode = false;
@@ -426,36 +523,48 @@ export function registerSavedSessionsView(context: vscode.ExtensionContext, stat
             for (const session of sessions) selected.add(sessionKey(session));
             notifySelection();
         }),
-        vscode.commands.registerCommand("multiHarness.deleteSession", deleteSessions),
+        vscode.commands.registerCommand("multiHarness.deleteSession", (item?: SavedSessionItem) => deleteSessions(item ? [item] : [])),
+        vscode.commands.registerCommand("multiHarness.deleteContextSessions", (item?: SavedSessionItem, items?: readonly SavedSessionItem[]) =>
+            deleteSessions(Array.isArray(items) && items.length > 0 ? items : item ? [item] : [])),
         vscode.commands.registerCommand("multiHarness.deleteSelectedSessions", () => deleteSessions()),
-        vscode.commands.registerCommand("multiHarness.resumeSession", async (request?: { harnessId?: string; id?: string }) => {
-            if (deleting || !request || typeof request.harnessId !== "string" || typeof request.id !== "string") {
+        vscode.commands.registerCommand("multiHarness.resumeSession", async (request?: { harnessId?: string; id?: string; file?: string }) => {
+            if (deleting || disposed || !request || typeof request.harnessId !== "string" || typeof request.id !== "string") {
                 return;
             }
-            const originalScope = scopeKey();
-            const session = (await getSessions()).sessions.find((candidate) => candidate.harnessId === request.harnessId && candidate.id === request.id);
-            const harness = HARNESSES.find((candidate) => candidate.id === session?.harnessId);
-            if (deleting || !session || !harness) {
-                return;
-            }
+            activeResumes += 1;
             try {
-                if (!(await fs.stat(session.file)).isFile() || !(await fs.stat(session.cwd)).isDirectory()) {
-                    throw new Error("missing");
+                const originalScope = scopeKey();
+                if (originalScope === undefined) return;
+                const session = resolveSession((await getSessions()).sessions, request);
+                const harness = HARNESSES.find((candidate) => candidate.id === session?.harnessId);
+                if (disposed || deleting || !session || !harness || originalScope !== scopeKey()) {
+                    return;
                 }
-            } catch {
-                void vscode.window.showErrorMessage(`${strings["savedSessions.missing"]}\n${session.cwd}`);
-                refresh();
-                return;
+                try {
+                    if (!(await fs.stat(session.file)).isFile() || !(await fs.stat(session.cwd)).isDirectory()) {
+                        throw new Error("missing");
+                    }
+                } catch {
+                    if (!disposed) {
+                        void vscode.window.showErrorMessage(`${strings["savedSessions.missing"]}\n${session.cwd}`);
+                        refresh();
+                    }
+                    return;
+                }
+                if (disposed || deleting || originalScope !== scopeKey()) return;
+                const root = sessionRoot(session);
+                if (!root) return;
+                await openAgentTerminal(context, harness, status, {
+                    sessionId: session.id,
+                    sessionFile: session.file,
+                    sessionsRoot: root.directory,
+                    terminalName: `${harness.defaultExecutable} - ${session.title}`,
+                    cwd: session.cwd,
+                    args: resumeArguments(session),
+                });
+            } finally {
+                activeResumes -= 1;
             }
-            if (deleting || originalScope !== scopeKey()) return;
-            await openAgentTerminal(context, harness, status, {
-                sessionId: session.id,
-                sessionFile: session.file,
-                sessionsRoot: getRoots().find((root) => root.harnessId === session.harnessId)?.directory,
-                terminalName: `${harness.defaultExecutable} - ${session.title}`,
-                cwd: session.cwd,
-                args: resumeArguments(session),
-            });
         }),
         vscode.window.onDidCloseTerminal(refresh),
         vscode.workspace.onDidChangeConfiguration((event) => {

@@ -5,6 +5,7 @@
   "command.selectAllTerminals.title": "Görünür Terminallerin Tümünü Seç",
   "command.closeSelectedTerminals.title": "Seçilen Terminalleri Kapat",
   "command.closeOtherTerminals.title": "Görünür Diğer Terminalleri Kapat",
+  "command.closeContextTerminals.title": "Terminalleri Kapat",
   "command.filterTerminalAgent.title": "Açık Terminalleri Ajana Göre Filtrele",
   "command.filterTerminalProject.title": "Açık Terminalleri Projeye Göre Filtrele",
   "terminals.selectedCount": "Seçilen terminal: {count}",
@@ -146,6 +147,7 @@
   "command.toggleSessionSelection.title": "Oturum Seçimini Değiştir",
   "command.selectAllSessions.title": "Listelenen Tüm Oturumları Seç",
   "command.deleteSession.title": "Oturumu Sil",
+  "command.deleteContextSessions.title": "Oturumları Sil",
   "command.deleteSelectedSessions.title": "Seçilen Oturumları Sil",
   "savedSessions.selectedCount": "{count} oturum seçili",
   "savedSessions.deleting": "Oturumlar siliniyor…",
@@ -170,5 +172,11 @@
   "antigravity.executablePath.description": "Antigravity CLI’ı başlatmak için kullanılan yol veya komut adı. Varsayılan 'agy' komutu standart kurulum dizinlerinde veya PATH üzerinde aranır.",
   "antigravity.arguments.description": "Antigravity CLI’a başlatma sırasında eklenen argümanlar.",
   "terminal.profile.antigravity.title": "Antigravity CLI terminali aç",
-  "antigravity.sessionDirectory.description": "conversation_summaries.db ve conversations/ içeren mutlak Antigravity CLI veri dizini. ~/.gemini/antigravity-cli kullanmak için boş bırakın."
+  "antigravity.sessionDirectory.description": "conversation_summaries.db ve conversations/ içeren mutlak Antigravity CLI veri dizini. ~/.gemini/antigravity-cli kullanmak için boş bırakın.",
+  "command.openAgentPicker.placeholder": "Terminal sekmesinde açılacak ajanı seçin",
+  "terminal.missingExecutable": "Multi-Harness: {displayName} için çalıştırılabilir dosya bulunamadı ('{configuredPath}'). CLI aracını kurun veya {settingKey} ayarını yapın.",
+  "terminal.openSettings": "Ayarları Aç",
+  "terminal.shellFallback": "Multi-Harness: Bu terminalde durum izleme kullanılamıyor (shell integration {seconds}s içinde etkinleşmedi). Bunun yerine {displayName} alıntılanmış komut satırıyla başlatıldı.",
+  "terminal.exitedWithCode": "{displayName} terminali {code} çıkış koduyla kapandı",
+  "terminal.exited": "{displayName} terminali kapandı"
 }

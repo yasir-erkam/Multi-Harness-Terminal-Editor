@@ -116,18 +116,18 @@ Aşağıdaki tablo uygulama desteğini gösterir; standart uyumluluğu veya ger�
 | Antigravity CLI | Var; SQLite | Uygulanmamış; salt okunur entegrasyon | Yalnızca manuel terminal kapatma |
 | Cursor Agent | Uygulanmamış | Uygulanmamış | Yalnızca manuel terminal kapatma |
 
-Bütün 16 harness ortak terminal başlatma/odaklama/kapatma yollarını kullanır. SQLite ve Zstandard okuma host runtime desteğine bağlıdır. Mevcut listeler en çok 100 kayıt döndürür; taramalar sınırlıdır. Terminal kimliği launch metadata'sıyla taşınır; metadata kaybolduğunda süreçten kurtarma Linux'a özgüdür.
+Bütün 15 harness ortak terminal başlatma/odaklama/kapatma yollarını kullanır. SQLite ve Zstandard okuma host runtime desteğine bağlıdır. Mevcut listeler en çok 100 kayıt döndürür; taramalar sınırlıdır. Terminal kimliği launch metadata'sıyla taşınır; metadata kaybolduğunda süreçten kurtarma Linux'a özgüdür.
 
 ### Bilinen uyum açıkları ve uygulama sırası
 
-1. **Önce yanlış sekme riskini kaldır:** HIST-10 ve DEL-07/08 için güncel kimlik bulunamamasını eski resume ID'sinden ayır. CLI içi konuşma değişiminde eski ID yanlış terminale işaret edebilir. Codex canlı keşfi şu anda silmede kullanılır; resume aynı canlı keşfi kullanmaz. OMP breadcrumb okunamadığında eski kimliğe dönebilir. Grok Linux belirsiz kimliği ayrı ele alır.
+1. **Yanlış sekme ve silme sınırları:** HIST-10 ve DEL-07/08 kapsamında Codex canlı keşfi (`codexTerminalSessionFiles` / `windowsCodexSessionMatches`) artık hem silmede hem resume'da kullanılır; OMP breadcrumb veya Codex/Grok canlı keşfi bulunamadığında (desteklenmeyen platformlar dahil) eski resume kimliğine düşülmez ve belirsiz terminal odaklanmaz. Ancak canlı keşfi olmayan sağlayıcılar (Prime Agent, Pi, Claude Code) ile desteklenmeyen platformlarda CLI içi konuşma değişimi hâlâ eski kimliğe veya eşleşmemeye bağlı kalabilir.
 2. **Silme sonucunu dürüst göster:** Kayıt silindi ama eşleşen sekme bulunamadı/kapatılamadı durumunu ayır. Eşleme bulunamaması, hiçbir yazıcı olmadığına kanıt değildir. Mevcut terminal kapatma hatası bildirimi bu gereksinimin yalnızca bir parçasıdır.
 3. **Var olan entegrasyonları tamamla:** Geçmişi olan sağlayıcılarda yeni/switched/reconnected oturumları, direct/shell/profile ve platform farklarıyla doğrula. Antigravity için güvenli native silme imkânını araştır; ortak SQLite dosyasını silmek kabul edilmez.
 4. **Sonra geçmiş kapsamını genişlet:** Yedi terminal-only harness için native format/CLI sözleşmesini doğrula; liste/resume'u, ardından güvenli silmeyi ekle. CLI desteği bilinmeden “desteklenmiyor” deme.
 
 Bu sıra bir uygulama önceliğidir; bu belgeyle kod değişikliği veya bu açıkların kapatıldığı iddiası yapılmaz.
 
-Ek güvenlik açıkları **koddan çıkarımdır; bu çalışmada çalıştırılarak yeniden üretilmedi**: terminal eşlemesi silmeden önce alınır, kapatmada güncel konuşma tekrar doğrulanmaz; başlamış resume ile silme ortak işlem kilidi paylaşmaz; ilk modal sonrasında kapsam tekrar kontrol edilmez; OpenCode alt kayıtları silse de terminal keşfi yalnız seçilen parent ID'sini arar. DEL-14/15 bu açıkların hedef davranışını tanımlar. Aynı sağlayıcı/ID farklı store'larda bulunabiliyorsa seçim ve işlem tekilleştirme anahtarları store'u da ayırt etmeli.
+Önceden çıkarılan güvenlik açıklarından modal sonrası kapsam/dispose denetimi, resume–silme işlem koordinasyonu (`activeResumes`/`deleting`), OpenCode doğrulanmış aile kümesi ve aile terminalleri eşlemesi, kapatma anı `exitStatus`/`terminalHasExited` kontrolü ve çok köklü/store'lu kanonik anahtar ayrımı kodda uygulanmıştır. Kalan doğrulanmış sınırlar: silme sonrası harici süreçlerin kaydı yeniden oluşturmasını engelleyen sağlayıcı kilidi/atomikliği yoktur; kapatma anında dosya/breadcrumb kimliği yeniden taranmaz (yalnız retained çıkış durumu yeniden denetlenir); Prime Agent/Pi/Claude Code canlı konuşma değişimini izlemez ve Antigravity salt okunurdur; gerçek VS Code extension-host ve native Windows/macOS davranışları ayrı doğrulanmalıdır.
 
 ## 7. Kabul senaryoları ve tamamlanma ölçütü
 
@@ -162,7 +162,7 @@ Her destek iddiası şu davranışlarla doğrulanmalı. Kalıcı testler kullan�
 
 ## 8. Kod dayanakları ve belge bakımı
 
-- `src/harnesses.ts`: sabit 16 harness registry'si, ayar ve ikon kimlikleri.
+- `src/harnesses.ts`: sabit 15 harness registry'si, ayar ve ikon kimlikleri.
 - `src/launch.ts`, `src/profiles.ts`, `src/workspaceContext.ts`: ortak başlatma, resume tekilleştirme ve proje/host bağlamı.
 - `src/terminalExit.ts`, `media/terminal-launcher.cjs`: direct/profile çıkış politikası, gerçek TTY aktarımı ve hata çıktısının korunması.
 - `src/savedSessions.ts`: native store keşfi, tarama, resume argümanları ve silme destek listesi.

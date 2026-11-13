@@ -74,6 +74,13 @@ async function sameDirectory(actual: unknown, expected: string): Promise<void> {
 
 const quote = (identifier: string): string => `"${identifier.replace(/"/g, '""')}"`;
 
+function verifyFamily(ids: readonly string[], expectedIds: readonly string[]): void {
+    const expected = new Set(expectedIds);
+    if (expected.size !== ids.length || ids.some((id) => !expected.has(id))) {
+        fail("changedFile", "The OpenCode session family changed; refresh the session list.");
+    }
+}
+
 /** Only known ownership relationships may participate in a destructive transaction. */
 function schema(db: DatabaseSync): Set<string> {
     const tables = new Set<string>();
@@ -111,7 +118,9 @@ function schema(db: DatabaseSync): Set<string> {
     return tables;
 }
 
-async function sqlite(session: SavedSession, root: string, deleting: boolean): Promise<void> {
+async function sqlite(session: SavedSession, root: string, deleting: false): Promise<readonly string[]>;
+async function sqlite(session: SavedSession, root: string, deleting: true, expectedIds: readonly string[]): Promise<readonly string[]>;
+async function sqlite(session: SavedSession, root: string, deleting: boolean, expectedIds?: readonly string[]): Promise<readonly string[]> {
     for (const suffix of ["-wal", "-shm", "-journal"]) {
         const stat = await inspect(root, session.file + suffix, true);
         if (stat && !stat.isFile()) fail("invalidFile", "The OpenCode database sidecar is not a regular file.");
@@ -132,6 +141,7 @@ async function sqlite(session: SavedSession, root: string, deleting: boolean): P
         const rows = db.prepare("WITH RECURSIVE descendants(id) AS (SELECT id FROM session WHERE id = ? UNION SELECT s.id FROM session s JOIN descendants d ON s.parent_id = d.id) SELECT id FROM descendants").all(session.id);
         const ids = rows.map((entry) => String(entry.id));
         if (ids.some((id) => !sessionID.test(id))) fail("invalidFile", "An OpenCode descendant has an invalid identity.");
+        if (deleting) verifyFamily(ids, expectedIds!);
         // A corrupt cross-session part must never cause unrelated records to be removed.
         const selected = new Set(ids);
         const parts = db.prepare("SELECT p.session_id, m.session_id AS message_session FROM part p LEFT JOIN message m ON m.id = p.message_id").all();
@@ -158,10 +168,11 @@ async function sqlite(session: SavedSession, root: string, deleting: boolean): P
                 deleteEvents?.run(id);
                 deleteSequence?.run(id);
             }
-            for (const id of ids.reverse()) deleteSession.run(id);
+            for (const id of [...ids].reverse()) deleteSession.run(id);
         }
         db.exec(deleting ? "COMMIT" : "ROLLBACK");
         transaction = false;
+        return ids;
     } finally {
         try { if (transaction) db.exec("ROLLBACK"); } finally { db.close(); }
     }
@@ -170,7 +181,9 @@ async function sqlite(session: SavedSession, root: string, deleting: boolean): P
 type JsonRecord = Record<string, any>;
 interface LegacyFile { file: string; content: string; dev: number; ino: number }
 
-async function legacy(session: SavedSession, root: string, deleting: boolean): Promise<void> {
+async function legacy(session: SavedSession, root: string, deleting: false): Promise<readonly string[]>;
+async function legacy(session: SavedSession, root: string, deleting: true, expectedIds: readonly string[]): Promise<readonly string[]>;
+async function legacy(session: SavedSession, root: string, deleting: boolean, expectedIds?: readonly string[]): Promise<readonly string[]> {
     const project = path.dirname(session.file);
     if (path.dirname(project) !== path.join(root, "storage", "session") || path.basename(session.file) !== `${session.id}.json`) {
         fail("invalidFile", "The OpenCode legacy session path is invalid.");
@@ -217,6 +230,7 @@ async function legacy(session: SavedSession, root: string, deleting: boolean): P
         changed = false;
         for (const [id, entry] of sessions) if (!selected.has(id) && selected.has(entry.row.parentID)) { selected.add(id); changed = true; }
     }
+    if (deleting) verifyFamily([...selected], expectedIds!);
     const metadata = plan.filter((entry) => selected.has(path.basename(entry.file, ".json")));
     plan.length = 0;
     for (const id of selected) {
@@ -260,25 +274,26 @@ async function legacy(session: SavedSession, root: string, deleting: boolean): P
         }
         await fs.unlink(entry.file);
     }
+    return [...selected];
 }
 
-async function processSession(session: SavedSession, roots: readonly SessionRoot[], deleting: boolean): Promise<void> {
+async function processSession(session: SavedSession, roots: readonly SessionRoot[], deleting: boolean, expectedIds?: readonly string[]): Promise<readonly string[]> {
     // Normalize paths once; all subsequent layout comparisons use absolute paths.
     session = { ...session, file: path.resolve(session.file) };
     const root = await storeRoot(session, roots);
-    if (session.file === path.join(root, "opencode.db")) await sqlite(session, root, deleting);
-    else {
-        if (await inspect(root, path.join(root, "opencode.db"), true)) {
-            fail("invalidFile", "The OpenCode SQLite store is authoritative; refresh the session list before deleting legacy records.");
-        }
-        await legacy(session, root, deleting);
+    if (session.file === path.join(root, "opencode.db")) {
+        return deleting ? sqlite(session, root, true, expectedIds!) : sqlite(session, root, false);
     }
+    if (await inspect(root, path.join(root, "opencode.db"), true)) {
+        fail("invalidFile", "The OpenCode SQLite store is authoritative; refresh the session list before deleting legacy records.");
+    }
+    return deleting ? legacy(session, root, true, expectedIds!) : legacy(session, root, false);
 }
 
-export async function validateOpenCodeDeletion(session: SavedSession, roots: readonly SessionRoot[]): Promise<void> {
-    await processSession(session, roots, false);
+export async function validateOpenCodeDeletion(session: SavedSession, roots: readonly SessionRoot[]): Promise<readonly string[]> {
+    return processSession(session, roots, false);
 }
 
-export async function deleteOpenCodeSession(session: SavedSession, roots: readonly SessionRoot[]): Promise<void> {
-    await processSession(session, roots, true);
+export async function deleteOpenCodeSession(session: SavedSession, roots: readonly SessionRoot[], expectedIds: readonly string[]): Promise<void> {
+    await processSession(session, roots, true, expectedIds);
 }

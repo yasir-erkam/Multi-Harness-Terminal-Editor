@@ -67,6 +67,31 @@ test("absolute path to an existing file resolves", (dir) => {
     assert.equal(resolveExecutable(join(dir, "missing-cli")), undefined);
 });
 
+test("executable discovery skips directories and follows only file symlinks on POSIX and Windows", (dir) => {
+    for (const platform of ["linux", "win32"]) {
+        const name = platform === "win32" ? "agent.exe" : "agent";
+        const first = join(dir, platform, "first"), second = join(dir, platform, "second");
+        mkdirSync(first, { recursive: true }); mkdirSync(second, { recursive: true });
+        const shadow = join(first, name), target = join(second, name);
+        mkdirSync(shadow); writeFileSync(target, "fixture"); chmodSync(target, 0o755);
+        const opts = { platform, nextPathDirs: [first, second], user: { home: join(dir, "empty") } };
+        assert.equal(resolveExecutable(shadow, opts), undefined, `${platform}: explicit directory rejected`);
+        assert.equal(resolveExecutable(name, opts), target, `${platform}: directory does not shadow later file`);
+        const previousPath = process.env.PATH;
+        try {
+            process.env.PATH = [first, second].join(process.platform === "win32" ? ";" : ":");
+            assert.equal(resolveExecutable(name, { platform, user: { home: join(dir, "empty") } }), target, `${platform}: PATH skips a directory shadow`);
+        } finally { if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath; }
+        const fileLink = join(first, platform === "win32" ? "file.exe" : "file-link");
+        const directoryLink = join(first, platform === "win32" ? "dir.exe" : "dir-link");
+        if (fileSymlink(target, fileLink)) assert.equal(resolveExecutable(fileLink, opts), fileLink);
+        try {
+            symlinkSync(shadow, directoryLink, process.platform === "win32" ? "junction" : "dir");
+            assert.equal(resolveExecutable(directoryLink, opts), undefined);
+        } catch (error) { if (process.platform !== "win32" || error.code !== "EPERM") throw error; }
+    }
+});
+
 // 2. Name found in an injected PATH-like array
 test("bare name found in provided directory list", (dir) => {
     writeFileSync(join(dir, "claude"), "#!/bin/sh\n");
@@ -446,6 +471,14 @@ try {
     writeFileSync(join(large, "updates.jsonl"), "x".repeat(300 * 1024) + "\n" + message
         + JSON.stringify({ timestamp: 1990000000, params: { sessionId: "other", update: { sessionUpdate: "agent_message_chunk" } } }) + "\n{partial");
     assert.equal((await scanSavedSessions([root])).sessions[0].modified, 1950000000000, "bounded tail reads ignore foreign sessions and partial writes");
+    // The tail begins after the head window, so only the tail can see this event.
+    const boundaryPrefix = "x".repeat(300 * 1024);
+    const tailPadding = " ".repeat(256 * 1024 - Buffer.byteLength(message));
+    for (const [separator, expected] of [["\n", 1950000000000], ["x", Date.parse("2026-10-20T10:00:00Z")]]) {
+        writeFileSync(join(large, "updates.jsonl"), boundaryPrefix + separator + message + tailPadding);
+        const entry = (await scanSavedSessions([root])).sessions.find((session) => session.id === "large-log");
+        assert.equal(entry.modified, expected, `tail preceding byte ${JSON.stringify(separator)} determines whether its first line is complete`);
+    }
     rmSync(large, { recursive: true });
     rmSync(main, { recursive: true });
     assert.equal((await scanSavedSessions([root])).sessions.some((entry) => entry.id === "main"), false);
@@ -671,6 +704,50 @@ try {
 } finally {
     rmSync(datedDir, { recursive: true, force: true });
 }
+// Boundary regressions use isolated stores so limits and mtimes are deterministic.
+const boundaryDir = mkdtempSync(join(tmpdir(), "mhte-boundaries-"));
+try {
+    const windowBytes = 256 * 1024;
+    const pi = join(boundaryDir, "pi");
+    mkdirSync(pi);
+    const header = JSON.stringify({ type: "session", id: "split", cwd: boundaryDir }) + "\n";
+    const prefix = '{"type":"session_info","padding":"';
+    const padding = "x".repeat(windowBytes - Buffer.byteLength(header + prefix) - 1);
+    writeFileSync(join(pi, "split.jsonl"), header + prefix + padding + 'é","name":"Boundary title"}\n');
+    let result = await scanSavedSessions([{ harnessId: "pi", directory: pi }], 2000);
+    assert.equal(result.sessions[0].title, "Boundary title", "UTF-8 JSONL line crossing the window is retained");
+
+    const roots = ["first", "second"].map((name) => ({ harnessId: "pi", directory: join(boundaryDir, name) }));
+    for (const root of roots) {
+        mkdirSync(root.directory);
+        writeFileSync(join(root.directory, "same.jsonl"), JSON.stringify({ type: "session", id: "same", cwd: boundaryDir }) + "\n");
+    }
+    result = await scanSavedSessions(roots, 2000);
+    assert.equal(result.sessions.length, 2, "identical IDs in different roots remain distinct");
+    assert.equal(new Set(result.sessions.map((session) => session.file)).size, 2);
+
+    const candidates = join(boundaryDir, "candidates");
+    const omitted = join(boundaryDir, "omitted");
+    mkdirSync(candidates); mkdirSync(omitted);
+    for (let i = 0; i < 1000; i++) {
+        const file = join(candidates, `${i}.jsonl`);
+        writeFileSync(file, JSON.stringify({ type: "session", id: `id${i}`, cwd: boundaryDir }) + "\n");
+        utimesSync(file, 2000000000, 2000000000);
+    }
+    const candidateRoots = [{ harnessId: "pi", directory: candidates }, { harnessId: "primeAgent", directory: omitted }];
+    result = await scanSavedSessions(candidateRoots, 2000);
+    assert.equal(result.sessions.length, 1000);
+    assert.deepEqual(result.unreadable, []);
+    const extra = join(omitted, "older.jsonl");
+    writeFileSync(extra, JSON.stringify({ type: "session", id: "older", cwd: boundaryDir }) + "\n");
+    utimesSync(extra, 1000000000, 1000000000);
+    result = await scanSavedSessions(candidateRoots, 2000);
+    assert.equal(result.sessions.length, 1000);
+    assert.equal(result.sessions.some((session) => session.id === "older"), false);
+    assert.deepEqual(result.unreadable, ["primeAgent"]);
+    passed++;
+    console.log("ok: JSONL windows, distinct roots and unfiltered candidate limits preserve bounded history");
+} finally { rmSync(boundaryDir, { recursive: true, force: true }); }
 const savedDir = mkdtempSync(join(tmpdir(), "mhte-saved-"));
 try {
     const roots = sessionRoots(savedDir, {}).filter((root) => supportsSessionDeletion(root.harnessId) && !["openCode", "grokBuild"].includes(root.harnessId));
@@ -923,22 +1000,24 @@ try {
     const session = (await scanSavedSessions([root])).sessions.find((row) => row.id === "ses_main");
     assert.ok(session);
     const before = readFileSync(file);
-    await validateOpenCodeDeletion(session, [root]);
+    const family = await validateOpenCodeDeletion(session, [root]);
+    assert.deepEqual(new Set(family), new Set(["ses_main", "ses_child", "ses_grandchild"]));
+    await assert.rejects(deleteOpenCodeSession(session, [root], ["ses_main"]), { reason: "changedFile" });
     assert.deepEqual(readFileSync(file), before, "validation must not modify SQLite history");
     for (const stale of [{ ...session, id: "ses_missing" }, { ...session, cwd: root.directory }]) {
         await assert.rejects(validateOpenCodeDeletion(stale, [root]));
-        await assert.rejects(deleteOpenCodeSession(stale, [root]));
+        await assert.rejects(deleteOpenCodeSession(stale, [root], family));
         assert.deepEqual(readFileSync(file), before, "mismatched IDs and directories must leave SQLite untouched");
     }
     const outside = join(openCodeDeleteDir, "opencode.db");
     copyFileSync(file, outside);
     await assert.rejects(validateOpenCodeDeletion({ ...session, file: outside }, [root]));
-    await assert.rejects(deleteOpenCodeSession({ ...session, file: outside }, [root]));
+    await assert.rejects(deleteOpenCodeSession({ ...session, file: outside }, [root], family));
     assert.deepEqual(readFileSync(outside), before, "outside-store databases must never be modified");
     rmSync(file);
     if (fileSymlink(outside, file)) {
         await assert.rejects(validateOpenCodeDeletion(session, [root]));
-        await assert.rejects(deleteOpenCodeSession(session, [root]));
+        await assert.rejects(deleteOpenCodeSession(session, [root], family));
         assert.deepEqual(readFileSync(outside), before, "a database symlink must not permit deletion of its target");
         rmSync(file);
     }
@@ -947,7 +1026,7 @@ try {
     changed.prepare("UPDATE session SET directory = ? WHERE id = ?").run(root.directory, session.id);
     changed.close();
     await assert.rejects(validateOpenCodeDeletion(session, [root]));
-    await assert.rejects(deleteOpenCodeSession(session, [root]));
+    await assert.rejects(deleteOpenCodeSession(session, [root], family));
     const restored = new DatabaseSync(file);
     restored.prepare("UPDATE session SET directory = ? WHERE id = ?").run(cwd, session.id);
     restored.close();
@@ -961,7 +1040,7 @@ try {
     const guarded = new DatabaseSync(file);
     guarded.exec("CREATE TRIGGER prevent_session_delete BEFORE DELETE ON session BEGIN SELECT RAISE(ABORT, 'deletion blocked'); END");
     guarded.close();
-    await assert.rejects(deleteOpenCodeSession(session, [root]));
+    await assert.rejects(deleteOpenCodeSession(session, [root], family));
     assert.deepEqual(snapshot(), allRowsBeforeFailure, "a trigger-blocked deletion must leave every session, descendant and related row intact");
     const unguarded = new DatabaseSync(file);
     unguarded.exec("DROP TRIGGER prevent_session_delete");
@@ -972,13 +1051,13 @@ try {
         writeFileSync(target, content);
         if (fileSymlink(target, `${file}${suffix}`)) {
             await assert.rejects(validateOpenCodeDeletion(session, [root]));
-            await assert.rejects(deleteOpenCodeSession(session, [root]));
+            await assert.rejects(deleteOpenCodeSession(session, [root], family));
             assert.deepEqual(readFileSync(target), content, `${suffix} symlink targets must remain untouched`);
             rmSync(`${file}${suffix}`);
             assert.deepEqual(snapshot(), allRowsBeforeFailure, `${suffix} symlink rejection must preserve all database rows`);
         }
     }
-    await deleteOpenCodeSession(session, [root]);
+    await deleteOpenCodeSession(session, [root], family);
     assert.ok(existsSync(file), "deleting a conversation must never delete the shared database");
     const remaining = new DatabaseSync(file);
     try {
@@ -1029,7 +1108,10 @@ try {
     assert.ok(session);
     const file = session.file;
     const before = readFileSync(file);
-    await validateOpenCodeDeletion(session, [root]);
+    const family = await validateOpenCodeDeletion(session, [root]);
+    assert.deepEqual(new Set(family), new Set(["ses_main", "ses_child", "ses_grandchild"]));
+    await assert.rejects(deleteOpenCodeSession(session, [root], ["ses_main"]), { reason: "changedFile" });
+    for (const paths of files.values()) for (const path of paths) assert.ok(existsSync(path), "family mismatch must preserve legacy records");
     assert.deepEqual(readFileSync(file), before, "legacy validation must be read-only");
     const authoritativeFile = join(root.directory, "opencode.db");
     const authoritative = new DatabaseSync(authoritativeFile);
@@ -1038,7 +1120,7 @@ try {
     authoritative.close();
     const authoritativeBefore = readFileSync(authoritativeFile);
     await assert.rejects(validateOpenCodeDeletion(session, [root]));
-    await assert.rejects(deleteOpenCodeSession(session, [root]));
+    await assert.rejects(deleteOpenCodeSession(session, [root], family));
     assert.deepEqual(readFileSync(authoritativeFile), authoritativeBefore, "an authoritative database appearing after discovery must not be touched through a legacy target");
     for (const paths of files.values()) {
         for (const path of paths) assert.ok(existsSync(path), "an authoritative database must prevent deletion of all legacy records");
@@ -1047,17 +1129,17 @@ try {
     rmSync(authoritativeFile);
     for (const stale of [{ ...session, id: "ses_missing" }, { ...session, cwd: root.directory }]) {
         await assert.rejects(validateOpenCodeDeletion(stale, [root]));
-        await assert.rejects(deleteOpenCodeSession(stale, [root]));
+        await assert.rejects(deleteOpenCodeSession(stale, [root], family));
         assert.deepEqual(readFileSync(file), before);
     }
     const outside = join(openCodeLegacyDeleteDir, "ses_main.json");
     copyFileSync(file, outside);
     await assert.rejects(validateOpenCodeDeletion({ ...session, file: outside }, [root]));
-    await assert.rejects(deleteOpenCodeSession({ ...session, file: outside }, [root]));
+    await assert.rejects(deleteOpenCodeSession({ ...session, file: outside }, [root], family));
     rmSync(file);
     if (fileSymlink(outside, file)) {
         await assert.rejects(validateOpenCodeDeletion(session, [root]));
-        await assert.rejects(deleteOpenCodeSession(session, [root]));
+        await assert.rejects(deleteOpenCodeSession(session, [root], family));
         assert.deepEqual(readFileSync(outside), before);
         rmSync(file);
     }
@@ -1065,12 +1147,12 @@ try {
     for (const changed of [{ ...metadata.get("ses_main"), id: "ses_replaced" }, { ...metadata.get("ses_main"), directory: root.directory }]) {
         writeFileSync(file, JSON.stringify(changed));
         await assert.rejects(validateOpenCodeDeletion(session, [root]));
-        await assert.rejects(deleteOpenCodeSession(session, [root]));
+        await assert.rejects(deleteOpenCodeSession(session, [root], family));
         assert.ok(existsSync(files.get("ses_child")[0]), "a stale parent must not remove descendants");
     }
     writeFileSync(file, before);
     const unrelated = files.get("ses_other").map((path) => readFileSync(path));
-    await deleteOpenCodeSession(session, [root]);
+    await deleteOpenCodeSession(session, [root], family);
     for (const id of ["ses_main", "ses_child", "ses_grandchild"]) {
         for (const path of files.get(id)) assert.equal(existsSync(path), false, `legacy deletion must remove ${path}`);
     }
@@ -1133,6 +1215,78 @@ try {
     passed += 1;
     console.log("ok: Antigravity SQLite history filters projects and children, decodes file URIs, resumes by ID and tolerates unavailable indexes");
 } finally { rmSync(agyDir, { recursive: true, force: true }); }
+
+const sqliteLimitDir = mkdtempSync(join(tmpdir(), "mhte-sqlite-limit-"));
+try {
+    const openRoot = { harnessId: "openCode", directory: join(sqliteLimitDir, "open") };
+    mkdirSync(openRoot.directory);
+    const openDb = new DatabaseSync(join(openRoot.directory, "opencode.db"));
+    openDb.exec("CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, title TEXT, time_updated INTEGER, parent_id TEXT, time_archived INTEGER); BEGIN");
+    const openInsert = openDb.prepare("INSERT INTO session VALUES (?, ?, ?, ?, NULL, NULL)");
+    for (let i = 0; i < 5000; i++) openInsert.run(`ses_${i}`, sqliteLimitDir, `Title ${i}`, i);
+    openDb.exec("COMMIT");
+    let scan = await scanSavedSessions([openRoot], 6000);
+    assert.equal(scan.sessions.length, 5000);
+    assert.deepEqual(scan.unreadable, []);
+    openInsert.run("ses_extra", sqliteLimitDir, "Newest", 5000);
+    openDb.close();
+    scan = await scanSavedSessions([openRoot], 6000);
+    assert.equal(scan.sessions.length, 5000);
+    assert.equal(scan.sessions[0].id, "ses_extra");
+    assert.equal(scan.sessions.some((row) => row.id === "ses_0"), false);
+    assert.deepEqual(scan.unreadable, ["openCode"]);
+    const agyRoot = { harnessId: "antigravity", directory: join(sqliteLimitDir, "agy") };
+    const { db, add } = antigravityFixture(agyRoot.directory, sqliteLimitDir);
+    db.exec("BEGIN");
+    for (let i = 0; i < 5000; i++) add(`id${i}`, { time: `2026-10-16 16:50:${String(i % 60).padStart(2, "0")}+00:00` });
+    db.exec("COMMIT");
+    scan = await scanSavedSessions([agyRoot], 6000);
+    assert.equal(scan.sessions.length, 5000);
+    assert.deepEqual(scan.unreadable, []);
+    add("newest", { time: "2026-10-17 00:00:00+00:00" });
+    db.close();
+    scan = await scanSavedSessions([agyRoot], 6000);
+    assert.equal(scan.sessions.length, 5000);
+    assert.equal(scan.sessions[0].id, "newest");
+    assert.deepEqual(scan.unreadable, ["antigravity"]);
+    passed++;
+    console.log("ok: SQLite history limits distinguish 5000 from 5001 rows");
+} finally { rmSync(sqliteLimitDir, { recursive: true, force: true }); }
+
+// Inject stat errors only into a separate bundled scanner.
+const statErrorDir = mkdtempSync(join(tmpdir(), "mhte-stat-errors-"));
+try {
+    const fsPromises = (await import("node:fs")).promises;
+    const originalStat = fsPromises.stat;
+    await build({ entryPoints: [join(projectRoot, "src", "savedSessions.ts")], outfile: join(outdir, "savedSessions.stat.test.mjs"), bundle: true, format: "esm", platform: "node", logLevel: "silent", plugins: [{ name: "stat-injection", setup(build) {
+        build.onResolve({ filter: /^node:fs\/promises$/ }, (args) => args.namespace === "stat-injection" ? undefined : ({ path: "fs", namespace: "stat-injection" }));
+        build.onLoad({ filter: /.*/, namespace: "stat-injection" }, () => ({ contents: 'import * as real from "node:fs/promises"; export const stat = (...args) => globalThis.__scanStat(...args); export const { open, opendir, readFile, realpath } = real;', resolveDir: projectRoot }));
+    } }] });
+    const { scanSavedSessions: scanWithStat } = await import(pathToFileURL(join(outdir, "savedSessions.stat.test.mjs")).href);
+    const piRoot = { harnessId: "pi", directory: join(statErrorDir, "pi") };
+    mkdirSync(piRoot.directory);
+    for (const id of ["good", "bad"]) writeFileSync(join(piRoot.directory, `${id}.jsonl`), JSON.stringify({ type: "session", id, cwd: statErrorDir }) + "\n");
+    const agyRoot = { harnessId: "antigravity", directory: join(statErrorDir, "agy") };
+    const fixture = antigravityFixture(agyRoot.directory, statErrorDir);
+    fixture.add("good"); fixture.add("bad"); fixture.db.close();
+    try {
+        for (const code of ["EACCES", "EIO", "ENOENT", "ENOTDIR"]) {
+            globalThis.__scanStat = async (file, ...args) => {
+                if (file === join(piRoot.directory, "bad.jsonl") || file === join(agyRoot.directory, "conversations", "bad.db")) {
+                    throw Object.assign(new Error(code), { code });
+                }
+                return originalStat.call(fsPromises, file, ...args);
+            };
+            for (const root of [piRoot, agyRoot]) {
+                const scan = await scanWithStat([root]);
+                assert.deepEqual(scan.sessions.map((session) => session.id), ["good"], `${root.harnessId}: readable session survives ${code}`);
+                assert.deepEqual(scan.unreadable, ["EACCES", "EIO"].includes(code) ? [root.harnessId] : [], `${root.harnessId}: ${code} classification`);
+            }
+        }
+    } finally { delete globalThis.__scanStat; }
+    passed++;
+    console.log("ok: JSONL and Antigravity stat errors distinguish missing files from I/O failures");
+} finally { rmSync(statErrorDir, { recursive: true, force: true }); }
 
 
 // Headless activation test.
@@ -1287,9 +1441,9 @@ module.exports = {
         },
         // shell-integration API family (1.93+): handlers are recorded so the
         // test can fire them, mirroring VS Code 1.93's relative-lookup world.
-        onDidChangeTerminalShellIntegration(handler) { calls.shellIntegrationHandlers.push(handler); return { dispose() {} }; },
-        onDidStartTerminalShellExecution(handler) { calls.executionStartHandlers.push(handler); return { dispose() {} }; },
-        onDidEndTerminalShellExecution(handler) { calls.executionEndHandlers.push(handler); return { dispose() {} }; },
+        onDidChangeTerminalShellIntegration(handler) { return subscribeTerminalEvent(calls.shellIntegrationHandlers, handler); },
+        onDidStartTerminalShellExecution(handler) { return subscribeTerminalEvent(calls.executionStartHandlers, handler); },
+        onDidEndTerminalShellExecution(handler) { return subscribeTerminalEvent(calls.executionEndHandlers, handler); },
     },
     workspace: { workspaceFolders: [], getWorkspaceFolder() { return undefined; }, getConfiguration,
         fs: { async delete(uri, options) { calls.fsDeletes.push({ file: uri.fsPath, options }); await require("node:fs/promises").rm(uri.fsPath, { recursive: options.recursive }); } },
@@ -1449,6 +1603,8 @@ try {
                     terminalIdentity: prelude + `export { terminalIdentityEnv } from ${realModule};
                         export async function restoreTerminalIdentity(terminal) { return terminal.identity; }
                         export async function ompTerminalSessionFile(terminal) { return terminal.sessionFile; }
+                        export async function codexTerminalSessionFiles(terminal) { return terminal.sessionFiles ?? []; }
+                        export async function windowsCodexSessionMatches(terminals) { return new Map(terminals.map((terminal) => [terminal, terminal.windowsMatch]).filter(([, match]) => match !== undefined)); }
                         export async function grokTerminalSessionId(terminal) { return terminal.sessionId; }`,
                     sessionTakeover: prelude + `import { releaseSessionOwners as release } from ${realModule};
                         export function releaseSessionOwners(expected, dependencies) {
@@ -1550,6 +1706,34 @@ try {
     }
     passed++;
     console.log("ok: OMP and Grok resumes confirm external takeover, await release, fail closed on unsafe owners and preserve local reuse");
+
+    for (const harnessId of ["ohMyPi", "codex"]) {
+        const harness = vscodeStub.__calls.views[0].provider.getChildren().find((agent) => agent.id === harnessId);
+        const previous = vscodeStub.__fixture.multiHarness[harnessId];
+        vscodeStub.__fixture.multiHarness[harnessId] = { executablePath: fakeCli, arguments: [] };
+        vscodeStub.__calls.takeover = { owners: () => [], inputs: [] };
+        const request = { sessionId: "old", sessionFile: join(activationDir, "old.jsonl"), sessionsRoot: join(activationDir, "sessions"), terminalName: "Old", cwd: activationDir, args: ["--resume", "old"] };
+        try {
+            for (const discovery of ["switched", "missing", "matching", ...(harnessId === "codex" ? ["windows-match", "windows-mismatch"] : [])]) {
+                const terminal = { name: "Old", identity: { harnessId, sessionId: discovery === "matching" || discovery === "windows-match" ? "initially-different" : "old" }, shown: 0, show() { this.shown++; } };
+                if (harnessId === "ohMyPi" && discovery !== "missing") terminal.sessionFile = discovery === "matching" ? request.sessionFile : join(activationDir, "other.jsonl");
+                if (harnessId === "codex" && discovery !== "missing") terminal.sessionFiles = [discovery === "matching" ? request.sessionFile : join(activationDir, "other.jsonl")];
+                if (discovery.startsWith("windows-")) terminal.windowsMatch = discovery === "windows-match";
+                vscodeStub.window.terminals = [terminal];
+                const before = vscodeStub.__calls.created.length;
+                await takeoverLauncher.openAgentTerminal(context, harness, undefined, request);
+                const match = discovery === "matching" || discovery === "windows-match";
+                assert.equal(terminal.shown, Number(match), `${harnessId}: ${discovery} focus`);
+                assert.equal(vscodeStub.__calls.created.length, before + Number(!match), `${harnessId}: ${discovery} creates only without a proven match`);
+            }
+        } finally {
+            vscodeStub.__fixture.multiHarness[harnessId] = previous;
+            delete vscodeStub.__calls.takeover;
+            vscodeStub.window.terminals = [];
+        }
+    }
+    passed++;
+    console.log("ok: OMP and Codex resume follows live identity instead of stale launch metadata");
 
     const registeredCommands = vscodeStub.__calls.commands.map((c) => c.id).sort();
     const registeredProfiles = vscodeStub.__calls.profiles.map((p) => p.id).sort();
@@ -1842,6 +2026,7 @@ try {
         const filterProject = terminalCommand("filterTerminalProject");
         const closeOthers = terminalCommand("closeOtherTerminals");
         assert.equal(sessionsView.options.manageCheckboxStateManually, true, "Open Terminals uses native manually managed checkboxes");
+        assert.equal(sessionsView.options.canSelectMany, true, "terminal rows allow local multi-selection");
         assert.ok(sessionsView.checkboxHandlers.length > 0, "native checkbox changes are handled");
         const projectA = join(activationDir, "terminal-project-a");
         const projectB = join(activationDir, "terminal-project-b");
@@ -1931,6 +2116,45 @@ try {
         assert.equal(rows().length, 5, "All Projects removes the project filter only");
         await pick(filterAgent, "agentId", undefined);
         assert.equal(rows().length, 6, "All Agents restores all recognized terminals without including foreign shells");
+        {
+            const contextClose = terminalCommand("closeContextTerminals");
+            const inlineClose = terminalCommand("closeSession");
+            const a = makeTerminal("Context duplicate");
+            const b = makeTerminal("Context duplicate");
+            const checkedTerminal = makeTerminal("Checked independently");
+            vscodeStub.window.terminals.push(a, b, checkedTerminal);
+            const aRow = rowFor(a), bRow = rowFor(b), checkedRow = rowFor(checkedTerminal);
+            await toggleMode();
+            await toggle(checkedRow);
+            a.failDispose = true;
+            const errorsBefore = vscodeStub.__calls.errors.length;
+            await inlineClose(aRow, [aRow, bRow]);
+            assert.equal(vscodeStub.__calls.errors.length, errorsBefore + 1, "inline dispose failure is reported");
+            assert.equal(rowFor(a), aRow, "failed inline disposal leaves the row available");
+            assert.equal(b.disposed, 0, "inline close ignores the multi-selection argument");
+            a.failDispose = false;
+            await inlineClose(aRow, [aRow, bRow]);
+            assert.equal(a.disposed, 1);
+            assert.equal(b.disposed, 0);
+            const warning = vscodeStub.window.showWarningMessage;
+            try {
+                vscodeStub.window.showWarningMessage = async (_message, _options, action) => action;
+                const warningsBefore = vscodeStub.__calls.warnings.length;
+                await contextClose(bRow, [{ ...bRow }, { terminal: foreignShell }, aRow]);
+                assert.equal(b.disposed, 0, "invalid and stale context rows are ignored even when the first argument is valid");
+                assert.equal(vscodeStub.__calls.warnings.length, warningsBefore);
+                const c = makeTerminal("Context duplicate");
+                vscodeStub.window.terminals.push(c);
+                const cRow = rowFor(c);
+                await contextClose(bRow, [bRow, cRow, bRow, { ...bRow }]);
+                assert.equal(b.disposed, 1);
+                assert.equal(c.disposed, 1, "context command closes each distinct valid selected row");
+                assert.equal(checked(checkedRow), 1, "context selection does not replace checkbox selection");
+                await closeSelected();
+                assert.equal(checkedTerminal.disposed, 1);
+                assert.equal(checked(rowFor(keeper)), undefined, "successful bulk close exits selection mode");
+            } finally { vscodeStub.window.showWarningMessage = warning; await cancel(); }
+        }
 
         await toggleMode();
         await toggle(rowFor(sibling));
@@ -2201,12 +2425,13 @@ try {
                 assert.equal(vscodeStub.__calls.created.length, before + 1, `${harnessId}: concurrent resumes create one terminal`);
                 const terminal = vscodeStub.window.terminals[0];
                 await launch();
-                assert.equal(vscodeStub.__calls.created.length, before + 1, `${harnessId}: subsequent resume focuses the existing terminal`);
+                const uncertain = harnessId === "ohMyPi" || harnessId === "codex";
+                assert.equal(vscodeStub.__calls.created.length, before + (uncertain ? 2 : 1), `${harnessId}: subsequent resume ${uncertain ? "does not reuse an unverified terminal" : "focuses the existing terminal"}`);
                 await launch({ ...saved, sessionId: "different-session", sessionFile: `${savedFile}.other` });
-                assert.equal(vscodeStub.__calls.created.length, before + 2, `${harnessId}: different sessions with the same title remain independent`);
+                assert.equal(vscodeStub.__calls.created.length, before + (uncertain ? 3 : 2), `${harnessId}: different sessions with the same title remain independent`);
                 terminal.exitStatus = { code: 0 };
                 await launch();
-                assert.equal(vscodeStub.__calls.created.length, before + 3, `${harnessId}: closed sessions can reopen`);
+                assert.equal(vscodeStub.__calls.created.length, before + (uncertain ? 4 : 3), `${harnessId}: closed sessions can reopen`);
                 vscodeStub.window.terminals = [];
                 const create = vscodeStub.window.createTerminal;
                 vscodeStub.window.createTerminal = () => { throw new Error("terminal unavailable"); };
@@ -2216,7 +2441,7 @@ try {
                     vscodeStub.window.createTerminal = create;
                 }
                 await launch();
-                assert.equal(vscodeStub.__calls.created.length, before + 4, `${harnessId}: failed concurrent resumes allow retry`);
+                assert.equal(vscodeStub.__calls.created.length, before + (uncertain ? 5 : 4), `${harnessId}: failed concurrent resumes allow retry`);
             } finally {
                 vscodeStub.__fixture.multiHarness[harnessId] = previousConfig;
             }
@@ -2326,6 +2551,9 @@ try {
     openCodeDb.exec("CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT, title TEXT, time_updated INTEGER, parent_id TEXT, time_archived INTEGER)");
     openCodeDb.exec("CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT); CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT)");
     openCodeDb.prepare("INSERT INTO session VALUES (?, ?, ?, ?, NULL, NULL)").run("ses_recorded", projectDirectory, "OpenCode saved session", Date.now());
+    for (const [id, parent] of [["ses_child", "ses_recorded"], ["ses_grandchild", "ses_child"], ["ses_unrelated", null], ["ses_unrelated_child", "ses_unrelated"]]) {
+        openCodeDb.prepare("INSERT INTO session VALUES (?, ?, ?, ?, ?, NULL)").run(id, projectDirectory, id, Date.now() - 1000, parent);
+    }
     openCodeDb.close();
     await selectSessionAgent.handler("openCode");
     assert.equal(savedView.message, undefined, "OpenCode is a supported saved-session provider");
@@ -2357,18 +2585,54 @@ try {
     const openCodeTerminal = liveOpenCode.terminal;
     openCodeTerminal.disposed = 0;
     openCodeTerminal.dispose = function () { this.disposed += 1; };
-    vscodeStub.window.terminals = [retainedOpenCode.terminal, openCodeTerminal];
+    const familyTerminal = (id) => ({
+        name: "OpenCode same title", disposed: 0,
+        creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "openCode", launchMode: "direct", sessionId: id }) } },
+        dispose() { this.disposed++; },
+    });
+    const childTerminal = familyTerminal("ses_child");
+    const grandchildTerminal = familyTerminal("ses_grandchild");
+    const unrelatedTerminal = familyTerminal("ses_unrelated_child");
+    const exitedTerminal = familyTerminal("ses_recorded");
+    exitedTerminal.exitStatus = { code: 1 };
+    const transitioningTerminal = familyTerminal("ses_recorded");
+    Object.defineProperty(transitioningTerminal, "exitStatus", { get() { return existsSync(join(openCodeStore, "opencode.db")) && familyDeleted() ? { code: 1 } : undefined; } });
+    function familyDeleted() {
+        const db = new DatabaseSync(join(openCodeStore, "opencode.db"));
+        try { return !db.prepare("SELECT id FROM session WHERE id = ?").get("ses_recorded"); } finally { db.close(); }
+    }
+    const failingFamilyTerminal = familyTerminal("ses_child");
+    failingFamilyTerminal.dispose = () => { throw new Error("dispose failed"); };
+    vscodeStub.window.terminals = [retainedOpenCode.terminal, failingFamilyTerminal, childTerminal, grandchildTerminal, unrelatedTerminal, exitedTerminal, transitioningTerminal, openCodeTerminal];
     const openCodeDeletesBefore = vscodeStub.__calls.fsDeletes.length;
     await openCodeDelete({ harnessId: "openCode", id: "ses_recorded" });
     assert.equal(openCodeTerminal.disposed, 0, "canceling permanent deletion preserves the OpenCode terminal");
     assert.equal((await savedSessionRows()).some((row) => row.id === "ses_recorded"), true, "canceling preserves the SQLite session");
     assert.equal(vscodeStub.__calls.warnings.at(-1).options.modal, true);
+    const guardedOpenCode = new DatabaseSync(join(openCodeStore, "opencode.db"));
+    guardedOpenCode.exec("CREATE TRIGGER reject_family_delete BEFORE DELETE ON session BEGIN SELECT RAISE(ABORT, 'blocked'); END");
+    guardedOpenCode.close();
+    vscodeStub.__calls.warningResults.push("Delete Permanently");
+    await openCodeDelete({ harnessId: "openCode", id: "ses_recorded" });
+    assert.ok((await savedSessionRows()).some((row) => row.id === "ses_recorded"), "failed database deletion preserves the record");
+    assert.equal(openCodeTerminal.disposed, 0, "failed database deletion keeps the parent terminal open");
+    assert.equal(childTerminal.disposed, 0, "failed database deletion keeps descendant terminals open");
+    const unguardedOpenCode = new DatabaseSync(join(openCodeStore, "opencode.db"));
+    unguardedOpenCode.exec("DROP TRIGGER reject_family_delete");
+    unguardedOpenCode.close();
+    const errorsBeforeClose = vscodeStub.__calls.errors.length;
     vscodeStub.__calls.warningResults.push("Delete Permanently");
     await openCodeDelete({ harnessId: "openCode", id: "ses_recorded" });
     assert.equal(vscodeStub.__calls.fsDeletes.length, openCodeDeletesBefore, "OpenCode deletion must never trash or unlink the shared database");
     assert.ok(existsSync(join(openCodeStore, "opencode.db")));
     assert.equal((await savedSessionRows()).some((row) => row.id === "ses_recorded"), false, "explicit approval deletes the SQLite session");
     assert.equal(openCodeTerminal.disposed, 1, "successful permanent deletion closes its linked terminal");
+    assert.equal(childTerminal.disposed, 1, "deleting an OpenCode parent closes its child terminal despite another dispose failure");
+    assert.equal(grandchildTerminal.disposed, 1, "deleting an OpenCode parent closes descendant terminals");
+    assert.equal(unrelatedTerminal.disposed, 0, "unrelated OpenCode family terminals stay open");
+    assert.equal(exitedTerminal.disposed, 0, "VS Code retained exited tabs stay open");
+    assert.equal(transitioningTerminal.disposed, 0, "a terminal exiting after matching but before closure stays open");
+    assert.ok(vscodeStub.__calls.errors.slice(errorsBeforeClose).some((message) => message.includes(englishStrings["savedSessions.closeFailed"])), "terminal dispose failure is reported");
     assert.equal(retainedOpenCode.terminal.disposed, 0, "deleting a saved conversation preserves its retained error tab");
     assert.ok(existsSync(retainedExitFile), "deletion leaves retained-terminal exit metadata intact");
     for (const handler of vscodeStub.__calls.terminalCloseHandlers) handler(retainedOpenCode.terminal);
@@ -2519,6 +2783,56 @@ try {
     writeFileSync(outsideAgentFile, JSON.stringify({ type: "session_meta", payload: { id: "second", cwd: projectDirectory } }) + "\n");
     refreshSaved.handler();
     const getRow = async (id) => (await savedSessionRows()).find((row) => row.id === id);
+    assert.equal(savedView.options.canSelectMany, true, "saved history allows local multi-selection");
+    {
+        const contextDelete = command("deleteContextSessions");
+        const contextFiles = ["context-a", "context-b", "context-c"].map((id) => join(primeSessions, `${id}.jsonl`));
+        for (const [index, file] of contextFiles.entries()) writeSession(file, `context-${"abc"[index]}`, "Same title");
+        refreshSaved.handler();
+        const [a, b, c] = await Promise.all([getRow("context-a"), getRow("context-b"), getRow("context-c")]);
+        await selectionMode();
+        await toggleSession(c);
+        const day = (await savedView.provider.getChildren())[0];
+        const warningsBefore = vscodeStub.__calls.warnings.length;
+        await contextDelete(a, [day, { notice: true }, { harnessId: "primeAgent", id: "missing" }]);
+        assert.equal(vscodeStub.__calls.warnings.length, warningsBefore, "invalid context items do not prompt or fall back to the first row");
+        vscodeStub.__calls.warningResults.push("Move to Trash");
+        await deleteOne(a, [a, b]);
+        assert.ok(!existsSync(contextFiles[0]) && existsSync(contextFiles[1]), "inline deletion ignores local multi-selection");
+        assert.equal(savedView.provider.getTreeItem(await getRow("context-c")).checkboxState, 1, "inline deletion preserves unrelated checkbox selection");
+        writeSession(contextFiles[0], "context-a", "Same title");
+        refreshSaved.handler();
+        const currentA = await getRow("context-a"), currentB = await getRow("context-b");
+        vscodeStub.__calls.warningResults.push("Move to Trash");
+        await contextDelete(currentA, [currentA, currentB, currentA, day, { notice: true }]);
+        assert.ok(!existsSync(contextFiles[0]) && !existsSync(contextFiles[1]), "context deletion handles both distinct same-titled records");
+        assert.ok(existsSync(contextFiles[2]));
+        assert.equal(savedView.provider.getTreeItem(await getRow("context-c")).checkboxState, 1, "context rows do not replace checkbox selection");
+        await cancelSelection();
+        rmSync(contextFiles[2]);
+        refreshSaved.handler();
+    }
+    {
+        const limitFiles = Array.from({ length: 101 }, (_, index) => join(primeSessions, `limit-${index}.jsonl`));
+        for (const [index, file] of limitFiles.entries()) writeSession(file, `limit-${index}`, "Listing limit");
+        refreshSaved.handler();
+        const listed = await savedSessionRows();
+        assert.equal(listed.length, 100, "history lists at most 100 sessions");
+        const listedIds = new Set(listed.map((row) => row.id));
+        const unlisted = limitFiles.filter((_, index) => !listedIds.has(`limit-${index}`));
+        assert.ok(unlisted.length >= 1);
+        await selectionMode();
+        await selectAll();
+        assert.equal((await savedSessionRows()).filter((row) => savedView.provider.getTreeItem(row).checkboxState === 1).length, 100);
+        vscodeStub.__calls.warningResults.push("Move to Trash");
+        await deleteSelected();
+        assert.ok(unlisted.every((file) => existsSync(file)), "Select All cannot delete records outside the displayed page");
+        assert.ok(existsSync(outsideProjectFile) && existsSync(outsideAgentFile), "listing-limited deletion preserves foreign records");
+        for (const file of limitFiles) if (existsSync(file)) rmSync(file);
+        if (!existsSync(savedFile)) writeSession(savedFile, "recorded-prime");
+        for (const [index, file] of extraFiles.entries()) if (!existsSync(file)) writeSession(file, ["second", "third"][index], ["Second conversation", "Third conversation"][index]);
+        refreshSaved.handler();
+    }
     const deletionTerminal = (id, harnessId = "primeAgent", launchMode = "direct") => ({
         name: "same editable title",
         creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId, launchMode, sessionId: id }) } },
@@ -2594,11 +2908,13 @@ try {
     assert.ok(!existsSync(extraFiles[0]));
     assert.equal(secondTerminal.disposed, 1, "successful permanent deletion closes the linked terminal");
     assert.equal(vscodeStub.__calls.fsDeletes.at(-1).options.useTrash, false, "permanent deletion requires the separate explicit approval");
+    assert.equal(savedView.provider.getTreeItem({ harnessId: "primeAgent", id: "second", title: "second", cwd: projectDirectory, file: extraFiles[0], modified: 0 }).checkboxState, undefined, "successful bulk deletion exits selection mode");
     assert.ok(existsSync(outsideProjectFile) && existsSync(outsideAgentFile), "native Select All and bulk deletion preserve other projects and agents");
     rmSync(outsideProjectFile);
     rmSync(outsideAgentFile);
     writeSession(extraFiles[0], "second");
     refreshSaved.handler();
+    await selectionMode();
     await selectAll();
     const failedTerminal = deletionTerminal("second");
     vscodeStub.window.terminals = [failedTerminal];
@@ -2646,11 +2962,12 @@ try {
         vscodeStub.window.terminals = [direct, shell, unrelated];
         const warningsBefore = vscodeStub.__calls.warnings.length;
         vscodeStub.__calls.warningResults.push("Move to Trash");
-        if (harnessId === "codex") direct.dispose = () => { throw new Error("terminal close failed"); };
+        if (harnessId === "claudeCode") direct.dispose = () => { throw new Error("terminal close failed"); };
         await deleteOne({ harnessId, id });
         assert.ok(!existsSync(file), `${harnessId} deletes its session record`);
-        assert.equal(shell.disposed, 1, `${harnessId} closes linked shell terminals even if another close throws`);
-        if (harnessId !== "codex") assert.equal(direct.disposed, 1, `${harnessId} closes linked direct terminals`);
+        const liveProofRequired = harnessId === "codex" || harnessId === "ohMyPi";
+        assert.equal(shell.disposed, liveProofRequired ? 0 : 1, `${harnessId}: only verified linked shell terminals close`);
+        if (harnessId !== "claudeCode") assert.equal(direct.disposed, liveProofRequired ? 0 : 1, `${harnessId}: only verified linked direct terminals close`);
         assert.equal(unrelated.disposed, 0);
         assert.equal(vscodeStub.__calls.warnings.length, warningsBefore + 1, "terminal close failures must not prompt for permanent deletion");
         assert.ok(!(await savedSessionRows()).some((row) => row.id === id));
@@ -2681,6 +2998,173 @@ try {
     assert.equal(existsSync(unrelatedFile), true, "deletion preserves unrelated sessions");
     assert.equal(raceTerminal.disposed, 1);
     rmSync(unrelatedFile);
+    {
+        const files = ["scope-first", "scope-second"].map((id) => join(primeSessions, `${id}.jsonl`));
+        const ids = ["scope-first", "scope-second"];
+        const contextDelete = command("deleteContextSessions");
+        const warning = vscodeStub.window.showWarningMessage;
+        const diskDelete = vscodeStub.workspace.fs.delete;
+        const originalRoot = vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory;
+        try {
+            for (const [index, file] of files.entries()) writeSession(file, ids[index]);
+            refreshSaved.handler();
+            const terminals = ids.map((id) => deletionTerminal(id));
+            vscodeStub.window.terminals = terminals;
+            let resolveModal, modalOpened;
+            const opened = new Promise((resolve) => { modalOpened = resolve; });
+            vscodeStub.window.showWarningMessage = (_message, _options, action) => new Promise((resolve) => {
+                resolveModal = () => resolve(action); modalOpened();
+            });
+            const pending = contextDelete(await getRow(ids[0]), await Promise.all(ids.map(getRow)));
+            await opened;
+            await selectSessionAgent.handler("codex");
+            resolveModal();
+            await pending;
+            assert.ok(files.every(existsSync), "agent change during first confirmation preserves all records");
+            assert.ok(terminals.every((terminal) => terminal.disposed === 0));
+            await selectSessionAgent.handler("primeAgent");
+            refreshSaved.handler();
+            let fallbackOpened;
+            const fallback = new Promise((resolve) => { fallbackOpened = resolve; });
+            let promptCount = 0;
+            vscodeStub.window.showWarningMessage = async (_message, _options, action) => {
+                if (++promptCount === 1) return action;
+                return new Promise((resolve) => { resolveModal = () => resolve(action); fallbackOpened(); });
+            };
+            let attempted = 0;
+            vscodeStub.workspace.fs.delete = async (uri, options) => {
+                if (options.useTrash && ++attempted === 2) throw new Error("trash unavailable");
+                return diskDelete(uri, options);
+            };
+            const partial = contextDelete(await getRow(ids[0]), await Promise.all(ids.map(getRow)));
+            await fallback;
+            const remaining = files.filter(existsSync);
+            assert.equal(remaining.length, 1, "one trash deletion succeeds before fallback");
+            vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory = join(activationDir, "changed-store");
+            resolveModal();
+            await partial;
+            assert.ok(existsSync(remaining[0]), "store change during permanent confirmation preserves remaining record");
+            assert.equal(terminals.filter((terminal) => terminal.disposed === 1).length, 1, "only the successfully deleted record closes its terminal");
+        } finally {
+            vscodeStub.window.showWarningMessage = warning;
+            vscodeStub.workspace.fs.delete = diskDelete;
+            vscodeStub.__fixture.multiHarness.primeAgent.sessionDirectory = originalRoot;
+            for (const file of files) if (existsSync(file)) rmSync(file);
+            vscodeStub.window.terminals = [];
+            refreshSaved.handler();
+        }
+    }
+    {
+        const ids = ["resume-race-a", "resume-race-b"];
+        const files = ids.map((id) => join(primeSessions, `${id}.jsonl`));
+        const fsPromises = requireFrom("node:fs/promises");
+        const originalStat = fsPromises.stat;
+        const oldMode = vscodeStub.__fixture.multiHarness.launchMode;
+        const createTerminal = vscodeStub.window.createTerminal;
+        try {
+            for (const [index, file] of files.entries()) writeSession(file, ids[index]);
+            refreshSaved.handler();
+            const rows = await Promise.all(ids.map(getRow));
+            await selectionMode();
+            await toggleSession(rows[0]);
+            let releaseStat, statReached;
+            const reached = new Promise((resolve) => { statReached = resolve; });
+            fsPromises.stat = async (path, ...args) => {
+                if (path === files[0]) {
+                    await new Promise((resolve) => { releaseStat = resolve; statReached(); });
+                }
+                return originalStat(path, ...args);
+            };
+            const pending = resume.handler(rows[0]);
+            await reached;
+            const warnings = vscodeStub.__calls.warnings.length;
+            await Promise.all([deleteOne(rows[0]), deleteSelected(), command("deleteContextSessions")(rows[0], rows)]);
+            assert.equal(vscodeStub.__calls.warnings.length, warnings, "all delete surfaces return without prompting while resume awaits stat");
+            assert.ok(files.every(existsSync));
+            fsPromises.stat = originalStat;
+            releaseStat();
+            await pending;
+            vscodeStub.window.terminals = [];
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await deleteOne(rows[0]);
+            assert.ok(!existsSync(files[0]), "deletion becomes available after resume completes");
+            writeSession(files[0], ids[0]);
+            refreshSaved.handler();
+            const shellContext = { ...context, subscriptions: [] };
+            extension.activate(shellContext);
+            const shellCommand = (id) => vscodeStub.__calls.commands.filter((entry) => entry.id === `multiHarness.${id}`).at(-1).handler;
+            await shellCommand("selectSessionAgent")("primeAgent");
+            await shellCommand("toggleSessionSelectionMode")();
+            await shellCommand("toggleSessionSelection")(rows[0]);
+            vscodeStub.__fixture.multiHarness.launchMode = "shell";
+            vscodeStub.window.createTerminal = (options) => {
+                const terminal = createTerminal(options);
+                vscodeStub.window.terminals.push(terminal);
+                return terminal;
+            };
+            vscodeStub.window.terminals = [];
+            const before = vscodeStub.__calls.created.length;
+            const first = shellCommand("resumeSession")({ harnessId: "primeAgent", id: ids[0] });
+            const duplicate = shellCommand("resumeSession")({ harnessId: "primeAgent", id: ids[0] });
+            const different = shellCommand("resumeSession")({ harnessId: "primeAgent", id: ids[1] });
+            while (vscodeStub.__calls.created.length < before + 2) await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(vscodeStub.__calls.created.length, before + 2, "identical resumes share a launch while distinct sessions launch independently");
+            const warningsDuringLaunch = vscodeStub.__calls.warnings.length;
+            await Promise.all([shellCommand("deleteSession")(rows[0]), shellCommand("deleteSelectedSessions")(), shellCommand("deleteContextSessions")(rows[0], rows)]);
+            assert.equal(vscodeStub.__calls.warnings.length, warningsDuringLaunch, "deletion remains blocked while shell integration is pending");
+            assert.ok(files.every(existsSync));
+            for (const { terminal } of vscodeStub.__calls.created.slice(before)) {
+                const event = { terminal, shellIntegration: { executeCommand() { return {}; } } };
+                vscodeStub.__calls.shellIntegrationHandlers.forEach((handler) => handler(event));
+            }
+            await Promise.all([first, duplicate, different]);
+            const disposedBefore = vscodeStub.__calls.statusDisposed;
+            for (const subscription of shellContext.subscriptions) subscription.dispose();
+            vscodeStub.__calls.statusDisposed = disposedBefore;
+            vscodeStub.window.terminals = [];
+            vscodeStub.__calls.warningResults.push("Move to Trash");
+            await deleteOne({ harnessId: "primeAgent", id: ids[1] });
+            assert.ok(!existsSync(files[1]), "deletion resumes after pending launches finish");
+        } finally {
+            fsPromises.stat = originalStat;
+            vscodeStub.__fixture.multiHarness.launchMode = oldMode;
+            vscodeStub.window.createTerminal = createTerminal;
+            vscodeStub.window.terminals = [];
+            await cancelSelection();
+            for (const file of files) if (existsSync(file)) rmSync(file);
+            refreshSaved.handler();
+        }
+    }
+    {
+        const file = join(primeSessions, "dispose-race.jsonl");
+        writeSession(file, "dispose-race");
+        const isolated = { ...context, subscriptions: [] };
+        const warning = vscodeStub.window.showWarningMessage;
+        const terminal = deletionTerminal("dispose-race");
+        try {
+            extension.activate(isolated);
+            const latest = (id) => vscodeStub.__calls.commands.filter((entry) => entry.id === `multiHarness.${id}`).at(-1).handler;
+            await latest("selectSessionAgent")("primeAgent");
+            vscodeStub.window.terminals = [terminal];
+            let resolveModal, openedModal;
+            const opened = new Promise((resolve) => { openedModal = resolve; });
+            vscodeStub.window.showWarningMessage = (_message, _options, action) => new Promise((resolve) => {
+                resolveModal = () => resolve(action); openedModal();
+            });
+            const pending = latest("deleteSession")({ harnessId: "primeAgent", id: "dispose-race" });
+            await opened;
+            for (const subscription of isolated.subscriptions) subscription.dispose();
+            resolveModal();
+            await pending;
+            assert.ok(existsSync(file), "disposing the view during confirmation prevents deletion");
+            assert.equal(terminal.disposed, 0, "disposing the view preserves linked terminals");
+        } finally {
+            vscodeStub.window.showWarningMessage = warning;
+            if (existsSync(file)) rmSync(file);
+            vscodeStub.window.terminals = [];
+            refreshSaved.handler();
+        }
+    }
     writeSession(savedFile, "recorded-prime");
     await cancelSelection();
     vscodeStub.window.terminals = [];
@@ -2738,6 +3222,87 @@ try {
     assert.equal(workspaceProfile.options.isTransient, false, "profile terminals allow persistence across reloads");
     assert.deepEqual(workspaceProfile.options.location, { viewColumn: vscodeStub.ViewColumn.Active }, "terminal profiles use the active editor group");
     assert.equal(launcherTarget(workspaceProfile.options).executable, launcherTarget(workspaceLaunch).executable);
+    {
+        const scoped = vscodeStub.__scopedFixtures.get(folderB.uri.fsPath).multiHarness;
+        const originalMode = vscodeStub.__fixture.multiHarness.launchMode;
+        const originalQuickPick = vscodeStub.window.showQuickPick;
+        try {
+            for (const agent of agents) {
+                const previous = scoped[agent.id];
+                scoped[agent.id] = { executablePath: fakeCli, arguments: ["--matrix", agent.id] };
+                const command = vscodeStub.__calls.commands.find((entry) => entry.id === agent.commandId);
+                const profile = vscodeStub.__calls.profiles.find((entry) => entry.id === `multiHarness.${agent.id}`);
+                vscodeStub.__fixture.multiHarness.launchMode = "direct";
+                const count = vscodeStub.__calls.created.length;
+                await command.handler();
+                assert.equal(vscodeStub.__calls.created.length, count + 1, `${agent.id}: command creates terminal`);
+                const options = vscodeStub.__calls.created.at(-1).options;
+                assert.equal(options.cwd, folderB.uri.fsPath);
+                assert.deepEqual(launcherTarget(options), { executable: fakeCli, args: ["--matrix", agent.id] });
+                vscodeStub.__fixture.multiHarness.launchMode = "shell";
+                const supplied = await profile.provider.provideTerminalProfile({});
+                assert.equal(supplied.options.cwd, folderB.uri.fsPath);
+                assert.deepEqual(launcherTarget(supplied.options), { executable: fakeCli, args: ["--matrix", agent.id] }, `${agent.id}: profile remains direct`);
+                scoped[agent.id] = { executablePath: join(activationDir, "missing-matrix"), arguments: [] };
+                assert.equal(await profile.provider.provideTerminalProfile({}), undefined, `${agent.id}: missing executable returns no profile`);
+                if (previous === undefined) delete scoped[agent.id]; else scoped[agent.id] = previous;
+            }
+            const dispatched = vscodeStub.__calls.executed.length;
+            vscodeStub.window.showQuickPick = async () => undefined;
+            await vscodeStub.__calls.commands.find((entry) => entry.id === "multiHarness.openAgentPicker").handler();
+            assert.equal(vscodeStub.__calls.executed.length, dispatched, "cancelled picker dispatches nothing");
+            const selectedBefore = savedState.get("workspace:selectedSessionAgent");
+            await selectSessionAgent.handler("invalid-agent-id");
+            assert.equal(savedState.get("workspace:selectedSessionAgent"), selectedBefore, "invalid agent ID does not change selection");
+        } finally { vscodeStub.__fixture.multiHarness.launchMode = originalMode; vscodeStub.window.showQuickPick = originalQuickPick; }
+        passed++;
+        console.log("ok: all fifteen commands and direct profiles use resource-scoped settings");
+    }
+    {
+        const previousLanguage = vscodeStub.env.language;
+        const previousNotify = vscodeStub.__fixture.multiHarness.notifyOnExit;
+        const previousPick = vscodeStub.window.showQuickPick;
+        const previousError = vscodeStub.window.showErrorMessage;
+        try {
+            for (const language of ["en", "tr"]) {
+                vscodeStub.env.language = language;
+                const strings = JSON.parse(readFileSync(join(projectRoot, language === "tr" ? "package.nls.tr.json" : "package.nls.json"), "utf8"));
+                vscodeStub.window.showQuickPick = async (_items, options) => { assert.equal(options.placeHolder, strings["command.openAgentPicker.placeholder"]); return undefined; };
+                await vscodeStub.__calls.commands.find((entry) => entry.id === "multiHarness.openAgentPicker").handler();
+                let errorArgs;
+                vscodeStub.window.showErrorMessage = async (...args) => { errorArgs = args; };
+                const previous = scopedMissingFixture();
+                await vscodeStub.__calls.commands.find((entry) => entry.id === "multiHarness.openPi").handler();
+                previous();
+                assert.ok(errorArgs[0].includes(strings["terminal.missingExecutable"].split("{")[0]));
+                assert.ok(errorArgs.includes(strings["terminal.openSettings"]));
+                const terminal = { name: "Renamed", creationOptions: { env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId: "primeAgent", launchMode: "direct" }) } }, exitStatus: { code: 7 } };
+                const fire = async (target) => { for (const handler of [...vscodeStub.__calls.terminalCloseHandlers]) handler(target); await new Promise((resolve) => setImmediate(resolve)); };
+                let before = vscodeStub.__calls.infos.length;
+                vscodeStub.__fixture.multiHarness.notifyOnExit = false;
+                await fire(terminal);
+                assert.equal(vscodeStub.__calls.infos.length, before);
+                vscodeStub.__fixture.multiHarness.notifyOnExit = true;
+                await fire({ name: "unrecognized", exitStatus: { code: 0 } });
+                await fire({ ...terminal, exitStatus: undefined });
+                assert.equal(vscodeStub.__calls.infos.length, before);
+                await fire(terminal);
+                assert.equal(vscodeStub.__calls.infos.at(-1), strings["terminal.exitedWithCode"].replace("{displayName}", "Prime Agent").replace("{code}", "7"));
+                terminal.exitStatus = { code: undefined };
+                await fire(terminal);
+                assert.equal(vscodeStub.__calls.infos.at(-1), strings["terminal.exited"].replace("{displayName}", "Prime Agent"));
+            }
+        } finally { vscodeStub.env.language = previousLanguage; vscodeStub.__fixture.multiHarness.notifyOnExit = previousNotify; vscodeStub.window.showQuickPick = previousPick; vscodeStub.window.showErrorMessage = previousError; }
+        function scopedMissingFixture() {
+            const scoped = vscodeStub.__scopedFixtures.get(folderB.uri.fsPath).multiHarness;
+            const previous = scoped.pi;
+            scoped.pi = { executablePath: join(activationDir, "missing-localized"), arguments: [] };
+            return () => { if (previous === undefined) delete scoped.pi; else scoped.pi = previous; };
+        }
+        passed++;
+        console.log("ok: runtime picker, missing executable and exit notifications use English and Turkish strings");
+        await selectSessionAgent.handler("ohMyPi");
+    }
     vscodeStub.workspace.workspaceFolders = [folderA];
     vscodeStub.__calls.workspaceFolderHandlers.forEach((handler) => handler({}));
     assert.ok(savedView.description.includes("project-a"), "removed folders are no longer retained");
@@ -2835,6 +3400,8 @@ try {
     const created = vscodeStub.__calls.created.at(-1)?.options;
     assert.equal(launcherTarget(created).executable, fakeCli, "createTerminal must use the configured executablePath");
     assert.deepEqual(launcherTarget(created).args, ["--continue"], "createTerminal must use the configured arguments");
+    assert.equal(created.cwd, homedir(), "commands fall back to home without workspace folders");
+    assert.equal((await ompProfile.provider.provideTerminalProfile({})).options.cwd, homedir(), "profiles fall back to home without workspace folders");
     assert.deepEqual(created?.location, { viewColumn: vscodeStub.ViewColumn.Active }, "direct launches use the active editor group");
     passed += 1;
     console.log("ok: configured executablePath and arguments are read with relative keys and reach createTerminal");
@@ -3044,6 +3611,52 @@ try {
     assert.ok(statusItem.text.endsWith("(exit ?)"), `unknown exit code renders as ? (saw ${statusItem.text})`);
     passed += 1;
     console.log("ok: start/end shell executions drive the status-bar text (exit code included)");
+    // Exercise an independent status instance with controlled hide timers.
+    await build({ entryPoints: [join(projectRoot, "src", "status.ts")], outfile: join(activationDir, "status.regression.cjs"), bundle: true, format: "cjs", platform: "node", external: ["vscode"], logLevel: "silent" });
+    {
+        const { AgentStatus } = requireFrom(join(activationDir, "status.regression.cjs"));
+        const set = globalThis.setTimeout, clear = globalThis.clearTimeout;
+        const timers = [];
+        globalThis.setTimeout = (callback, delay) => { const timer = { callback, delay, cleared: false }; timers.push(timer); return timer; };
+        globalThis.clearTimeout = (timer) => { timer.cleared = true; };
+        const status = new AgentStatus();
+        const a = {}, b = {}, e1 = {}, e2 = {}, e3 = {};
+        const startCount = vscodeStub.__calls.executionStartHandlers.length, endCount = vscodeStub.__calls.executionEndHandlers.length;
+        try {
+            status.track(a, { displayName: "First" }); status.track(b, { displayName: "Second" });
+            const item = vscodeStub.__calls.statusItems.at(-1);
+            const start = (terminal, execution) => vscodeStub.__calls.executionStartHandlers.at(-1)({ terminal, execution });
+            const end = (terminal, execution, exitCode) => vscodeStub.__calls.executionEndHandlers.at(-1)({ terminal, execution, exitCode });
+            start(a, e1); start(b, e2);
+            assert.equal(item.text, "$(sync~spin) Second");
+            end(b, e2, 1);
+            assert.equal(item.text, "$(sync~spin) First", "older active execution survives newer completion");
+            end(a, e1, 0);
+            assert.ok(item.text.includes("First") && item.text.endsWith("(exit 0)"));
+            assert.equal(timers.at(-1).delay, 30000);
+            const firstTimer = timers.at(-1);
+            start(b, e3);
+            assert.equal(firstTimer.cleared, true);
+            start(a, e1);
+            status.onTerminalClosed(a);
+            assert.equal(item.text, "$(sync~spin) Second", "closing one terminal retains the other execution");
+            end(b, e3, 2);
+            const secondTimer = timers.at(-1);
+            assert.equal(secondTimer.delay, 30000);
+            status.onTerminalClosed(b);
+            assert.equal(secondTimer.cleared, true);
+            assert.equal(item.visible, false, "closing the finished result owner hides the item");
+            status.track(a, { displayName: "First" });
+            start(a, e1); end(a, e1, 0);
+            const disposeTimer = timers.at(-1);
+            status.dispose();
+            assert.equal(disposeTimer.cleared, true);
+            assert.equal(vscodeStub.__calls.executionStartHandlers.length, startCount, "status start subscriptions restored");
+            assert.equal(vscodeStub.__calls.executionEndHandlers.length, endCount, "status end subscriptions restored");
+        } finally { status.dispose(); globalThis.setTimeout = set; globalThis.clearTimeout = clear; vscodeStub.__calls.statusDisposed--; }
+    }
+    passed++;
+    console.log("ok: overlapping status executions recalculate on finish, close and dispose");
 
     // Saved resumes stay single-flight for the entire integration wait, and
     // expose their saved title before either launch path has run.
@@ -3147,6 +3760,80 @@ try {
         vscodeStub.__fixture.multiHarness.launchMode = savedShellMode;
     }
 
+    // Identical IDs in different stores must not share a pending shell launch.
+    {
+        const previousMode = vscodeStub.__fixture.multiHarness.launchMode;
+        const previousConfigs = [vscodeStub.__fixture.multiHarness.ohMyPi, vscodeStub.__fixture.multiHarness.codex];
+        const set = globalThis.setTimeout, clear = globalThis.clearTimeout;
+        const timers = [];
+        globalThis.setTimeout = (callback, delay, ...args) => {
+            if (delay !== 10000) return set(callback, delay, ...args);
+            const timer = { callback }; timers.push(timer); return timer;
+        };
+        globalThis.clearTimeout = (timer) => { if (!timers.includes(timer)) clear(timer); };
+        try {
+            vscodeStub.__calls.takeover = { owners: () => [], inputs: [] };
+            vscodeStub.__fixture.multiHarness.launchMode = "shell";
+            for (const id of ["ohMyPi", "codex"]) {
+                vscodeStub.__fixture.multiHarness[id] = { executablePath: fakeCli, arguments: [] };
+                vscodeStub.window.terminals = [];
+                const harness = agents.find((agent) => agent.id === id);
+                const before = vscodeStub.__calls.created.length;
+                const request = (name) => ({ sessionId: "shared-id", sessionFile: join(activationDir, name, "shared.jsonl"), sessionsRoot: join(activationDir, name), terminalName: name, cwd: projectDirectory, args: ["--resume", "shared-id"] });
+                const first = takeoverLauncher.openAgentTerminal(context, harness, undefined, request("store-a"));
+                const second = takeoverLauncher.openAgentTerminal(context, harness, undefined, request("store-b"));
+                await new Promise((resolve) => setImmediate(resolve));
+                for (let attempt = 0; attempt < 100 && vscodeStub.__calls.created.length < before + 2; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+                assert.equal(vscodeStub.__calls.created.length, before + 2, `${id}: different stores launch independently while both wait`);
+                for (const { terminal } of vscodeStub.__calls.created.slice(before)) {
+                    for (const handler of [...vscodeStub.__calls.shellIntegrationHandlers]) handler({ terminal, shellIntegration: { executeCommand() {} } });
+                }
+                await Promise.all([first, second]);
+            }
+        } finally {
+            globalThis.setTimeout = set; globalThis.clearTimeout = clear;
+            vscodeStub.__fixture.multiHarness.launchMode = previousMode;
+            delete vscodeStub.__calls.takeover;
+            [vscodeStub.__fixture.multiHarness.ohMyPi, vscodeStub.__fixture.multiHarness.codex] = previousConfigs;
+            vscodeStub.window.terminals = [];
+        }
+    }
+    passed++;
+    console.log("ok: same session ID in different stores has independent pending resumes");
+
+    // Closing during integration must settle the launch and release both listeners.
+    baseline();
+    vscodeStub.__fixture.multiHarness.launchMode = "shell";
+    {
+        const set = globalThis.setTimeout, clear = globalThis.clearTimeout;
+        const timers = [];
+        globalThis.setTimeout = (callback, delay, ...args) => {
+            if (delay !== 10000) return set(callback, delay, ...args);
+            const timer = { callback, cleared: false }; timers.push(timer); return timer;
+        };
+        globalThis.clearTimeout = (timer) => { if (timers.includes(timer)) timer.cleared = true; else clear(timer); };
+        try {
+            const integrationHandlers = vscodeStub.__calls.shellIntegrationHandlers.length;
+            const closeHandlers = vscodeStub.__calls.terminalCloseHandlers.length;
+            const sends = vscodeStub.__calls.sendTexts.length, infos = vscodeStub.__calls.infos.length;
+            const pending = ohMyPi.handler();
+            await new Promise((resolve) => setImmediate(resolve));
+            const terminal = vscodeStub.__calls.created.at(-1).terminal;
+            assert.equal(timers.length, 1);
+            assert.equal(vscodeStub.__calls.shellIntegrationHandlers.length, integrationHandlers + 1);
+            assert.equal(vscodeStub.__calls.terminalCloseHandlers.length, closeHandlers + 2);
+            for (const handler of [...vscodeStub.__calls.terminalCloseHandlers]) handler(terminal);
+            await pending;
+            assert.equal(timers[0].cleared, true);
+            assert.equal(vscodeStub.__calls.shellIntegrationHandlers.length, integrationHandlers);
+            assert.equal(vscodeStub.__calls.terminalCloseHandlers.length, closeHandlers);
+            assert.equal(vscodeStub.__calls.sendTexts.length, sends);
+            assert.equal(vscodeStub.__calls.infos.length, infos);
+        } finally { globalThis.setTimeout = set; globalThis.clearTimeout = clear; }
+    }
+    passed++;
+    console.log("ok: closing a terminal during shell integration cancels the wait without fallback");
+
     // (iv) the timeout path degrades to a quoted sendText plus one message.
     baseline();
     const fallbackLaunchMode = vscodeStub.__fixture.multiHarness.launchMode;
@@ -3172,6 +3859,17 @@ try {
         assert.equal(pendingTimeouts[0].delay, 10000, `integration timeout is 10s (saw ${pendingTimeouts[0].delay})`);
         pendingTimeouts[0].callback();
         await fallbackPromise;
+        const english = JSON.parse(readFileSync(join(projectRoot, "package.nls.json"), "utf8"));
+        assert.equal(vscodeStub.__calls.infos.at(-1), english["terminal.shellFallback"].replace("{seconds}", "10").replace("{displayName}", "Oh My Pi"));
+        vscodeStub.env.language = "tr";
+        try {
+            const turkishPromise = ohMyPi.handler();
+            await new Promise((resolve) => setImmediate(resolve));
+            pendingTimeouts.at(-1).callback();
+            await turkishPromise;
+            const turkish = JSON.parse(readFileSync(join(projectRoot, "package.nls.tr.json"), "utf8"));
+            assert.equal(vscodeStub.__calls.infos.at(-1), turkish["terminal.shellFallback"].replace("{seconds}", "10").replace("{displayName}", "Oh My Pi"));
+        } finally { vscodeStub.env.language = "en"; }
     } finally {
         globalThis.setTimeout = realSetTimeout;
         globalThis.clearTimeout = realClearTimeout;
@@ -3182,7 +3880,7 @@ try {
     const sendText = vscodeStub.__calls.sendTexts.at(-1)?.text ?? "";
     const expectedFallback = process.platform === "win32" ? `"${fakeCli}" "--continue"` : `'${fakeCli}' '--continue'`;
     assert.equal(sendText, expectedFallback, `fallback quoting rule (saw ${sendText})`);
-    assert.equal(vscodeStub.__calls.infos.length, 1, "exactly one information message on the degrade path");
+    assert.equal(vscodeStub.__calls.infos.length, 2, "one information message per degraded launch");
     assert.ok(
         /status tracking is unavailable/i.test(vscodeStub.__calls.infos[0]),
         `degrade message explains the limitation (saw ${vscodeStub.__calls.infos[0]})`
@@ -3285,6 +3983,29 @@ try {
     }
     passed += 1;
     console.log("ok: favorites survive extension reactivation through persisted global state");
+    {
+        const stateA = new Map([["selectedSessionAgent", "pi"]]);
+        const stateB = new Map([["selectedSessionAgent", "codex"]]);
+        const workspaceState = (state) => ({ get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => { state.set(key, value); } });
+        const first = { ...context, workspaceState: workspaceState(stateA), subscriptions: [] };
+        const second = { ...context, workspaceState: workspaceState(stateB), subscriptions: [] };
+        vscodeStub.window.activeTerminal = undefined;
+        vscodeStub.window.terminals = [];
+        freshExtension.activate(first);
+        const firstAgentView = vscodeStub.__calls.views.filter((view) => view.id === "multiHarness.agents").at(-1);
+        const selectA = vscodeStub.__calls.commands.filter((entry) => entry.id === "multiHarness.selectSessionAgent").at(-1).handler;
+        await selectA("ohMyPi");
+        freshExtension.activate(second);
+        const secondAgentView = vscodeStub.__calls.views.filter((view) => view.id === "multiHarness.agents").at(-1);
+        assert.equal(stateA.get("selectedSessionAgent"), "ohMyPi");
+        assert.equal(stateB.get("selectedSessionAgent"), "codex");
+        assert.equal(firstAgentView.provider.getTreeItem(codex).contextValue, "favoriteAgent");
+        assert.equal(secondAgentView.provider.getTreeItem(codex).contextValue, "favoriteAgent");
+        for (const subscription of [...first.subscriptions, ...second.subscriptions]) subscription.dispose();
+        passed++;
+        vscodeStub.window.terminals = [restoredShell];
+        console.log("ok: favorites are global while selected agents remain workspace-local across activations");
+    }
     const startupContext = { ...context, subscriptions: [] };
     const beforeStartupRestore = vscodeStub.__calls.statusItems.length;
     freshExtension.activate(startupContext);
@@ -3603,8 +4324,8 @@ try {
                 sessionId: "fresh-omp", sessionFile: freshFile, sessionsRoot: ompRoot,
                 terminalName: "saved conversation", cwd: projectDirectory, args: ["--resume", freshFile],
             });
-            assert.equal(vscodeStub.__calls.created.length, beforeStaleBreadcrumb,
-                "a stale PTY breadcrumb must not open a second terminal for the resumed identity");
+            assert.equal(vscodeStub.__calls.created.length, beforeStaleBreadcrumb + 1,
+                "a stale PTY breadcrumb cannot verify the resumed identity, so a new terminal opens");
             utimesSync(breadcrumb, (startedAt + 1000) / 1000, (startedAt + 1000) / 1000);
             assert.equal(await identities.ompTerminalSessionFile(terminal, ompRoot), switchedFile,
                 "a breadcrumb written by the current process still follows in-process session switches");
@@ -3612,7 +4333,7 @@ try {
                 sessionId: "switched-omp", sessionFile: switchedFile, sessionsRoot: ompRoot,
                 terminalName: "switched conversation", cwd: projectDirectory, args: ["--resume", switchedFile],
             });
-            assert.equal(vscodeStub.__calls.created.length, beforeStaleBreadcrumb,
+            assert.equal(vscodeStub.__calls.created.length, beforeStaleBreadcrumb + 1,
                 "a current breadcrumb continues to reuse the terminal after switching conversations");
             vscodeStub.window.terminals = [];
             rmSync(breadcrumb);

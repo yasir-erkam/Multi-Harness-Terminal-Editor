@@ -7,6 +7,7 @@ import { registerAgentsView } from "./agentsView";
 import { registerSessionsView } from "./sessionsView";
 import { registerSessionContext } from "./sessionContext";
 import { registerSavedSessionsView } from "./savedSessionsView";
+import { extensionStrings } from "./localization";
 import { harnessForTerminal, restoreTerminalIdentity } from "./terminalIdentity";
 import { registerTerminalTitles } from "./terminalTitles";
 import { cleanupTerminalExit } from "./terminalExit";
@@ -27,7 +28,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand("multiHarness.openAgentPicker", async () => {
             const picked = await vscode.window.showQuickPick(
                 HARNESSES.map((harness) => ({ label: harness.displayName, harness })),
-                { placeHolder: "Select agent to open in a terminal tab" }
+                { placeHolder: extensionStrings(context)["command.openAgentPicker.placeholder"] }
             );
             if (picked) {
                 await vscode.commands.executeCommand(picked.harness.commandId);
@@ -56,7 +57,13 @@ export function activate(context: vscode.ExtensionContext): void {
             void restoreTerminalIdentity(terminal).then(() => {
                 const displayName = harnessForTerminal(terminal)?.displayName;
                 if (displayName && terminal.exitStatus) {
-                    void vscode.window.showInformationMessage(`${displayName} terminal exited with code ${terminal.exitStatus.code}`);
+                    const strings = extensionStrings(context);
+                    const message = terminal.exitStatus.code === undefined
+                        ? strings["terminal.exited"].replace("{displayName}", displayName)
+                        : strings["terminal.exitedWithCode"]
+                            .replace("{displayName}", displayName)
+                            .replace("{code}", String(terminal.exitStatus.code));
+                    void vscode.window.showInformationMessage(message);
                 }
             });
         })

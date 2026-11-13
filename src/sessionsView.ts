@@ -104,7 +104,7 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
             };
         },
     };
-    const options = { treeDataProvider: provider, manageCheckboxStateManually: true };
+    const options = { treeDataProvider: provider, manageCheckboxStateManually: true, canSelectMany: true };
     const view = vscode.window.createTreeView("multiHarness.sessions", options) as vscode.TreeView<AgentSession> & {
         onDidChangeCheckboxState?: vscode.Event<{ items: readonly (readonly [AgentSession, number])[] }>;
     };
@@ -146,6 +146,9 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
                     selected.add(target.session);
                     failures.push(`${sessionLabel(target.session)}: ${error instanceof Error ? error.message : String(error)}`);
                 }
+            }
+            if (!keeper && failures.length === 0 && selected.size === 0) {
+                selectionMode = false;
             }
             if (failures.length) await vscode.window.showErrorMessage(`${strings["terminals.closeFailed"]}\n${failures.join("\n")}`);
         } finally {
@@ -190,7 +193,30 @@ export function registerSessionsView(context: vscode.ExtensionContext): AgentSes
             if (!busy && terminal && getSessions().some((session) => session.terminal === terminal)) await showEditorTerminal(terminal);
         }),
         vscode.commands.registerCommand("multiHarness.closeSession", (session?: AgentSession) => {
-            if (!busy && session && visible().includes(session)) session.terminal.dispose();
+            if (busy || !session || !visible().includes(session)) return;
+            try {
+                session.terminal.dispose();
+                closed.add(session.terminal);
+                selected.delete(session);
+                refresh();
+            } catch (error) {
+                void vscode.window.showErrorMessage(`${strings["terminals.closeFailed"]}\n${sessionLabel(session)}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }),
+        vscode.commands.registerCommand("multiHarness.closeContextTerminals", (item?: AgentSession, items?: readonly AgentSession[]) => {
+            if (busy) return;
+            const requested = Array.isArray(items) && items.length > 0 ? items : item ? [item] : [];
+            const available = visible();
+            const targets: AgentSession[] = [];
+            const seen = new Set<AgentSession>();
+            for (const candidate of requested) {
+                if (candidate && available.includes(candidate) && !seen.has(candidate)) {
+                    seen.add(candidate);
+                    targets.push(candidate);
+                }
+            }
+            if (!targets.length) return;
+            return closeMany(targets);
         }),
         vscode.commands.registerCommand("multiHarness.toggleTerminalSelectionMode", () => {
             if (busy) return;

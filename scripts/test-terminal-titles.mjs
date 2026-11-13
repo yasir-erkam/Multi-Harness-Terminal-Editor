@@ -52,6 +52,51 @@ try {
     await done;
     assert.equal(terminal.name, "omp - Yeni konu", "focus changes during disk reads must not rename another terminal");
     assert.equal(visibleTitles.length, 2, "a stale rename must not refresh consumers with another terminal's topic");
+    const identity = (harnessId, sessionId) => ({ env: { MULTI_HARNESS_TERMINAL_IDENTITY: JSON.stringify({ version: 1, harnessId, launchMode: "direct", sessionId }) } });
+    terminal.creationOptions = identity("primeAgent", "second");
+    terminal.name = "prime-agent";
+    vscode.window.activeTerminal = terminal;
+    done = renamed();
+    activeChanged();
+    await Promise.race([done, new Promise((_, reject) => setTimeout(() => reject(new Error("Prime title timeout")), 3000))]);
+    assert.equal(terminal.name, "prime-agent - Yanlış sekmeye yazılmamalı", "non-OMP resumed identity updates its title");
+    terminal.creationOptions = identity("primeAgent", "missing");
+    tick();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(terminal.name, "prime-agent - Yanlış sekmeye yazılmamalı", "unmatched identity leaves title unchanged");
+    writeTitle("second", "second");
+    terminal.creationOptions = identity("primeAgent", "second");
+    tick();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(terminal.name, "prime-agent - Yanlış sekmeye yazılmamalı", "untitled history leaves title unchanged");
+    writeTitle("second", "Should not rename closed terminal");
+    tick();
+    vscode.window.terminals = [];
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(terminal.name, "prime-agent - Yanlış sekmeye yazılmamalı", "closing during scan prevents rename");
+    vscode.window.terminals = [terminal];
+    tick();
+    for (const disposable of context.subscriptions) disposable.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(terminal.name, "prime-agent - Yanlış sekmeye yazılmamalı", "disposal during scan prevents rename");
+    // Isolate the Grok registry result to prove a live mismatch beats stale metadata.
+    globalThis.__titleGrok = { id: "current", rows: [{ id: "stale", title: "Stale topic", file }] };
+    const grokBundle = await build({ entryPoints: ["src/terminalTitles.ts"], bundle: true, platform: "node", format: "cjs", write: false, plugins: [{ name: "title-registry-fixture", setup(b) {
+        b.onResolve({ filter: /^vscode$/ }, () => ({ path: "vscode", namespace: "fixture" }));
+        b.onResolve({ filter: /^\.\/(terminalIdentity|savedSessions)$/ }, (args) => args.importer.endsWith("terminalTitles.ts") ? { path: args.path, namespace: "fixture" } : undefined);
+        b.onLoad({ filter: /.*/, namespace: "fixture" }, (args) => ({ contents: args.path === "vscode" ? "module.exports = globalThis.__titleTestVscode;" : args.path.endsWith("terminalIdentity")
+            ? 'exports.restoreTerminalIdentity = async () => ({ harnessId: "grokBuild", sessionId: "stale" }); exports.grokTerminalSessionId = async () => globalThis.__titleGrok.id; exports.ompTerminalSessionFile = async () => undefined;'
+            : 'exports.sessionRoots = () => [{ harnessId: "grokBuild", directory: "/fixture" }]; exports.scanSavedSessions = async () => ({ sessions: globalThis.__titleGrok.rows });' }));
+    } }] });
+    const grokModule = { exports: {} };
+    new Function("require", "module", "exports", "setInterval", "clearInterval", grokBundle.outputFiles[0].text)(createRequire(import.meta.url), grokModule, grokModule.exports, () => 1, () => {});
+    const grokContext = { subscriptions: [] };
+    terminal.name = "grok";
+    grokModule.exports.registerTerminalTitles(grokContext, () => {});
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminal.name, "grok", "live Grok registry mismatch never renames from stale launch ID");
+    for (const disposable of grokContext.subscriptions) disposable.dispose();
+    delete globalThis.__titleGrok;
     console.log("ok: saved OMP topic appears in tab title, follows changes and does not rename after focus changes");
 } finally {
     for (const disposable of context.subscriptions) disposable.dispose();

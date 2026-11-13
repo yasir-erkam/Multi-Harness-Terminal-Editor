@@ -5,6 +5,7 @@
   "command.selectAllTerminals.title": "Select All Visible Terminals",
   "command.closeSelectedTerminals.title": "Close Selected Terminals",
   "command.closeOtherTerminals.title": "Close Other Visible Terminals",
+  "command.closeContextTerminals.title": "Close Terminals",
   "command.filterTerminalAgent.title": "Filter Open Terminals by Agent",
   "command.filterTerminalProject.title": "Filter Open Terminals by Project",
   "terminals.selectedCount": "Selected terminals: {count}",
@@ -146,6 +147,7 @@
   "command.toggleSessionSelection.title": "Toggle Session Selection",
   "command.selectAllSessions.title": "Select All Listed Sessions",
   "command.deleteSession.title": "Delete Session",
+  "command.deleteContextSessions.title": "Delete Sessions",
   "command.deleteSelectedSessions.title": "Delete Selected Sessions",
   "savedSessions.selectedCount": "{count} sessions selected",
   "savedSessions.deleting": "Deleting sessions…",
@@ -170,5 +172,11 @@
   "antigravity.executablePath.description": "Path or command name used to launch Antigravity CLI. Defaults to 'agy', resolved from standard install directories or PATH.",
   "antigravity.arguments.description": "Additional arguments passed to Antigravity CLI on launch.",
   "terminal.profile.antigravity.title": "Open Antigravity CLI terminal",
-  "antigravity.sessionDirectory.description": "Absolute Antigravity CLI data directory containing conversation_summaries.db and conversations/. Leave empty to use ~/.gemini/antigravity-cli."
+  "antigravity.sessionDirectory.description": "Absolute Antigravity CLI data directory containing conversation_summaries.db and conversations/. Leave empty to use ~/.gemini/antigravity-cli.",
+  "command.openAgentPicker.placeholder": "Select agent to open in a terminal tab",
+  "terminal.missingExecutable": "Multi-Harness: could not find an executable for {displayName} ('{configuredPath}'). Install the CLI or set {settingKey}.",
+  "terminal.openSettings": "Open Settings",
+  "terminal.shellFallback": "Multi-Harness: status tracking is unavailable in this terminal (shell integration did not activate within {seconds}s). {displayName} was started with a quoted command line instead.",
+  "terminal.exitedWithCode": "{displayName} terminal exited with code {code}",
+  "terminal.exited": "{displayName} terminal exited"
 }

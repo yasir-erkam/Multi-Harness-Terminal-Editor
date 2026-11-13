@@ -40,6 +40,7 @@ async function canonicalDirectory(directory: string): Promise<string> {
 
 const WINDOW_BYTES = 256 * 1024;
 const MAX_CANDIDATES = 1000;
+const MAX_SQLITE_ROWS = 5000;
 
 /** Providers with identity-validated JSONL or provider-native deletion. */
 export function supportsSessionDeletion(harnessId: string): boolean {
@@ -105,7 +106,7 @@ function workspacePaths(value: unknown): string[] {
  * and keeps each trajectory in `conversations/<id>.db`. The index is opened
  * read-only; subagent and empty conversations are skipped like `/resume` does.
  */
-async function scanAntigravity(root: SessionRoot, matches: (directory: string) => Promise<boolean>, signal?: AbortSignal): Promise<SavedSession[]> {
+async function scanAntigravity(root: SessionRoot, matches: (directory: string) => Promise<boolean>, unreadable: Set<string>, signal?: AbortSignal): Promise<SavedSession[]> {
     const index = path.join(root.directory, "conversation_summaries.db");
     try {
         if (!(await fs.stat(index)).isFile()) {
@@ -126,13 +127,16 @@ async function scanAntigravity(root: SessionRoot, matches: (directory: string) =
         rows = db.prepare(
             "SELECT conversation_id, title, preview, last_modified_time, workspace_uris FROM conversation_summaries "
             + "WHERE parent_conversation_id = '' AND nesting_depth = 0 AND step_count > 0 "
-            + "ORDER BY last_modified_time DESC LIMIT 5000"
+            + "ORDER BY last_modified_time DESC LIMIT 5001"
         ).all() as Record<string, unknown>[];
     } finally {
         db.close();
     }
+    if (rows.length > MAX_SQLITE_ROWS) {
+        unreadable.add(root.harnessId);
+    }
     const sessions: SavedSession[] = [];
-    for (const row of rows) {
+    for (const row of rows.slice(0, MAX_SQLITE_ROWS)) {
         if (signal?.aborted) {
             return [];
         }
@@ -158,7 +162,11 @@ async function scanAntigravity(root: SessionRoot, matches: (directory: string) =
                 continue;
             }
             modified ||= stat.mtimeMs;
-        } catch {
+        } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code !== "ENOENT" && code !== "ENOTDIR") {
+                unreadable.add(root.harnessId);
+            }
             // The index can outlive a deleted trajectory; it cannot be resumed.
             continue;
         }
@@ -176,10 +184,14 @@ async function grokMessageTime(file: string, id: string, signal?: AbortSignal): 
         const offsets = stat.size > WINDOW_BYTES ? [0, stat.size - WINDOW_BYTES] : [0];
         for (const offset of offsets) {
             if (signal?.aborted) return 0;
-            const buffer = Buffer.alloc(Math.min(WINDOW_BYTES, stat.size - offset));
-            const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
-            const lines = buffer.subarray(0, bytesRead).toString("utf8").split("\n");
-            if (offset > 0) lines.shift();
+            let startsAtLine = offset === 0;
+            if (offset > 0) {
+                const previous = await readRange(handle, offset - 1, 1);
+                startsAtLine = previous.length === 1 && previous[0] === 0x0a;
+            }
+            const buffer = await readRange(handle, offset, Math.min(WINDOW_BYTES, stat.size - offset));
+            const lines = buffer.toString("utf8").split("\n");
+            if (!startsAtLine) lines.shift();
             for (const line of lines) {
                 try {
                     const row = JSON.parse(line);
@@ -251,7 +263,7 @@ async function scanGrokBuild(root: SessionRoot, matches: (directory: string) => 
 }
 
 /** OpenCode v1.2+ uses SQLite; older releases store individual session metadata JSON. */
-async function scanOpenCode(root: SessionRoot, matches: (directory: string) => Promise<boolean>, options: SessionScanOptions): Promise<SavedSession[]> {
+async function scanOpenCode(root: SessionRoot, matches: (directory: string) => Promise<boolean>, options: SessionScanOptions, unreadable: Set<string>): Promise<SavedSession[]> {
     const index = path.join(root.directory, "opencode.db");
     const sessions: SavedSession[] = [];
     async function add(row: Record<string, any>, file: string): Promise<void> {
@@ -275,8 +287,11 @@ async function scanOpenCode(root: SessionRoot, matches: (directory: string) => P
         const db = new DatabaseSync(index, { readOnly: true });
         try {
             const rows = db.prepare("SELECT id, directory, title, time_updated FROM session "
-                + "WHERE parent_id IS NULL AND time_archived IS NULL ORDER BY time_updated DESC LIMIT 5000").all();
-            for (const row of rows) await add(row, index);
+                + "WHERE parent_id IS NULL AND time_archived IS NULL ORDER BY time_updated DESC LIMIT 5001").all();
+            if (rows.length > MAX_SQLITE_ROWS) {
+                unreadable.add(root.harnessId);
+            }
+            for (const row of rows.slice(0, MAX_SQLITE_ROWS)) await add(row, index);
         } finally {
             db.close();
         }
@@ -330,19 +345,26 @@ function clean(value: unknown): string {
 }
 
 /** Bounded metadata reads: never load a full conversation into the extension host. */
+async function readRange(handle: fs.FileHandle, offset: number, length: number): Promise<Buffer> {
+    const buffer = Buffer.alloc(length);
+    let read = 0;
+    while (read < length) {
+        const { bytesRead } = await handle.read(buffer, read, length - read, offset + read);
+        if (bytesRead === 0) break;
+        read += bytesRead;
+    }
+    return buffer.subarray(0, read);
+}
+
 async function readWindows(file: string, size: number): Promise<Record<string, any>[]> {
     const handle = await fs.open(file, "r");
     try {
-        const head = Buffer.alloc(Math.min(size, WINDOW_BYTES));
-        await handle.read(head, 0, head.length, 0);
-        const result = records(head.toString("utf8"));
-        if (size > WINDOW_BYTES) {
-            const offset = Math.max(WINDOW_BYTES, size - WINDOW_BYTES);
-            const tail = Buffer.alloc(size - offset);
-            await handle.read(tail, 0, tail.length, offset);
-            result.push(...records(tail.toString("utf8")));
+        if (size <= 2 * WINDOW_BYTES) {
+            return records((await readRange(handle, 0, size)).toString("utf8"));
         }
-        return result;
+        const head = await readRange(handle, 0, WINDOW_BYTES);
+        const tail = await readRange(handle, size - WINDOW_BYTES, WINDOW_BYTES);
+        return [...records(head.toString("utf8")), ...records(tail.toString("utf8"))];
     } finally {
         await handle.close();
     }
@@ -491,8 +513,11 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
                         if (stat.isFile()) {
                             candidates.push({ root, file, modified: stat.mtimeMs, size: stat.size });
                         }
-                    } catch {
-                        // A session may disappear while the list is being refreshed.
+                    } catch (error) {
+                        const code = (error as NodeJS.ErrnoException).code;
+                        if (code !== "ENOENT" && code !== "ENOTDIR") {
+                            unreadable.add(root.harnessId);
+                        }
                     }
                 }
             }
@@ -518,7 +543,7 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
         }
         if (root.harnessId === "openCode") {
             try {
-                indexedSessions.push(...await scanOpenCode(root, matches, options));
+                indexedSessions.push(...await scanOpenCode(root, matches, options, unreadable));
             } catch {
                 unreadable.add(root.harnessId);
             }
@@ -526,7 +551,7 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
         }
         if (root.harnessId === "antigravity") {
             try {
-                indexedSessions.push(...await scanAntigravity(root, matches, options.signal));
+                indexedSessions.push(...await scanAntigravity(root, matches, unreadable, options.signal));
             } catch {
                 unreadable.add(root.harnessId);
             }
@@ -534,17 +559,27 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
         }
         return walk(root, root.directory, 0);
     }));
+    const canonicalRoots = new Map<string, string>();
+    async function rootKey(directory: string): Promise<string> {
+        let canonical = canonicalRoots.get(directory);
+        if (!canonical) {
+            canonical = await canonicalDirectory(directory);
+            canonicalRoots.set(directory, canonical);
+        }
+        return canonical;
+    }
     const codexTitles = new Map<string, string>();
     for (const root of roots.filter((candidate) => candidate.harnessId === "codex")) {
         if (options.signal?.aborted) {
             return empty;
         }
+        const canonicalRoot = await rootKey(root.directory);
         const index = path.join(root.directory, "..", "session_index.jsonl");
         try {
             const stat = await fs.stat(index);
             for (const row of await readWindows(index, stat.size)) {
                 if (typeof row.id === "string" && clean(row.thread_name)) {
-                    codexTitles.set(row.id, clean(row.thread_name));
+                    codexTitles.set(JSON.stringify([canonicalRoot, row.id]), clean(row.thread_name));
                 }
             }
         } catch {
@@ -554,6 +589,11 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
     candidates.sort((a, b) => b.modified - a.modified);
     const sessions: SavedSession[] = [...indexedSessions];
     const seen = new Set<string>();
+    if (!filter && candidates.length > MAX_CANDIDATES) {
+        for (const omitted of candidates.slice(MAX_CANDIDATES)) {
+            unreadable.add(omitted.root.harnessId);
+        }
+    }
     for (const candidate of filter ? candidates : candidates.slice(0, MAX_CANDIDATES)) {
         if (options.signal?.aborted) {
             return empty;
@@ -564,13 +604,16 @@ export async function scanSavedSessions(roots = sessionRoots(), limit = 100, fil
             if (session && !await matches(session.cwd)) {
                 continue;
             }
-            if (session && !seen.has(`${session.harnessId}:${session.id}`)) {
-                seen.add(`${session.harnessId}:${session.id}`);
-                sessions.push(session.harnessId === "codex" && codexTitles.has(session.id)
-                    ? { ...session, title: codexTitles.get(session.id)! } : session);
+            const canonicalRoot = await rootKey(candidate.root.directory);
+            const dedupeKey = session ? JSON.stringify([session.harnessId, canonicalRoot, session.id]) : "";
+            if (session && !seen.has(dedupeKey)) {
+                seen.add(dedupeKey);
+                const codexTitle = session.harnessId === "codex" ? codexTitles.get(JSON.stringify([canonicalRoot, session.id])) : undefined;
+                sessions.push(codexTitle ? { ...session, title: codexTitle } : session);
             }
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code !== "ENOENT" && code !== "ENOTDIR") {
                 unreadable.add(candidate.root.harnessId);
             }
         }

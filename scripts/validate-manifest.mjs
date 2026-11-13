@@ -26,7 +26,7 @@ const harnessIds = [
 ];
 
 const agentCommandIds = harnessIds.map((id) => `multiHarness.open${id.charAt(0).toUpperCase()}${id.slice(1)}`);
-const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.closeSession", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSessionSelectionMode", "multiHarness.cancelSessionSelection", "multiHarness.toggleSessionSelection", "multiHarness.selectAllSessions", "multiHarness.deleteSession", "multiHarness.deleteSelectedSessions"];
+const allCommandIds = [...agentCommandIds, "multiHarness.openAgentPicker", "multiHarness.openSettings", "multiHarness.addFavorite", "multiHarness.removeFavorite", "multiHarness.focusSession", "multiHarness.closeSession", "multiHarness.closeContextTerminals", "multiHarness.resumeSession", "multiHarness.refreshSessions", "multiHarness.selectSessionAgent", "multiHarness.toggleSessionSelectionMode", "multiHarness.cancelSessionSelection", "multiHarness.toggleSessionSelection", "multiHarness.selectAllSessions", "multiHarness.deleteSession", "multiHarness.deleteContextSessions", "multiHarness.deleteSelectedSessions"];
 allCommandIds.push("multiHarness.toggleSessionLocationScope");
 allCommandIds.push(...["toggleTerminalSelectionMode", "cancelTerminalSelection", "toggleTerminalSelection", "selectAllTerminals", "closeSelectedTerminals", "closeOtherTerminals", "filterTerminalAgent", "filterTerminalProject"].map((id) => `multiHarness.${id}`));
 
@@ -83,9 +83,12 @@ check(activationEvents.includes("onView:multiHarness.sessions"), "opening the se
 check(manifest.contributes.viewsWelcome?.some((entry) => entry.view === "multiHarness.sessions" && entry.contents === "%view.sessions.welcome%") && typeof nls["view.sessions.welcome"] === "string", "sessions view has a localized empty state");
 check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.focusSession" && entry.when === "false"), "session focus command is hidden from the palette because it requires a terminal");
 check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.closeSession" && entry.when === "false"), "terminal close command is hidden from the palette because it requires a session");
-for (const group of ["inline", "terminal"]) {
-    check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.closeSession" && entry.when === "view == multiHarness.sessions && viewItem == openTerminal" && entry.group === group), "open terminal rows expose a close action in " + group);
-}
+check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.closeContextTerminals" && entry.when === "false"), "context terminal close command is hidden from the palette");
+check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.deleteContextSessions" && entry.when === "false"), "context session delete command is hidden from the palette");
+check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.selectAllTerminals" && entry.when === "false"), "selectAllTerminals is hidden from the palette");
+check(manifest.contributes.menus?.commandPalette?.some((entry) => entry.command === "multiHarness.cancelTerminalSelection" && entry.when === "false"), "cancelTerminalSelection is hidden from the palette");
+check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.closeSession" && entry.when === "view == multiHarness.sessions && viewItem == openTerminal" && entry.group === "inline"), "open terminal rows expose a close action in inline");
+check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.closeContextTerminals" && entry.when.includes("view == multiHarness.sessions && viewItem == openTerminal") && entry.group === "terminal"), "open terminal rows expose a bulk close action in terminal");
 for (const id of allCommandIds) {
     check(commandIdList.includes(id), `command ${id} exists`);
     check(activationEvents.includes(`onCommand:${id}`), `activation event onCommand:${id} exists`);
@@ -107,6 +110,7 @@ for (const command of commands) {
     }
     const sessionIcons = {
         "multiHarness.closeSession": "$(close)",
+        "multiHarness.closeContextTerminals": "$(close-all)",
         "multiHarness.toggleTerminalSelectionMode": "$(checklist)",
         "multiHarness.cancelTerminalSelection": "$(close)",
         "multiHarness.toggleTerminalSelection": "$(check)",
@@ -120,6 +124,7 @@ for (const command of commands) {
         "multiHarness.toggleSessionSelection": "$(check)",
         "multiHarness.selectAllSessions": "$(check-all)",
         "multiHarness.deleteSession": "$(trash)",
+        "multiHarness.deleteContextSessions": "$(trash)",
         "multiHarness.deleteSelectedSessions": "$(trash)",
     };
     if (command.command in sessionIcons) {
@@ -157,7 +162,7 @@ check(manifest.contributes.views?.multiHarness?.some((view) => view.id === "mult
 check(activationEvents.includes("onView:multiHarness.savedSessions"), "saved sessions view activates the extension");
 check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === "multiHarness.refreshSessions" && entry.when === "view == multiHarness.savedSessions"), "saved sessions have a refresh button");
 check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.deleteSession" && entry.group === "inline" && entry.when.includes("viewItem == savedSession")), "saved session rows expose a trash button");
-check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.deleteSession" && entry.group === "session"), "saved sessions expose a delete context menu");
+check(manifest.contributes.menus?.["view/item/context"]?.some((entry) => entry.command === "multiHarness.deleteContextSessions" && entry.group === "session" && entry.when.includes("viewItem == savedSession")), "saved sessions expose a bulk delete context menu");
 for (const id of ["toggleSessionSelectionMode", "cancelSessionSelection", "selectAllSessions", "deleteSelectedSessions"]) {
     check(manifest.contributes.menus?.["view/title"]?.some((entry) => entry.command === `multiHarness.${id}` && entry.when.includes("view == multiHarness.savedSessions")), `Sessions header exposes ${id}`);
 }
@@ -245,9 +250,19 @@ try {
 check(nlsTr !== undefined, "package.nls.tr.json is present and valid JSON");
 if (nlsTr) {
     check(JSON.stringify(Object.keys(nlsTr).sort()) === JSON.stringify(Object.keys(nls).sort()), "package.nls.tr.json mirrors every package.nls.json key");
-for (const key of ["launchMode.description", "launchMode.direct.description", "launchMode.shell.description"]) {
-    check(typeof nls[key] === "string" && typeof nlsTr?.[key] === "string", `nls key ${key} exists in both bundles`);
-}
+    for (const key of [
+        "launchMode.description",
+        "launchMode.direct.description",
+        "launchMode.shell.description",
+        "command.openAgentPicker.placeholder",
+        "terminal.missingExecutable",
+        "terminal.openSettings",
+        "terminal.shellFallback",
+        "terminal.exitedWithCode",
+        "terminal.exited",
+    ]) {
+        check(typeof nls[key] === "string" && typeof nlsTr?.[key] === "string", `nls key ${key} exists in both bundles`);
+    }
 }
 
 // Settings keys: reads go through the section-relative `settingKey`, while the

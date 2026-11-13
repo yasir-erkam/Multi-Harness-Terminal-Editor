@@ -28,7 +28,7 @@ function accessChecker(platform: NodeJS.Platform): (candidate: string) => boolea
         return (candidate) => {
             try {
                 fs.accessSync(candidate, fs.constants.F_OK);
-                return true;
+                return fs.statSync(candidate).isFile();
             } catch {
                 return false;
             }
@@ -37,7 +37,7 @@ function accessChecker(platform: NodeJS.Platform): (candidate: string) => boolea
     return (candidate) => {
         try {
             fs.accessSync(candidate, fs.constants.X_OK);
-            return true;
+            return fs.statSync(candidate).isFile();
         } catch {
             return false;
         }
